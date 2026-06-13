@@ -5,7 +5,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.tooling.preview.Preview
 
 import com.example.tasama.data.repository.FakeTransactionRepository
-import com.example.tasama.presentation.dashboard.DashboardScreen
+import com.example.tasama.navigation.AppNavigation
 import com.example.tasama.presentation.dashboard.DashboardViewModel
 
 @Composable
@@ -20,9 +20,7 @@ fun App() {
 
     MaterialTheme {
 
-        DashboardScreen(
-            viewModel = viewModel
-        )
+        AppNavigation()
 
     }
 }

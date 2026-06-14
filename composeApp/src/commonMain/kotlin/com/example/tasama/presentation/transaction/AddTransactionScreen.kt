@@ -6,11 +6,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.tooling.preview.Preview
+
 @Composable
 fun AddTransactionScreen(
     onSave: (Long, String) -> Unit
 ) {
+    AddTransactionContent(onSave = onSave)
+}
 
+@Composable
+fun AddTransactionContent(
+    onSave: (Long, String) -> Unit
+) {
     var amount by remember {
         mutableStateOf("")
     }
@@ -53,7 +61,6 @@ fun AddTransactionScreen(
 
         Button(
             onClick = {
-
                 val amountLong =
                     amount.toLongOrNull() ?: 0L
 
@@ -66,4 +73,10 @@ fun AddTransactionScreen(
             Text("Save")
         }
     }
+}
+
+@Preview
+@Composable
+fun AddTransactionPreview() {
+    AddTransactionContent(onSave = { _, _ -> })
 }

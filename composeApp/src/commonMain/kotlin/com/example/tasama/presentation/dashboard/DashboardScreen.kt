@@ -10,18 +10,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.tooling.preview.Preview
+
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onTransactionClick: () -> Unit
 ) {
-
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadData()
-    }
+    DashboardContent(
+        uiState = uiState,
+        onTransactionClick = onTransactionClick
+    )
+}
 
+@Composable
+fun DashboardContent(
+    uiState: DashboardUiState,
+    onTransactionClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -52,11 +60,25 @@ fun DashboardScreen(
 
             }
         }
-    }
 
-    Button(
-        onClick = onTransactionClick
-    ) {
-        Text("Lihat Semua Transaksi")
+        Button(
+            onClick = onTransactionClick
+        ) {
+            Text("Lihat Semua Transaksi")
+        }
     }
+}
+
+@Preview
+@Composable
+fun DashboardPreview() {
+    DashboardContent(
+        uiState = DashboardUiState(
+            balance = 1000000,
+            income = 1500000,
+            expense = 500000,
+            transactions = emptyList()
+        ),
+        onTransactionClick = {}
+    )
 }

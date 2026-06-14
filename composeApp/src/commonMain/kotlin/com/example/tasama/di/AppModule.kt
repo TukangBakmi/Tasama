@@ -1,5 +1,6 @@
 package com.example.tasama.di
 
+import com.example.tasama.data.remote.GeminiService
 import com.example.tasama.data.repository.FakeChatRepository
 import com.example.tasama.data.repository.FakeSavingsRepository
 import com.example.tasama.data.repository.FakeTransactionRepository
@@ -29,10 +30,12 @@ val appModule = module {
         FakeChatRepository()
     }
 
+    single { GeminiService() }
+
     viewModel { DashboardViewModel(get()) }
     viewModel { TransactionViewModel(get()) }
-    viewModel { AIViewModel(get()) }
+    viewModel { AIViewModel(get(), get()) }
     viewModel { SavingsViewModel(get()) }
     viewModel { ChatViewModel(get()) }
-    viewModel { ProfileViewModel(get(), get()) }
+    viewModel { ProfileViewModel(get(), get(), get()) }
 }

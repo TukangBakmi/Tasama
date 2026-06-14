@@ -2,10 +2,11 @@ package com.example.tasama.presentation.ai
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.data.remote.GeminiService
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.TransactionRepository
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +15,8 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class AIViewModel(
-    private val repository: TransactionRepository
+    private val repository: TransactionRepository,
+    private val geminiService: GeminiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AIUiState())
@@ -27,7 +29,7 @@ class AIViewModel(
                 messages = listOf(
                     ChatMessage(
                         id = "1",
-                        text = "Halo! Saya adalah Tasama AI. Ada yang bisa saya bantu dengan keuangan Anda hari ini?",
+                        text = "Halo! Saya adalah Tasama AI. Saya bisa membantu menganalisis transaksi Anda. Coba tanya 'Berapa total pengeluaran saya?' atau 'Berikan saran untuk hemat uang.'",
                         sender = MessageSender.AI
                     )
                 )
@@ -62,16 +64,25 @@ class AIViewModel(
 
     private fun processAIResponse(userText: String) {
         viewModelScope.launch {
-            // Simulate AI thinking
-            delay(1500)
-
-            val responseText = if (userText.contains("makan", ignoreCase = true) || userText.contains("beli", ignoreCase = true)) {
-                "Baik, saya telah mencatat pengeluaran tersebut. Apakah ada kategori khusus untuk ini?"
-            } else if (userText.contains("saldo", ignoreCase = true)) {
-                "Saldo Anda saat ini sedang dikalkulasi. Tunggu sebentar ya."
-            } else {
-                "Saya mengerti. Tasama AI siap membantu memonitor keuangan Anda."
+            val transactions = repository.getTransactions()
+            
+            // Construct a prompt with transaction context
+            val transactionContext = transactions.joinToString("\n") { 
+                "- ${it.category}: Rp ${it.amount} (${it.type})"
             }
+
+            val prompt = """
+                Anda adalah Tasama AI, asisten keuangan pribadi yang ramah.
+                Berikut adalah data transaksi pengguna:
+                $transactionContext
+                
+                Gunakan data di atas untuk menjawab pertanyaan berikut dari pengguna:
+                "$userText"
+                
+                Berikan jawaban yang singkat, membantu, dan dalam Bahasa Indonesia.
+            """.trimIndent()
+
+            val responseText = geminiService.generateContent(prompt)
 
             val aiMessage = ChatMessage(
                 id = Random.nextInt().toString(),

@@ -47,7 +47,9 @@ fun MainScreen() {
                     SavingsScreen()
                 }
                 composable(BottomNavItem.AIAdvisor.route) {
-                    AIScreen()
+                    AIScreen(
+                        viewModel = koinViewModel()
+                    )
                 }
                 composable(BottomNavItem.Chat.route) {
                     ChatScreen()

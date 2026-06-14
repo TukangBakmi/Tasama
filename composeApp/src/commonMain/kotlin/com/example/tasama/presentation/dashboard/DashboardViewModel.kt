@@ -34,11 +34,32 @@ class DashboardViewModel(
                 .filter { it.type == TransactionType.EXPENSE }
                 .sumOf { it.amount }
 
+            // Dummy weekly spending data for visualization
+            val weeklySpending = listOf(
+                DailySpending("Mon", 150000),
+                DailySpending("Tue", 80000),
+                DailySpending("Wed", 200000),
+                DailySpending("Thu", 50000),
+                DailySpending("Fri", 120000),
+                DailySpending("Sat", 300000),
+                DailySpending("Sun", 90000)
+            )
+
+            // Dummy category spending data
+            val categorySpending = listOf(
+                CategorySpending("Food", 450000, 0.6f),
+                CategorySpending("Transport", 150000, 0.2f),
+                CategorySpending("Bills", 100000, 0.13f),
+                CategorySpending("Other", 50000, 0.07f)
+            )
+
             _uiState.value = DashboardUiState(
                 balance = income - expense,
                 income = income,
                 expense = expense,
-                transactions = transactions
+                transactions = transactions,
+                weeklySpending = weeklySpending,
+                categorySpending = categorySpending
             )
         }
     }

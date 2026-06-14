@@ -4,9 +4,6 @@ data class ChatMessage(
     val id: String,
     val text: String,
     val sender: MessageSender,
-    val timestamp: Long = 0L
+    val timestamp: Long = 0L,
+    val isFromMe: Boolean = false
 )
-
-enum class MessageSender {
-    USER, AI
-}

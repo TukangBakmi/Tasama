@@ -11,7 +11,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 class GeminiService(
-    private val apiKey: String = "YOUR_GEMINI_API_KEY" // Placeholder
+    private val apiKey: String = "AIzaSyBaens9ojdQjWK5BzpvMDZ7yecGaYAaPns"
 ) {
     private val client = HttpClient {
         install(ContentNegotiation) {

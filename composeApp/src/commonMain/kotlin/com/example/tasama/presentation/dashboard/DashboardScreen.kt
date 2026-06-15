@@ -322,7 +322,7 @@ fun TransactionItem(transaction: Transaction) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = if (isExpense) "🍔" else "💰")
+                Text(text = getCategoryEmoji(transaction.category, transaction.type))
             }
             
             Spacer(modifier = Modifier.width(16.dp))
@@ -354,6 +354,24 @@ fun Long.formatAmount(): String {
     return this.toString().reversed().chunked(3).joinToString(".").reversed()
 }
 
+fun getCategoryEmoji(category: String, type: TransactionType): String {
+    if (type == TransactionType.INCOME) return "💰"
+    
+    return when (category.lowercase()) {
+        "food", "makan", "minum", "restoran" -> "🍔"
+        "transport", "transportasi", "ojek", "bensin" -> "🚗"
+        "shopping", "belanja" -> "🛍️"
+        "entertainment", "hiburan", "nonton" -> "🎬"
+        "bills", "tagihan", "listrik", "air" -> "🧾"
+        "health", "kesehatan", "obat" -> "🏥"
+        "education", "pendidikan", "sekolah", "kuliah" -> "🎓"
+        "gift", "hadiah" -> "🎁"
+        "salary", "gaji" -> "💸"
+        "investment", "investasi" -> "📈"
+        else -> "📦"
+    }
+}
+
 @Preview
 @Composable
 fun DashboardPreview() {
@@ -364,8 +382,8 @@ fun DashboardPreview() {
                 income = 2000000,
                 expense = 750000,
                 transactions = listOf(
-                    Transaction("1", 50000, TransactionType.EXPENSE, "Food", "Lunch", 0),
-                    Transaction("2", 1000000, TransactionType.INCOME, "Salary", "Monthly", 0)
+                    Transaction(id = "1", amount = 50000, type = TransactionType.EXPENSE, category = "Food", note = "Lunch"),
+                    Transaction(id = "2", amount = 1000000, type = TransactionType.INCOME, category = "Salary", note = "Monthly")
                 ),
                 weeklySpending = listOf(
                     DailySpending("Mon", 50000),

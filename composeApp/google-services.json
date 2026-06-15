@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "761665195026",
+    "project_id": "tasama-aecc9",
+    "storage_bucket": "tasama-aecc9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761665195026:android:6165b67f144348b221dccb",
+        "android_client_info": {
+          "package_name": "com.example.tasama"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwZQy9C4uIEiL2IyrJfwWW8VjP3WG7-KA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

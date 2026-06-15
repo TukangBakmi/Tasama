@@ -224,9 +224,9 @@ fun ChatPreview() {
         ChatContent(
             uiState = ChatUiState(
                 messages = listOf(
-                    ChatMessage("1", "Hey! How is our savings for the Japan trip going?", MessageSender.USER, 0, false),
-                    ChatMessage("2", "It's going well! We just reached 80% of our goal.", MessageSender.USER, 0, true),
-                    ChatMessage("3", "That's awesome! Let's save a bit more this month.", MessageSender.USER, 0, false)
+                    ChatMessage(id = "1", text = "Hey! How is our savings for the Japan trip going?", sender = MessageSender.USER, isFromMe = false),
+                    ChatMessage(id = "2", text = "It's going well! We just reached 80% of our goal.", sender = MessageSender.USER, isFromMe = true),
+                    ChatMessage(id = "3", text = "That's awesome! Let's save a bit more this month.", sender = MessageSender.USER, isFromMe = false)
                 )
             )
         )

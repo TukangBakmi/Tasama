@@ -56,11 +56,22 @@ fun AIContent(
 
             if (uiState.isTyping) {
                 item {
-                    Text(
-                        "Tasama AI sedang mengetik...",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Tasama AI sedang mengetik...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
@@ -106,7 +117,9 @@ fun ChatBubble(message: ChatMessage) {
     }
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         contentAlignment = alignment
     ) {
         Column(
@@ -132,9 +145,9 @@ fun AIPreview() {
         AIContent(
             uiState = AIUiState(
                 messages = listOf(
-                    ChatMessage("1", "Halo! Ada yang bisa saya bantu?", MessageSender.AI),
-                    ChatMessage("2", "Saya ingin mencatat pengeluaran makan siang 50rb", MessageSender.USER),
-                    ChatMessage("3", "Baik, sudah saya catat ya!", MessageSender.AI)
+                    ChatMessage(id = "1", text = "Halo! Ada yang bisa saya bantu?", sender = MessageSender.AI),
+                    ChatMessage(id = "2", text = "Saya ingin mencatat pengeluaran makan siang 50rb", sender = MessageSender.USER),
+                    ChatMessage(id = "3", text = "Baik, sudah saya catat ya!", sender = MessageSender.AI)
                 )
             ),
             onInputChange = {},

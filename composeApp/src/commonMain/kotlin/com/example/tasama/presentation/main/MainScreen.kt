@@ -17,7 +17,9 @@ import com.example.tasama.presentation.savings.SavingsScreen
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    viewModel: MainViewModel = koinViewModel()
+) {
     val navController = rememberNavController()
 
     val items = listOf(

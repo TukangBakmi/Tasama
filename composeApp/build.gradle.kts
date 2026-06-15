@@ -11,6 +11,8 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+apply(plugin = "com.google.gms.google-services")
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -35,11 +37,11 @@ kotlin {
         binaries.executable()
     }
     
-    @OptIn(ExperimentalWasmDsl::class)
+    /*@OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
         binaries.executable()
-    }
+    }*/
     
     sourceSets {
         androidMain.dependencies {
@@ -68,6 +70,9 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.ktor.client.logging)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.firebase.firestore)
+            implementation(libs.firebase.auth)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

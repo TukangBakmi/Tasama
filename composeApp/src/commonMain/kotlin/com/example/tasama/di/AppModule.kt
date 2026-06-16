@@ -1,6 +1,6 @@
 package com.example.tasama.di
 
-import com.example.tasama.data.remote.GeminiService
+import com.example.tasama.data.remote.GroqService
 import com.example.tasama.data.repository.FirebaseAIChatRepository
 import com.example.tasama.data.repository.FirebaseAuthRepository
 import com.example.tasama.data.repository.FirebaseChatRepository
@@ -42,8 +42,6 @@ val appModule = module {
     single<AIChatRepository> {
         FirebaseAIChatRepository(get())
     }
-
-    single { GeminiService() }
 
     viewModel { DashboardViewModel(get()) }
     viewModel { TransactionViewModel(get()) }

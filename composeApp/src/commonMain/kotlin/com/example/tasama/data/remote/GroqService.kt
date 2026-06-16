@@ -4,49 +4,51 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
-class GeminiService(
-    private val apiKey: String = "AIzaSyBaens9ojdQjWK5BzpvMDZ7yecGaYAaPns"
+class GroqService(
+    private val apiKey: String
 ) {
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
-                prettyPrint = true
                 isLenient = true
+                encodeDefaults = true
             })
         }
-        install(Logging) {
-            level = LogLevel.INFO
+        install(HttpTimeout) {
+            requestTimeoutMillis = 30_000
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 30_000
         }
         defaultRequest {
-            url("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent")
-            url.parameters.append("key", apiKey)
+            url("https://api.groq.com/openai/v1/chat/completions")
+            header(HttpHeaders.Authorization, "Bearer $apiKey")
         }
     }
 
     suspend fun generateContent(prompt: String): String {
         return try {
-            val response: GeminiResponse = client.post {
+            val response: GroqResponse = client.post {
                 contentType(ContentType.Application.Json)
                 setBody(
-                    GeminiRequest(
-                        contents = listOf(
-                            Content(
-                                parts = listOf(
-                                    Part(text = prompt)
-                                )
-                            )
+                    GroqRequest(
+                        messages = listOf(
+                            GroqMessage(role = "user", content = prompt)
                         )
                     )
                 )
             }.body()
-            response.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "No response from AI."
+
+            when {
+                response.error != null -> "API Error: ${response.error.message}"
+                response.choices.isNullOrEmpty() -> "Tidak ada respons dari AI."
+                else -> response.choices.first().message.content
+            }
         } catch (e: Exception) {
             "Error: ${e.message}"
         }

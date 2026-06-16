@@ -34,16 +34,24 @@ class FirebaseAIChatRepository(
     }
 
     override suspend fun saveMessage(message: ChatMessage) {
-        val userId = authRepository.getCurrentUserId() ?: return
-        val now = Clock.System.now().toEpochMilliseconds()
-        val id = if (message.id.isEmpty()) "ai_msg_$now" else message.id
-        val finalMessage = message.copy(id = id, userId = userId)
-        collection.document(id).set(finalMessage)
+        try {
+            val userId = authRepository.getCurrentUserId() ?: return
+            val now = Clock.System.now().toEpochMilliseconds()
+            val id = message.id.ifEmpty { "ai_msg_$now" }
+            val finalMessage = message.copy(id = id, userId = userId)
+            collection.document(id).set(finalMessage)
+        } catch (e: Exception) {
+            println("Firestore saveMessage error: ${e.message}")
+        }
     }
 
     override suspend fun clearHistory() {
-        val userId = authRepository.getCurrentUserId() ?: return
-        val documents = collection.where { "userId" equalTo userId }.get().documents
-        documents.forEach { it.reference.delete() }
+        try {
+            val userId = authRepository.getCurrentUserId() ?: return
+            val documents = collection.where { "userId" equalTo userId }.get().documents
+            documents.forEach { it.reference.delete() }
+        } catch (e: Exception) {
+            println("Firestore clearHistory error: ${e.message}")
+        }
     }
 }

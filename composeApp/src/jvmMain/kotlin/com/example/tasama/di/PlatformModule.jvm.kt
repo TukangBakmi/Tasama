@@ -1,5 +1,6 @@
 package com.example.tasama.di
 
+import com.example.tasama.data.remote.GroqService
 import com.example.tasama.data.service.JvmExportService
 import com.example.tasama.data.service.JvmFileService
 import com.example.tasama.domain.service.ExportService
@@ -10,4 +11,5 @@ import org.koin.dsl.module
 actual val platformModule: Module = module {
     single<ExportService> { JvmExportService() }
     single<FileService> { JvmFileService() }
+    single { GroqService(apiKey = System.getenv("GROQ_API_KEY") ?: "") }
 }

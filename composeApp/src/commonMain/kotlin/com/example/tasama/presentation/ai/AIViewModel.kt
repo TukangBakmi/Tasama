@@ -2,7 +2,7 @@ package com.example.tasama.presentation.ai
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tasama.data.remote.GeminiService
+import com.example.tasama.data.remote.GroqService
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.repository.AIChatRepository
@@ -18,7 +18,7 @@ import kotlin.random.Random
 class AIViewModel(
     private val repository: TransactionRepository,
     private val aiChatRepository: AIChatRepository,
-    private val geminiService: GeminiService
+    private val groqService: GroqService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AIUiState())
@@ -106,7 +106,7 @@ class AIViewModel(
                 5. Jawab dalam Bahasa Indonesia yang santun.
             """.trimIndent()
 
-            val responseText = geminiService.generateContent(prompt)
+            val responseText = groqService.generateContent(prompt)
 
             val now = Clock.System.now().toEpochMilliseconds()
             val aiMessage = ChatMessage(

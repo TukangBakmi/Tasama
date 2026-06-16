@@ -8,4 +8,5 @@ interface SavingsRepository {
     suspend fun addSavingsGoal(goal: SavingsGoal)
     suspend fun updateSavingsGoal(goal: SavingsGoal)
     suspend fun deleteSavingsGoal(id: String)
+    suspend fun inviteByEmail(goalId: String, email: String)
 }

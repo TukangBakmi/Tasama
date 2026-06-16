@@ -30,7 +30,7 @@ class ProfileViewModel(
                 mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
-            _uiState.update { it.copy(isExporting = false) }
+            _uiState.update { it.copy(isExporting = false, exportMessage = "Excel exported successfully") }
         }
     }
 
@@ -46,7 +46,11 @@ class ProfileViewModel(
                 mimeType = "application/pdf"
             )
 
-            _uiState.update { it.copy(isExporting = false) }
+            _uiState.update { it.copy(isExporting = false, exportMessage = "PDF exported successfully") }
         }
+    }
+
+    fun clearExportMessage() {
+        _uiState.update { it.copy(exportMessage = null) }
     }
 }

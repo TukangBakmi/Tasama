@@ -2,6 +2,7 @@ package com.example.tasama.presentation.savings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.SavingsGoal
 import com.example.tasama.domain.repository.SavingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,48 @@ class SavingsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun addGoal(goal: SavingsGoal) {
+        viewModelScope.launch {
+            repository.addSavingsGoal(goal)
+        }
+    }
+
+    fun updateGoal(goal: SavingsGoal) {
+        viewModelScope.launch {
+            repository.updateSavingsGoal(goal)
+        }
+    }
+
+    fun deleteGoal(id: String) {
+        viewModelScope.launch {
+            repository.deleteSavingsGoal(id)
+        }
+    }
+
+    fun onAddGoalClick() {
+        _uiState.update { it.copy(showAddGoalDialog = true) }
+    }
+
+    fun onDismissAddGoal() {
+        _uiState.update { it.copy(showAddGoalDialog = false) }
+    }
+
+    fun onInviteClick(goalId: String) {
+        _uiState.update { it.copy(showInviteCollaboratorDialog = true, selectedGoalId = goalId) }
+    }
+
+    fun onDismissInvite() {
+        _uiState.update { it.copy(showInviteCollaboratorDialog = false, selectedGoalId = null) }
+    }
+
+    fun inviteCollaborator(email: String) {
+        val goalId = _uiState.value.selectedGoalId ?: return
+        viewModelScope.launch {
+            repository.inviteByEmail(goalId, email)
+            onDismissInvite()
         }
     }
 }

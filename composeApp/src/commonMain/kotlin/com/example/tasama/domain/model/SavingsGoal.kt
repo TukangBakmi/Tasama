@@ -11,6 +11,7 @@ data class SavingsGoal(
     val currentAmount: Double = 0.0,
     val emoji: String = "",
     val isShared: Boolean = false,
+    val collaboratorIds: List<String> = emptyList(),
     val collaborators: List<Collaborator> = emptyList()
 )
 

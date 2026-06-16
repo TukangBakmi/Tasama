@@ -8,7 +8,8 @@ data class DashboardUiState(
     val expense: Long = 0,
     val transactions: List<Transaction> = emptyList(),
     val weeklySpending: List<DailySpending> = emptyList(),
-    val categorySpending: List<CategorySpending> = emptyList()
+    val categorySpending: List<CategorySpending> = emptyList(),
+    val monthlyTrends: List<MonthlyTrend> = emptyList()
 )
 
 data class DailySpending(
@@ -20,4 +21,10 @@ data class CategorySpending(
     val category: String,
     val amount: Long,
     val percentage: Float
+)
+
+data class MonthlyTrend(
+    val month: String,
+    val income: Long,
+    val expense: Long
 )

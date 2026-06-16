@@ -91,6 +91,16 @@ fun DashboardContent(
             WeeklyBarChart(weeklySpending = uiState.weeklySpending)
         }
 
+        // Category Spending Pie Chart
+        item {
+            CategorySpendingChart(categorySpending = uiState.categorySpending)
+        }
+
+        // Monthly Trends Chart
+        item {
+            MonthlyTrendChart(monthlyTrends = uiState.monthlyTrends)
+        }
+
         // Recent Transactions Header
         item {
             Row(
@@ -295,6 +305,160 @@ fun Bar(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = day,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun CategorySpendingChart(categorySpending: List<CategorySpending>) {
+    if (categorySpending.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "Spending by Category",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+
+            categorySpending.forEach { spending ->
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(getCategoryEmoji(spending.category, TransactionType.EXPENSE))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(spending.category, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text(
+                            "Rp ${spending.amount.formatAmount()}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { spending.percentage },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MonthlyTrendChart(monthlyTrends: List<MonthlyTrend>) {
+    if (monthlyTrends.isEmpty()) return
+    val maxAmount = monthlyTrends.maxOfOrNull { maxOf(it.income, it.expense) } ?: 1L
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "Monthly Trends",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                monthlyTrends.forEach { trend ->
+                    TrendBarPair(
+                        trend = trend,
+                        maxAmount = maxAmount,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            // Legend
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(12.dp).background(Color(0xFF4CAF50), RoundedCornerShape(2.dp)))
+                Text(" Income", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 16.dp))
+                Box(Modifier.size(12.dp).background(Color(0xFFF44336), RoundedCornerShape(2.dp)))
+                Text(" Expense", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+fun TrendBarPair(
+    trend: MonthlyTrend,
+    maxAmount: Long,
+    modifier: Modifier = Modifier
+) {
+    val incomeRatio = trend.income.toFloat() / maxAmount.toFloat()
+    val expenseRatio = trend.expense.toFloat() / maxAmount.toFloat()
+
+    val animatedIncome by animateFloatAsState(
+        targetValue = incomeRatio,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 1000)
+    )
+    val animatedExpense by animateFloatAsState(
+        targetValue = expenseRatio,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 1000)
+    )
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom
+    ) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            // Income Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight(animatedIncome.coerceAtLeast(0.01f))
+                    .width(8.dp)
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .background(Color(0xFF4CAF50))
+            )
+            // Expense Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight(animatedExpense.coerceAtLeast(0.01f))
+                    .width(8.dp)
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .background(Color(0xFFF44336))
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = trend.month,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

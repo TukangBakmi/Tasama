@@ -23,8 +23,10 @@ class FirebaseSavingsRepository(
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
-                collection.where { "userId" equalTo uid }.snapshots.map { snapshot ->
-                    snapshot.documents.map { it.data() }
+                collection.snapshots.map { snapshot ->
+                    snapshot.documents
+                        .map { it.data<SavingsGoal>() }
+                        .filter { it.userId == uid || it.collaboratorIds.contains(uid) }
                 }
             }
         }
@@ -48,5 +50,26 @@ class FirebaseSavingsRepository(
 
     override suspend fun deleteSavingsGoal(id: String) {
         collection.document(id).delete()
+    }
+
+    override suspend fun inviteByEmail(goalId: String, email: String) {
+        try {
+            val userSnapshot = firestore.collection("users")
+                .where { "email" equalTo email }
+                .get()
+            
+            val userDoc = userSnapshot.documents.firstOrNull() ?: return
+            val userIdToAdd = userDoc.id
+            
+            val goalDoc = collection.document(goalId)
+            val goal = goalDoc.get().data<SavingsGoal>()
+            
+            if (!goal.collaboratorIds.contains(userIdToAdd)) {
+                val updatedCollaborators = goal.collaboratorIds + userIdToAdd
+                goalDoc.set(goal.copy(collaboratorIds = updatedCollaborators, isShared = true))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

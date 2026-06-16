@@ -10,10 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +38,7 @@ fun SavingsScreen(
             TopAppBar(
                 title = { Text("Savings Goals", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { /* TODO */ }) {
+                    IconButton(onClick = { viewModel.onAddGoalClick() }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Goal")
                     }
                 }
@@ -48,14 +47,41 @@ fun SavingsScreen(
     ) { paddingValues ->
         SavingsContent(
             uiState = uiState,
+            onInviteClick = { viewModel.onInviteClick(it) },
             modifier = Modifier.padding(paddingValues)
         )
+
+        if (uiState.showAddGoalDialog) {
+            AddGoalDialog(
+                onDismiss = { viewModel.onDismissAddGoal() },
+                onConfirm = { title, target, emoji ->
+                    viewModel.addGoal(
+                        SavingsGoal(
+                            title = title,
+                            targetAmount = target,
+                            emoji = emoji
+                        )
+                    )
+                    viewModel.onDismissAddGoal()
+                }
+            )
+        }
+
+        if (uiState.showInviteCollaboratorDialog) {
+            InviteCollaboratorDialog(
+                onDismiss = { viewModel.onDismissInvite() },
+                onConfirm = { email ->
+                    viewModel.inviteCollaborator(email)
+                }
+            )
+        }
     }
 }
 
 @Composable
 fun SavingsContent(
     uiState: SavingsUiState,
+    onInviteClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -64,7 +90,10 @@ fun SavingsContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(uiState.savingsGoals) { goal ->
-            SavingsGoalItem(goal = goal)
+            SavingsGoalItem(
+                goal = goal,
+                onInviteClick = { onInviteClick(goal.id) }
+            )
         }
     }
 }
@@ -97,14 +126,18 @@ fun SavingsPreview() {
                             emoji = "🗾"
                         )
                     )
-                )
+                ),
+                onInviteClick = {}
             )
         }
     }
 }
 
 @Composable
-fun SavingsGoalItem(goal: SavingsGoal) {
+fun SavingsGoalItem(
+    goal: SavingsGoal,
+    onInviteClick: () -> Unit
+) {
     val progress = (goal.currentAmount / goal.targetAmount).toFloat().coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(targetValue = progress)
 
@@ -161,12 +194,13 @@ fun SavingsGoalItem(goal: SavingsGoal) {
                     }
                 }
                 
-                Text(
-                    "${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                IconButton(onClick = onInviteClick) {
+                    Icon(
+                        Icons.Default.PersonAdd,
+                        contentDescription = "Invite Collaborator",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -246,6 +280,88 @@ fun SavingsGoalItem(goal: SavingsGoal) {
             }
         }
     }
+}
+
+@Composable
+fun AddGoalDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, Double, String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var target by remember { mutableStateOf("") }
+    var emoji by remember { mutableStateOf("💰") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Savings Goal") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Goal Title") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { target = it },
+                    label = { Text("Target Amount") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = emoji,
+                    onValueChange = { emoji = it },
+                    label = { Text("Emoji") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(title, target.toDoubleOrNull() ?: 0.0, emoji) }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun InviteCollaboratorDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Invite Collaborator") },
+        text = {
+            Column {
+                Text("Enter the email address of the person you want to invite.")
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email Address") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(email) }) {
+                Text("Invite")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 private fun formatCurrency(amount: Double): String {

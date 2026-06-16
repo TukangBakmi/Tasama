@@ -77,13 +77,35 @@ class DashboardViewModel(
                     emptyList()
                 }
 
+                // Calculate monthly trends (last 6 months)
+                val last6Months = (0..5).map { i ->
+                    val monthDate = today.minus(i, DateTimeUnit.MONTH)
+                    monthDate.year to monthDate.month
+                }.reversed()
+
+                val monthlyTrends = last6Months.map { (year, month) ->
+                    val monthTransactions = transactions.filter {
+                        val txDate = Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date
+                        txDate.year == year && txDate.month == month
+                    }
+                    val monthIncome = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                    val monthExpense = monthTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+                    MonthlyTrend(
+                        month = month.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
+                        income = monthIncome,
+                        expense = monthExpense
+                    )
+                }
+
                 _uiState.value = DashboardUiState(
                     balance = income - expense,
                     income = income,
                     expense = expense,
                     transactions = transactions.sortedByDescending { it.createdAt }.take(10),
                     weeklySpending = weeklySpending,
-                    categorySpending = categorySpending
+                    categorySpending = categorySpending,
+                    monthlyTrends = monthlyTrends
                 )
             }
         }

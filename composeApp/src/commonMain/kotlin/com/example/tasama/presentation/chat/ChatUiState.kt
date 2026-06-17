@@ -4,6 +4,7 @@ import com.example.tasama.domain.model.ChatMessage
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
-    val isLoading: Boolean = false,
-    val currentMessage: String = ""
+    val inputText: String = "",
+    val isLoadingMore: Boolean = false,
+    val hasMoreMessages: Boolean = true
 )

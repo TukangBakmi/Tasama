@@ -1,5 +1,8 @@
 package com.example.tasama.presentation.chat
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,11 +12,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +47,7 @@ fun ChatScreen(
         },
         bottomBar = {
             ChatInput(
-                message = uiState.currentMessage,
+                message = uiState.inputText,
                 onMessageChange = viewModel::onMessageChange,
                 onSend = viewModel::sendMessage
             )
@@ -53,7 +55,8 @@ fun ChatScreen(
     ) { paddingValues ->
         ChatContent(
             uiState = uiState,
-            modifier = Modifier.padding(paddingValues)
+            modifier = Modifier.padding(paddingValues),
+            onLoadMore = viewModel::loadMoreMessages
         )
     }
 }
@@ -61,20 +64,66 @@ fun ChatScreen(
 @Composable
 fun ChatContent(
     uiState: ChatUiState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLoadMore: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
+    // Detect when user scrolls to the top
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItemsInfo = layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isEmpty()) false
+            else {
+                val firstVisibleItem = visibleItemsInfo.first()
+                firstVisibleItem.index == 0 && firstVisibleItem.offset >= 0
+            }
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && uiState.hasMoreMessages && !uiState.isLoadingMore) {
+            onLoadMore()
+        }
+    }
+
+    // Auto-scroll to bottom only for new messages (not when loading more)
+    var previousMessageCount by remember { mutableStateOf(uiState.messages.size) }
     LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+        val newMessageCount = uiState.messages.size
+        val isNewMessageAtBottom = newMessageCount > previousMessageCount && 
+            uiState.messages.lastOrNull()?.isFromMe == true
+        
+        if (isNewMessageAtBottom || previousMessageCount == 0) {
+            if (newMessageCount > 0) {
+                listState.animateScrollToItem(newMessageCount - 1)
+            }
+        }
+        previousMessageCount = newMessageCount
+    }
+
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItemsCount = layoutInfo.totalItemsCount
+            if (totalItemsCount == 0) return@derivedStateOf false
+            
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            if (lastVisibleItem == null) return@derivedStateOf false
+            
+            val isLastItem = lastVisibleItem.index == totalItemsCount - 1
+            if (!isLastItem) true 
+            else {
+                val viewportBottom = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
+                lastVisibleItem.offset + lastVisibleItem.size > viewportBottom
+            }
         }
     }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        if (uiState.isLoading && uiState.messages.isEmpty()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else if (uiState.messages.isEmpty()) {
+        if (uiState.messages.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -99,9 +148,49 @@ fun ChatContent(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(uiState.messages) { message ->
+                if (uiState.isLoadingMore) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+                }
+
+                items(uiState.messages, key = { it.id }) { message ->
                     MessageBubble(message = message)
                 }
+            }
+        }
+
+        // Floating Action Button to scroll to bottom
+        AnimatedVisibility(
+            visible = showScrollToBottom,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            SmallFloatingActionButton(
+                onClick = {
+                    coroutineScope.launch {
+                        if (uiState.messages.isNotEmpty()) {
+                            listState.animateScrollToItem(uiState.messages.size - 1)
+                        }
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Scroll to bottom"
+                )
             }
         }
     }
@@ -135,8 +224,12 @@ fun MessageBubble(message: ChatMessage) {
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             if (!message.isFromMe) {
+                val senderName = when(message.sender) {
+                    MessageSender.AI -> "Tasama AI"
+                    MessageSender.USER -> "Partner"
+                }
                 Text(
-                    text = if (message.sender == MessageSender.AI) "Tasama AI" else "Partner",
+                    text = senderName,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                     color = MaterialTheme.colorScheme.primary,
@@ -228,7 +321,8 @@ fun ChatPreview() {
                     ChatMessage(id = "2", text = "It's going well! We just reached 80% of our goal.", sender = MessageSender.USER, isFromMe = true),
                     ChatMessage(id = "3", text = "That's awesome! Let's save a bit more this month.", sender = MessageSender.USER, isFromMe = false)
                 )
-            )
+            ),
+            onLoadMore = {}
         )
     }
 }

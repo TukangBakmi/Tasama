@@ -21,12 +21,46 @@ class ChatViewModel(
 
     private fun observeMessages() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
             repository.getMessages().collect { messages ->
-                _uiState.update {
-                    it.copy(
-                        messages = messages,
-                        isLoading = false
+                _uiState.update { state ->
+                    // Merge logic: Keep paged messages (older than the latest batch)
+                    // but replace the latest batch with the new data from the flow
+                    val latestOldestTimestamp = messages.firstOrNull()?.timestamp ?: 0L
+                    val pagedMessages = state.messages.filter { it.timestamp < latestOldestTimestamp }
+                    
+                    val combined = (pagedMessages + messages)
+                        .distinctBy { it.id }
+                        .sortedBy { it.timestamp }
+                    state.copy(messages = combined)
+                }
+            }
+        }
+    }
+
+    fun loadMoreMessages() {
+        if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreMessages) return
+
+        val oldestMessage = _uiState.value.messages.firstOrNull() ?: return
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            
+            val moreMessages = repository.getMoreMessages(
+                limit = 20,
+                beforeTimestamp = oldestMessage.timestamp
+            )
+            
+            if (moreMessages.isEmpty()) {
+                _uiState.update { it.copy(isLoadingMore = false, hasMoreMessages = false) }
+            } else {
+                _uiState.update { state ->
+                    val combined = (moreMessages + state.messages)
+                        .distinctBy { it.id }
+                        .sortedBy { it.timestamp }
+                    state.copy(
+                        messages = combined,
+                        isLoadingMore = false,
+                        hasMoreMessages = moreMessages.size >= 20
                     )
                 }
             }
@@ -34,16 +68,16 @@ class ChatViewModel(
     }
 
     fun onMessageChange(message: String) {
-        _uiState.update { it.copy(currentMessage = message) }
+        _uiState.update { it.copy(inputText = message) }
     }
 
     fun sendMessage() {
-        val messageText = _uiState.value.currentMessage
+        val messageText = _uiState.value.inputText
         if (messageText.isBlank()) return
 
         viewModelScope.launch {
             repository.sendMessage(messageText)
-            _uiState.update { it.copy(currentMessage = "") }
+            _uiState.update { it.copy(inputText = "") }
         }
     }
 }

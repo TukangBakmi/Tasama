@@ -39,7 +39,8 @@ class AIViewModel(
         viewModelScope.launch {
             aiChatRepository.getMessages().collect { messages ->
                 if (messages.isEmpty()) {
-                    // Initial welcome message if no history
+                    // Only save welcome if we are sure there is no history (after initial check)
+                    // and not because of a Firestore error
                     val welcomeMessage = ChatMessage(
                         id = "welcome",
                         text = "Halo! Saya adalah Tasama AI. Saya bisa membantu mencatat keuangan Anda. Coba ketik 'abet nabung 100k' atau 'yaya parkir empo 4k'.",
@@ -48,7 +49,17 @@ class AIViewModel(
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
-                    _uiState.update { it.copy(messages = messages) }
+                    _uiState.update { state ->
+                        // Merge logic: Keep paged messages (older than the latest batch)
+                        // but replace the latest batch with the new data from the flow
+                        val latestOldestTimestamp = messages.firstOrNull()?.timestamp ?: 0L
+                        val pagedMessages = state.messages.filter { it.timestamp < latestOldestTimestamp }
+                        
+                        val combined = (pagedMessages + messages)
+                            .distinctBy { it.id }
+                            .sortedBy { it.timestamp }
+                        state.copy(messages = combined)
+                    }
                 }
             }
         }
@@ -56,6 +67,36 @@ class AIViewModel(
 
     fun onInputChange(text: String) {
         _uiState.update { it.copy(inputText = text) }
+    }
+
+    fun loadMoreMessages() {
+        if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreMessages) return
+
+        val oldestMessage = _uiState.value.messages.firstOrNull { it.id != "welcome" } ?: return
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            
+            val moreMessages = aiChatRepository.getMoreMessages(
+                limit = 20,
+                beforeTimestamp = oldestMessage.timestamp
+            )
+            
+            if (moreMessages.isEmpty()) {
+                _uiState.update { it.copy(isLoadingMore = false, hasMoreMessages = false) }
+            } else {
+                _uiState.update { state ->
+                    val combined = (moreMessages + state.messages)
+                        .distinctBy { it.id }
+                        .sortedBy { it.timestamp }
+                    state.copy(
+                        messages = combined,
+                        isLoadingMore = false,
+                        hasMoreMessages = moreMessages.size >= 20
+                    )
+                }
+            }
+        }
     }
 
     fun sendMessage() {

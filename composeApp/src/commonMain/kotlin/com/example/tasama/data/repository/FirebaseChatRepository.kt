@@ -8,6 +8,7 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -24,15 +25,35 @@ class FirebaseChatRepository(
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
-                // In a real app, you might want to filter by a chat room ID.
-                // For now, we'll just show all messages for this user.
                 collection.where { "userId" equalTo uid }
+                    .orderBy("timestamp", direction = dev.gitlive.firebase.firestore.Direction.DESCENDING)
+                    .limit(20)
                     .snapshots
                     .map { snapshot ->
                         snapshot.documents.map { it.data<ChatMessage>() }
                             .sortedBy { it.timestamp }
                     }
+                    .catch { e ->
+                        println("Firestore Error: ${e.message}")
+                        emit(emptyList())
+                    }
             }
+        }
+    }
+
+    override suspend fun getMoreMessages(limit: Int, beforeTimestamp: Long): List<ChatMessage> {
+        val uid = authRepository.getCurrentUserId() ?: return emptyList()
+        return try {
+            collection.where { "userId" equalTo uid }
+                .where { "timestamp" lessThan beforeTimestamp }
+                .orderBy("timestamp", direction = dev.gitlive.firebase.firestore.Direction.DESCENDING)
+                .limit(limit)
+                .get()
+                .documents
+                .map { it.data<ChatMessage>() }
+                .sortedBy { it.timestamp }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 

@@ -64,14 +64,47 @@ class FirebaseSavingsRepository(
             
             val userDoc = userSnapshot.documents.firstOrNull() ?: return
             val userIdToAdd = userDoc.id
+            val userName = userDoc.data<com.example.tasama.domain.model.User>().name
             
             val goalDoc = collection.document(goalId)
             val goal = goalDoc.get().data<SavingsGoal>()
             
             if (!goal.collaboratorIds.contains(userIdToAdd)) {
                 val updatedCollaborators = goal.collaboratorIds + userIdToAdd
-                goalDoc.set(goal.copy(collaboratorIds = updatedCollaborators, isShared = true))
+                val updatedCollaboratorList = goal.collaborators + com.example.tasama.domain.model.Collaborator(userIdToAdd, userName)
+                goalDoc.set(goal.copy(
+                    collaboratorIds = updatedCollaborators, 
+                    collaborators = updatedCollaboratorList,
+                    isShared = true
+                ))
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun contribute(goalId: String, amount: Double) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val userName = authRepository.getUserName(uid) ?: "User"
+        
+        try {
+            val goalDoc = collection.document(goalId)
+            val goal = goalDoc.get().data<SavingsGoal>()
+            
+            val newContribution = com.example.tasama.domain.model.Contribution(
+                userId = uid,
+                userName = userName,
+                amount = amount,
+                timestamp = Clock.System.now().toEpochMilliseconds()
+            )
+            
+            val updatedContributions = goal.contributions + newContribution
+            val updatedAmount = goal.currentAmount + amount
+            
+            goalDoc.set(goal.copy(
+                currentAmount = updatedAmount,
+                contributions = updatedContributions
+            ))
         } catch (e: Exception) {
             e.printStackTrace()
         }

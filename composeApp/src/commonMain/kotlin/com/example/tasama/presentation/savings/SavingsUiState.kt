@@ -7,5 +7,6 @@ data class SavingsUiState(
     val isLoading: Boolean = false,
     val showAddGoalDialog: Boolean = false,
     val showInviteCollaboratorDialog: Boolean = false,
+    val showContributeDialog: Boolean = false,
     val selectedGoalId: String? = null
 )

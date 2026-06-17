@@ -9,10 +9,18 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+sealed class AuthState {
+    object Loading : AuthState()
+    object Authenticated : AuthState()
+    object Unauthenticated : AuthState()
+}
+
 class MainViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
-    val isLoggedIn: StateFlow<Boolean> = authRepository.userId
-        .map { it != null }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val authState: StateFlow<AuthState> = authRepository.userId
+        .map { uid ->
+            if (uid != null) AuthState.Authenticated else AuthState.Unauthenticated
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState.Loading)
 }

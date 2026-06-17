@@ -153,4 +153,8 @@ class LoginViewModel(
             }
         }
     }
+
+    fun resetState() {
+        _uiState.value = LoginUiState()
+    }
 }

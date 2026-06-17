@@ -9,7 +9,14 @@ data class DashboardUiState(
     val transactions: List<Transaction> = emptyList(),
     val weeklySpending: List<DailySpending> = emptyList(),
     val categorySpending: List<CategorySpending> = emptyList(),
-    val monthlyTrends: List<MonthlyTrend> = emptyList()
+    val monthlyTrends: List<MonthlyTrend> = emptyList(),
+    val balanceHistory: List<BalancePoint> = emptyList(),
+    val showAddTransactionDialog: Boolean = false
+)
+
+data class BalancePoint(
+    val label: String,
+    val balance: Long
 )
 
 data class DailySpending(

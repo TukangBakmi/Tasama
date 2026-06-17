@@ -7,13 +7,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
+import com.example.tasama.presentation.components.DonutChart
+import com.example.tasama.presentation.components.LineChart
 
 @Composable
 fun DashboardScreen(
@@ -30,10 +35,35 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    DashboardContent(
-        uiState = uiState,
-        onTransactionClick = onTransactionClick
-    )
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.onAddTransactionClick() },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Transaction")
+            }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            DashboardContent(
+                uiState = uiState,
+                onTransactionClick = onTransactionClick
+            )
+        }
+
+        if (uiState.showAddTransactionDialog) {
+            AddTransactionDialog(
+                onDismiss = { viewModel.onDismissAddTransaction() },
+                onConfirm = { transaction ->
+                    viewModel.addTransaction(transaction)
+                    viewModel.onDismissAddTransaction()
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -50,7 +80,10 @@ fun DashboardContent(
     ) {
         // Balance Card
         item {
-            BalanceCard(balance = uiState.balance)
+            BalanceCard(
+                balance = uiState.balance,
+                history = uiState.balanceHistory
+            )
         }
 
         // Summary Rows (Income & Expense)
@@ -138,29 +171,46 @@ fun DashboardContent(
 }
 
 @Composable
-fun BalanceCard(balance: Long) {
+fun BalanceCard(balance: Long, history: List<BalancePoint>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         )
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Total Balance",
-                style = MaterialTheme.typography.labelLarge
-            )
-            Text(
-                text = "Rp ${balance.formatAmount()}",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // Background Sparkline
+            if (history.isNotEmpty()) {
+                LineChart(
+                    data = history,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .align(Alignment.BottomCenter)
+                        .alpha(0.4f),
+                    lineColor = Color.White
+                )
+            }
+
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Total Balance",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = "Rp ${balance.formatAmount()}",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }
@@ -240,6 +290,7 @@ fun IncomeExpenseProgress(income: Long, expense: Long) {
 @Composable
 fun WeeklyBarChart(weeklySpending: List<DailySpending>) {
     val maxSpending = weeklySpending.maxOfOrNull { it.amount } ?: 1L
+    val avgSpending = if (weeklySpending.isNotEmpty()) weeklySpending.map { it.amount }.average().toLong() else 0L
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -247,12 +298,22 @@ fun WeeklyBarChart(weeklySpending: List<DailySpending>) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = "Weekly Spending",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 20.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Weekly Spending",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Avg: Rp ${avgSpending.formatAmount()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Row(
                 modifier = Modifier
@@ -292,14 +353,29 @@ fun Bar(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Bottom
     ) {
+        if (amount > 0) {
+            Text(
+                text = amount.formatShortAmount(),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+        
         Box(
             modifier = Modifier
-                .fillMaxHeight(animatedRatio.coerceAtLeast(0.05f))
+                .fillMaxHeight(animatedRatio.coerceAtLeast(0.02f))
                 .width(28.dp)
                 .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                 .background(
-                    if (animatedRatio > 0.7f) MaterialTheme.colorScheme.error 
-                    else MaterialTheme.colorScheme.primary
+                    brush = Brush.verticalGradient(
+                        colors = if (animatedRatio > 0.7f) {
+                            listOf(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
+                        } else {
+                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                        }
+                    )
                 )
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -315,30 +391,57 @@ fun Bar(
 fun CategorySpendingChart(categorySpending: List<CategorySpending>) {
     if (categorySpending.isEmpty()) return
 
+    val chartColors = listOf(
+        Color(0xFF673AB7), Color(0xFF2196F3), Color(0xFF00BCD4),
+        Color(0xFF4CAF50), Color(0xFFFFC107), Color(0xFFFF5722),
+        Color(0xFFE91E63), Color(0xFF9C27B0)
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "Spending by Category",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 20.dp)
+                modifier = Modifier.align(Alignment.Start).padding(bottom = 20.dp)
             )
 
-            categorySpending.forEach { spending ->
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            DonutChart(
+                data = categorySpending,
+                colors = chartColors,
+                size = 180.dp,
+                thickness = 24.dp
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                categorySpending.forEachIndexed { index, spending ->
+                    val color = chartColors[index % chartColors.size]
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(color)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(getCategoryEmoji(spending.category, TransactionType.EXPENSE))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(spending.category, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                spending.category,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1
+                            )
                         }
                         Text(
                             "Rp ${spending.amount.formatAmount()}",
@@ -346,16 +449,6 @@ fun CategorySpendingChart(categorySpending: List<CategorySpending>) {
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { spending.percentage },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    )
                 }
             }
         }
@@ -380,32 +473,54 @@ fun MonthlyTrendChart(monthlyTrends: List<MonthlyTrend>) {
                 modifier = Modifier.padding(bottom = 20.dp)
             )
 
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
             ) {
-                monthlyTrends.forEach { trend ->
-                    TrendBarPair(
-                        trend = trend,
-                        maxAmount = maxAmount,
-                        modifier = Modifier.weight(1f)
-                    )
+                // Background Grid Lines
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    repeat(4) {
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxWidth(),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(1.dp)) // Bottom line
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    monthlyTrends.forEach { trend ->
+                        TrendBarPair(
+                            trend = trend,
+                            maxAmount = maxAmount,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
             
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Legend
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(12.dp).background(Color(0xFF4CAF50), RoundedCornerShape(2.dp)))
+                Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF4CAF50)))
                 Text(" Income", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 16.dp))
-                Box(Modifier.size(12.dp).background(Color(0xFFF44336), RoundedCornerShape(2.dp)))
+                Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFF44336)))
                 Text(" Expense", style = MaterialTheme.typography.labelSmall)
             }
         }
@@ -437,30 +552,35 @@ fun TrendBarPair(
     ) {
         Row(
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Income Bar
             Box(
                 modifier = Modifier
                     .fillMaxHeight(animatedIncome.coerceAtLeast(0.01f))
-                    .width(8.dp)
+                    .width(12.dp)
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(Color(0xFF4CAF50))
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFF4CAF50), Color(0xFF81C784)))
+                    )
             )
             // Expense Bar
             Box(
                 modifier = Modifier
                     .fillMaxHeight(animatedExpense.coerceAtLeast(0.01f))
-                    .width(8.dp)
+                    .width(12.dp)
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(Color(0xFFF44336))
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFFF44336), Color(0xFFE57373)))
+                    )
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = trend.month,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
         )
     }
 }
@@ -516,6 +636,12 @@ fun TransactionItem(transaction: Transaction) {
 
 fun Long.formatAmount(): String {
     return this.toString().reversed().chunked(3).joinToString(".").reversed()
+}
+
+fun Long.formatShortAmount(): String {
+    return if (this >= 1_000_000) "${(this / 100_000) / 10.0}M"
+    else if (this >= 1_000) "${(this / 1_000)}K"
+    else this.toString()
 }
 
 fun getCategoryEmoji(category: String, type: TransactionType): String {

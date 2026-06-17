@@ -48,6 +48,7 @@ fun SavingsScreen(
         SavingsContent(
             uiState = uiState,
             onInviteClick = { viewModel.onInviteClick(it) },
+            onContributeClick = { viewModel.onContributeClick(it) },
             modifier = Modifier.padding(paddingValues)
         )
 
@@ -75,6 +76,15 @@ fun SavingsScreen(
                 }
             )
         }
+
+        if (uiState.showContributeDialog) {
+            ContributeDialog(
+                onDismiss = { viewModel.onDismissContribute() },
+                onConfirm = { amount ->
+                    viewModel.contribute(amount)
+                }
+            )
+        }
     }
 }
 
@@ -82,6 +92,7 @@ fun SavingsScreen(
 fun SavingsContent(
     uiState: SavingsUiState,
     onInviteClick: (String) -> Unit,
+    onContributeClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -92,7 +103,8 @@ fun SavingsContent(
         items(uiState.savingsGoals) { goal ->
             SavingsGoalItem(
                 goal = goal,
-                onInviteClick = { onInviteClick(goal.id) }
+                onInviteClick = { onInviteClick(goal.id) },
+                onContributeClick = { onContributeClick(goal.id) }
             )
         }
     }
@@ -127,7 +139,8 @@ fun SavingsPreview() {
                         )
                     )
                 ),
-                onInviteClick = {}
+                onInviteClick = {},
+                onContributeClick = {}
             )
         }
     }
@@ -136,8 +149,10 @@ fun SavingsPreview() {
 @Composable
 fun SavingsGoalItem(
     goal: SavingsGoal,
-    onInviteClick: () -> Unit
+    onInviteClick: () -> Unit,
+    onContributeClick: () -> Unit
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val progress = (goal.currentAmount / goal.targetAmount).toFloat().coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(targetValue = progress)
 
@@ -146,7 +161,8 @@ fun SavingsGoalItem(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
+        ),
+        onClick = { expanded = !expanded }
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
@@ -194,12 +210,21 @@ fun SavingsGoalItem(
                     }
                 }
                 
-                IconButton(onClick = onInviteClick) {
-                    Icon(
-                        Icons.Default.PersonAdd,
-                        contentDescription = "Invite Collaborator",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                Row {
+                    IconButton(onClick = onContributeClick) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Contribute",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = onInviteClick) {
+                        Icon(
+                            Icons.Default.PersonAdd,
+                            contentDescription = "Invite Collaborator",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
@@ -247,32 +272,58 @@ fun SavingsGoalItem(
                 }
             }
             
-            if (goal.isShared && goal.collaborators.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            if (expanded) {
+                if (goal.contributions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Collaborators:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Recent Contributions",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Row {
-                        goal.collaborators.forEachIndexed { index, collaborator ->
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .offset(x = (index * -8).dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.secondary,
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    collaborator.name.take(1),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondary
-                                )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    goal.contributions.takeLast(3).reversed().forEach { contribution ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(contribution.userName, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "+ ${formatCurrency(contribution.amount)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+                }
+
+                if (goal.isShared && goal.collaborators.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Collaborators:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row {
+                            goal.collaborators.forEachIndexed { index, collaborator ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .offset(x = (index * -8).dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.secondary,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        collaborator.name.take(1),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondary
+                                    )
+                                }
                             }
                         }
                     }
@@ -354,6 +405,44 @@ fun InviteCollaboratorDialog(
         confirmButton = {
             Button(onClick = { onConfirm(email) }) {
                 Text("Invite")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun ContributeDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var amount by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Contribution") },
+        text = {
+            Column {
+                Text("How much would you like to contribute to this goal?")
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text("Amount") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(amount.toDoubleOrNull() ?: 0.0) }) {
+                Text("Contribute")
             }
         },
         dismissButton = {

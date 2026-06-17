@@ -7,10 +7,12 @@ import com.example.tasama.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -98,6 +100,22 @@ class DashboardViewModel(
                     )
                 }
 
+                // Calculate balance history (last 7 days cumulative)
+                val sortedTxs = transactions.sortedBy { it.createdAt }
+                val balanceHistory = last7Days.map { date ->
+                    val endOfDay = Instant.fromEpochMilliseconds(
+                        date.atStartOfDayIn(systemTZ).toEpochMilliseconds() + 86400000 - 1
+                    ).toEpochMilliseconds()
+                    
+                    val balanceAtDate = sortedTxs.filter { it.createdAt <= endOfDay }
+                        .sumOf { if (it.type == TransactionType.INCOME) it.amount else -it.amount }
+                    
+                    BalancePoint(
+                        label = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
+                        balance = balanceAtDate
+                    )
+                }
+
                 _uiState.value = DashboardUiState(
                     balance = income - expense,
                     income = income,
@@ -105,9 +123,24 @@ class DashboardViewModel(
                     transactions = transactions.sortedByDescending { it.createdAt }.take(10),
                     weeklySpending = weeklySpending,
                     categorySpending = categorySpending,
-                    monthlyTrends = monthlyTrends
+                    monthlyTrends = monthlyTrends,
+                    balanceHistory = balanceHistory
                 )
             }
         }
+    }
+
+    fun addTransaction(transaction: com.example.tasama.domain.model.Transaction) {
+        viewModelScope.launch {
+            repository.addTransaction(transaction)
+        }
+    }
+
+    fun onAddTransactionClick() {
+        _uiState.update { it.copy(showAddTransactionDialog = true) }
+    }
+
+    fun onDismissAddTransaction() {
+        _uiState.update { it.copy(showAddTransactionDialog = false) }
     }
 }

@@ -75,4 +75,20 @@ class SavingsViewModel(
             onDismissInvite()
         }
     }
+
+    fun onContributeClick(goalId: String) {
+        _uiState.update { it.copy(showContributeDialog = true, selectedGoalId = goalId) }
+    }
+
+    fun onDismissContribute() {
+        _uiState.update { it.copy(showContributeDialog = false, selectedGoalId = null) }
+    }
+
+    fun contribute(amount: Double) {
+        val goalId = _uiState.value.selectedGoalId ?: return
+        viewModelScope.launch {
+            repository.contribute(goalId, amount)
+            onDismissContribute()
+        }
+    }
 }

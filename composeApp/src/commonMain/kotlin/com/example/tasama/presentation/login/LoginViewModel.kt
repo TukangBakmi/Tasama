@@ -28,7 +28,15 @@ class LoginViewModel(
     }
 
     fun toggleMode() {
-        _uiState.update { it.copy(isRegister = !it.isRegister, error = null) }
+        _uiState.update { 
+            it.copy(
+                isRegister = !it.isRegister, 
+                error = null,
+                email = "",
+                password = "",
+                name = ""
+            ) 
+        }
     }
 
     fun login() {
@@ -44,7 +52,15 @@ class LoginViewModel(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 authRepository.signIn(email, password)
-                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                _uiState.update { 
+                    it.copy(
+                        isLoggedIn = true, 
+                        isLoading = false,
+                        email = "",
+                        password = "",
+                        name = ""
+                    ) 
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Login failed", isLoading = false) }
             }
@@ -65,7 +81,15 @@ class LoginViewModel(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 authRepository.signUp(email, password, name)
-                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                _uiState.update { 
+                    it.copy(
+                        isLoggedIn = true, 
+                        isLoading = false,
+                        email = "",
+                        password = "",
+                        name = ""
+                    ) 
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Registration failed", isLoading = false) }
             }
@@ -77,7 +101,15 @@ class LoginViewModel(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 authRepository.signInWithGoogle(idToken)
-                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                _uiState.update { 
+                    it.copy(
+                        isLoggedIn = true, 
+                        isLoading = false,
+                        email = "",
+                        password = "",
+                        name = ""
+                    ) 
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Google Sign-In failed", isLoading = false) }
             }
@@ -89,9 +121,35 @@ class LoginViewModel(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 authRepository.signInAnonymously()
-                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                _uiState.update { 
+                    it.copy(
+                        isLoggedIn = true, 
+                        isLoading = false,
+                        email = "",
+                        password = "",
+                        name = ""
+                    ) 
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Guest login failed", isLoading = false) }
+            }
+        }
+    }
+
+    fun resetPassword() {
+        val email = _uiState.value.email
+        if (email.isBlank()) {
+            _uiState.update { it.copy(error = "Please enter your email to reset password") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                authRepository.sendPasswordResetEmail(email)
+                _uiState.update { it.copy(error = "Password reset email sent!", isLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to send reset email", isLoading = false) }
             }
         }
     }

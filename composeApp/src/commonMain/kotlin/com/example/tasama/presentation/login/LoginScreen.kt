@@ -154,10 +154,24 @@ fun LoginScreen(
                     if (uiState.error != null) {
                         Text(
                             text = uiState.error!!,
-                            color = MaterialTheme.colorScheme.error,
+                            color = if (uiState.error!!.contains("sent")) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )
+                    }
+
+                    if (!uiState.isRegister) {
+                        TextButton(
+                            onClick = viewModel::resetPassword,
+                            modifier = Modifier.align(Alignment.End),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text(
+                                "Forgot Password?",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))

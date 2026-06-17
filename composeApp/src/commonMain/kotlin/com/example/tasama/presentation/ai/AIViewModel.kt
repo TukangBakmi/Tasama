@@ -43,7 +43,7 @@ class AIViewModel(
                     // and not because of a Firestore error
                     val welcomeMessage = ChatMessage(
                         id = "welcome",
-                        text = "Halo! Saya adalah Tasama AI. Saya bisa membantu mencatat keuangan Anda. Coba ketik 'abet nabung 100k' atau 'yaya parkir empo 4k'.",
+                        text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
                         timestamp = Clock.System.now().toEpochMilliseconds()
                     )
@@ -126,34 +126,31 @@ class AIViewModel(
     private fun processAIResponse(userText: String) {
         viewModelScope.launch {
             val prompt = """
-                Anda adalah Tasama AI, asisten keuangan pribadi yang cerdas dan ramah. 
+                Anda adalah Sir Quack, asisten keuangan pribadi yang cerdas dan ramah dalam aplikasi Tasama. 
                 Tugas Anda adalah memparsing input pengguna menjadi satu atau lebih transaksi keuangan dalam format JSON.
 
                 ATURAN PARSING:
-                1. FORMAT INCOME: "[Abet/Yaya] [Amount] [Note (opsional)]"
-                   - Nama (Abet/Yaya) WAJIB ada di depan.
+                1. FORMAT INCOME: "[Nama] [Amount] [Note (opsional)]"
+                   - Nama Pengguna WAJIB ada di depan.
                    - Urutan: Nama -> Nominal -> Catatan.
-                   - Jika Nama tidak disebutkan (misal: "nabung 100k"), atau kata "Income" digunakan tanpa nama, maka format SALAH.
-                   - Contoh: "abet 100k nabung" -> Category: Abet, Type: INCOME, Amount: 100000, Note: nabung.
+                   - Contoh: "Budi 100k nabung" -> Category: Budi, Type: INCOME, Amount: 100000, Note: nabung.
 
                 2. FORMAT EXPENSE: "[Amount] [Note]"
                    - Urutan: Nominal -> Catatan.
                    - Nominal WAJIB di depan Catatan.
-                   - Jika Catatan di depan Nominal (misal: "kopi 20k"), maka format SALAH.
                    - Contoh: "20k kopi" -> Category: General, Type: EXPENSE, Amount: 20000, Note: kopi.
 
-                3. FORMAT EXPENSE PRIBADI: "[Abet/Yaya] [Amount] [Note]"
-                   - Urutan: Nama -> Nominal -> Catatan.
-                   - JIKA Nama (Abet/Yaya) disebutkan di awal (misal: "abet 50k bakso"):
-                     ARTINYA Abet mengeluarkan uang pribadi untuk pengeluaran bersama.
+                3. FORMAT EXPENSE PRIBADI: "[Nama] [Amount] [Note]"
+                   - JIKA Nama disebutkan di awal (misal: "Budi 50k bakso"):
+                     ARTINYA Budi mengeluarkan uang pribadi untuk pengeluaran bersama.
                      WAJIB BUAT 2 TRANSAKSI SEKALIGUS:
-                     a. Type: INCOME, Category: "Abet", Amount: 50000, Note: "nabung"
-                     b. Type: EXPENSE, Category: "General", Amount: 50000, Note: "bakso"
+                     a. Type: INCOME, Category: [Nama], Amount: [Amount], Note: "nabung"
+                     b. Type: EXPENSE, Category: "General", Amount: [Amount], Note: [Note]
 
                 PENTING:
-                - Jika input hanya "income [amount]" tanpa menyebutkan Abet atau Yaya, set "is_transaction" ke false.
+                - Jika input hanya "income [amount]" tanpa menyebutkan Nama, set "is_transaction" ke false.
                 - Jangan pernah menebak nama jika tidak ada.
-                - Jika "is_transaction" false, beri tahu pengguna bahwa nama (Abet/Yaya) atau urutan nominal harus benar.
+                - Jika "is_transaction" false, beri tahu pengguna bahwa nama atau urutan nominal harus benar.
 
                 KATEGORI KHUSUS:
                 - Bunga: "Bunga [Amount]" -> Category: "Bunga", Type: INCOME, Note: "bunga"
@@ -169,7 +166,7 @@ class AIViewModel(
                     {
                       "type": "INCOME" | "EXPENSE",
                       "amount": number,
-                      "category": "Abet" | "Yaya" | "Bunga" | "Cashback" | "General",
+                      "category": "string (Nama atau Kategori)",
                       "note": "string"
                     }
                   ],

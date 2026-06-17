@@ -22,6 +22,7 @@ class FirebaseChatRepository(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getMessages(): Flow<List<ChatMessage>> {
+        val currentUserId = authRepository.getCurrentUserId()
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
@@ -30,8 +31,11 @@ class FirebaseChatRepository(
                     .limit(20)
                     .snapshots
                     .map { snapshot ->
-                        snapshot.documents.map { it.data<ChatMessage>() }
-                            .sortedBy { it.timestamp }
+                        snapshot.documents.map { 
+                            val msg = it.data<ChatMessage>()
+                            msg.copy(isFromMe = msg.userId == currentUserId)
+                        }
+                        .sortedBy { it.timestamp }
                     }
                     .catch { e ->
                         println("Firestore Error: ${e.message}")
@@ -50,7 +54,10 @@ class FirebaseChatRepository(
                 .limit(limit)
                 .get()
                 .documents
-                .map { it.data<ChatMessage>() }
+                .map { 
+                    val msg = it.data<ChatMessage>()
+                    msg.copy(isFromMe = msg.userId == uid)
+                }
                 .sortedBy { it.timestamp }
         } catch (e: Exception) {
             emptyList()
@@ -59,15 +66,17 @@ class FirebaseChatRepository(
 
     override suspend fun sendMessage(text: String) {
         val userId = authRepository.getCurrentUserId() ?: return
+        val senderName = authRepository.getUserName(userId) ?: "User"
         val now = Clock.System.now().toEpochMilliseconds()
         val id = "msg_$now"
         val newMessage = ChatMessage(
             id = id,
             userId = userId,
+            senderName = senderName,
             text = text,
             sender = MessageSender.USER,
-            timestamp = now,
-            isFromMe = true
+            timestamp = now
+            // isFromMe is computed in getMessages
         )
         collection.document(id).set(newMessage)
     }

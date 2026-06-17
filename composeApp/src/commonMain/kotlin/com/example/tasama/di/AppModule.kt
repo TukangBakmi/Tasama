@@ -14,6 +14,7 @@ import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.presentation.ai.AIViewModel
 import com.example.tasama.presentation.chat.ChatViewModel
 import com.example.tasama.presentation.dashboard.DashboardViewModel
+import com.example.tasama.presentation.login.LoginViewModel
 import com.example.tasama.presentation.main.MainViewModel
 import com.example.tasama.presentation.profile.ProfileViewModel
 import com.example.tasama.presentation.savings.SavingsViewModel
@@ -48,6 +49,7 @@ val appModule = module {
     viewModel { AIViewModel(get(), get(), get()) }
     viewModel { SavingsViewModel(get()) }
     viewModel { ChatViewModel(get()) }
-    viewModel { ProfileViewModel(get(), get(), get()) }
+    viewModel { ProfileViewModel(get(), get(), get(), get()) }
     viewModel { MainViewModel(get()) }
+    viewModel { LoginViewModel(get()) }
 }

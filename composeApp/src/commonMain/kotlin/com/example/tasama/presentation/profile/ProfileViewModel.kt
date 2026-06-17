@@ -2,6 +2,7 @@ package com.example.tasama.presentation.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.domain.service.ExportService
 import com.example.tasama.domain.service.FileService
@@ -11,12 +12,31 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
+    private val authRepository: AuthRepository,
     private val transactionRepository: TransactionRepository,
     private val exportService: ExportService,
     private val fileService: FileService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState = _uiState.asStateFlow()
+
+    init {
+        loadUserProfile()
+    }
+
+    private fun loadUserProfile() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            val name = authRepository.getUserName(uid)
+            _uiState.update { it.copy(userName = name ?: "User", userEmail = "") } // Email could be fetched if needed
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.signOut()
+        }
+    }
 
     fun exportToExcel() {
         viewModelScope.launch {

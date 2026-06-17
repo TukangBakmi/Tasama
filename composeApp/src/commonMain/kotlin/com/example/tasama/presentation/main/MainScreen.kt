@@ -12,56 +12,68 @@ import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
 import com.example.tasama.presentation.chat.ChatScreen
 import com.example.tasama.presentation.dashboard.DashboardScreen
+import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.profile.ProfileScreen
 import com.example.tasama.presentation.savings.SavingsScreen
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MainScreen(
-    viewModel: MainViewModel = koinViewModel()
+    viewModel: MainViewModel = koinViewModel(),
+    onGoogleSignInClick: () -> Unit = {}
 ) {
     val navController = rememberNavController()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
 
-    val items = listOf(
-        BottomNavItem.Dashboard,
-        BottomNavItem.Savings,
-        BottomNavItem.AIAdvisor,
-        BottomNavItem.Chat,
-        BottomNavItem.Profile
-    )
+    if (!isLoggedIn) {
+        LoginScreen(
+            onGoogleSignInClick = onGoogleSignInClick,
+            onLoginSuccess = {
+                // Navigation is handled by the isLoggedIn state observer in MainViewModel
+            }
+        )
+    } else {
+        val items = listOf(
+            BottomNavItem.Dashboard,
+            BottomNavItem.Savings,
+            BottomNavItem.AIAdvisor,
+            BottomNavItem.Chat,
+            BottomNavItem.Profile
+        )
 
-    MainContent(
-        navController = navController,
-        items = items,
-        content = { padding ->
-            NavHost(
-                navController = navController,
-                startDestination = BottomNavItem.Dashboard.route,
-                modifier = Modifier.padding(padding)
-            ) {
-                composable(BottomNavItem.Dashboard.route) {
-                    DashboardScreen(
-                        viewModel = koinViewModel(),
-                        onTransactionClick = { /* Handle navigation to list if needed */ }
-                    )
-                }
-                composable(BottomNavItem.Savings.route) {
-                    SavingsScreen()
-                }
-                composable(BottomNavItem.AIAdvisor.route) {
-                    AIScreen(
-                        viewModel = koinViewModel()
-                    )
-                }
-                composable(BottomNavItem.Chat.route) {
-                    ChatScreen()
-                }
-                composable(BottomNavItem.Profile.route) {
-                    ProfileScreen()
+        MainContent(
+            navController = navController,
+            items = items,
+            content = { padding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = BottomNavItem.Dashboard.route,
+                    modifier = Modifier.padding(padding)
+                ) {
+                    composable(BottomNavItem.Dashboard.route) {
+                        DashboardScreen(
+                            viewModel = koinViewModel(),
+                            onTransactionClick = { /* Handle navigation to list if needed */ }
+                        )
+                    }
+                    composable(BottomNavItem.Savings.route) {
+                        SavingsScreen()
+                    }
+                    composable(BottomNavItem.AIAdvisor.route) {
+                        AIScreen(
+                            viewModel = koinViewModel()
+                        )
+                    }
+                    composable(BottomNavItem.Chat.route) {
+                        ChatScreen()
+                    }
+                    composable(BottomNavItem.Profile.route) {
+                        ProfileScreen()
+                    }
                 }
             }
-        }
-    )
+        )
+    }
 }
 
 @Composable

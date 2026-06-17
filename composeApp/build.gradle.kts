@@ -50,6 +50,9 @@ kotlin {
             implementation(libs.poi.ooxml)
             implementation(libs.openpdf)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.androidx.auth.credentials)
+            implementation(libs.androidx.auth.play.services)
+            implementation(libs.googleid)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)

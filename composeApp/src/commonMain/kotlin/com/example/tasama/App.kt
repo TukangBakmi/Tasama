@@ -9,11 +9,12 @@ import org.koin.compose.KoinContext
 
 @Composable
 @Preview
-fun App() {
-    initKoin()
+fun App(
+    onGoogleSignInClick: () -> Unit = {}
+) {
     KoinContext {
         MaterialTheme {
-            MainScreen()
+            MainScreen(onGoogleSignInClick = onGoogleSignInClick)
         }
     }
 }

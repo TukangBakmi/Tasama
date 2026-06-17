@@ -50,6 +50,7 @@ fun ProfileScreen(
             uiState = uiState,
             onExportExcel = viewModel::exportToExcel,
             onExportPdf = viewModel::exportToPdf,
+            onLogout = viewModel::logout,
             modifier = Modifier.padding(padding)
         )
     }
@@ -60,6 +61,7 @@ fun ProfileContent(
     uiState: ProfileUiState,
     onExportExcel: () -> Unit,
     onExportPdf: () -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -117,7 +119,7 @@ fun ProfileContent(
                     icon = Icons.Default.ExitToApp,
                     title = "Logout",
                     titleColor = MaterialTheme.colorScheme.error,
-                    onClick = {}
+                    onClick = onLogout
                 )
             }
         }
@@ -252,7 +254,8 @@ fun ProfilePreview() {
         ProfileContent(
             uiState = ProfileUiState(),
             onExportExcel = {},
-            onExportPdf = {}
+            onExportPdf = {},
+            onLogout = {}
         )
     }
 }

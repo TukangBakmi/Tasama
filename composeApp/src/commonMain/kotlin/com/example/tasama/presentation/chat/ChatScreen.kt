@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -39,7 +42,7 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Partner Chat", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Shared Chat", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("Online", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -135,7 +138,7 @@ fun ChatContent(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "No messages yet. Say hi to your partner!",
+                    "No messages yet. Say hi!",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -224,9 +227,9 @@ fun MessageBubble(message: ChatMessage) {
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             if (!message.isFromMe) {
-                val senderName = when(message.sender) {
-                    MessageSender.AI -> "Tasama AI"
-                    MessageSender.USER -> "Partner"
+                val senderName = when (message.sender) {
+                    MessageSender.AI -> "Sir Quack"
+                    else -> message.senderName.ifEmpty { "User" }
                 }
                 Text(
                     text = senderName,
@@ -247,12 +250,27 @@ fun MessageBubble(message: ChatMessage) {
                         text = message.text,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Text(
-                        text = "12:30 PM", // Placeholder for actual time formatting
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
-                        color = contentColor.copy(alpha = 0.6f)
-                    )
+                    
+                    val timeString = remember(message.timestamp) {
+                        try {
+                            val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                            val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                            val hour = localDateTime.hour.toString().padStart(2, '0')
+                            val minute = localDateTime.minute.toString().padStart(2, '0')
+                            "$hour:$minute"
+                        } catch (e: Exception) {
+                            ""
+                        }
+                    }
+
+                    if (timeString.isNotEmpty()) {
+                        Text(
+                            text = timeString,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
+                            color = contentColor.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }

@@ -145,7 +145,7 @@ fun AIContent(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Tasama AI sedang mengetik...",
+                                "Sir Quack sedang mengetik...",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -164,7 +164,7 @@ fun AIContent(
                     value = uiState.inputText,
                     onValueChange = onInputChange,
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Tanya Tasama AI...") },
+                    placeholder = { Text("Tanya Sir Quack...") },
                     shape = RoundedCornerShape(24.dp)
                 )
 

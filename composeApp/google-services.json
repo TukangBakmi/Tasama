@@ -12,7 +12,20 @@
           "package_name": "com.example.tasama"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "761665195026-s9rfv0csg0nkbt6cg7gv3lke97g8bgm0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.tasama",
+            "certificate_hash": "3045aac2b275824a6a9318d56a787fb5e8d3d1d2"
+          }
+        },
+        {
+          "client_id": "761665195026-0lqjs7j2b7p7j8mjcvb6ukckl0p10d0u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCwZQy9C4uIEiL2IyrJfwWW8VjP3WG7-KA"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "761665195026-0lqjs7j2b7p7j8mjcvb6ukckl0p10d0u.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "761665195026-idobbj8g318tt52mlu3nuf4oh0hnss4i.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tasama"
+              }
+            }
+          ]
         }
       }
     }

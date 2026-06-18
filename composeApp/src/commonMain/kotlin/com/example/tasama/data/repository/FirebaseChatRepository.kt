@@ -1,11 +1,14 @@
 package com.example.tasama.data.repository
 
+import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.firestore.where
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -18,44 +21,52 @@ class FirebaseChatRepository(
     private val authRepository: AuthRepository
 ) : ChatRepository {
     private val firestore = Firebase.firestore
-    private val collection = firestore.collection("chat_messages")
+    private val channelsCollection = firestore.collection("chat_channels")
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun getMessages(): Flow<List<ChatMessage>> {
-        val currentUserId = authRepository.getCurrentUserId()
+    override fun getChannels(): Flow<List<ChatChannel>> {
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
-                collection.where { "userId" equalTo uid }
-                    .orderBy("timestamp", direction = dev.gitlive.firebase.firestore.Direction.DESCENDING)
-                    .limit(20)
+                channelsCollection.where { "participantIds" contains uid }
                     .snapshots
                     .map { snapshot ->
-                        snapshot.documents.map { 
-                            val msg = it.data<ChatMessage>()
-                            msg.copy(isFromMe = msg.userId == currentUserId)
-                        }
-                        .sortedBy { it.timestamp }
+                        snapshot.documents.map { it.data(ChatChannel.serializer()) }
+                            .sortedByDescending { it.lastMessageTimestamp }
                     }
-                    .catch { e ->
-                        println("Firestore Error: ${e.message}")
-                        emit(emptyList())
-                    }
+                    .catch { emit(emptyList()) }
             }
         }
     }
 
-    override suspend fun getMoreMessages(limit: Int, beforeTimestamp: Long): List<ChatMessage> {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getMessages(channelId: String): Flow<List<ChatMessage>> {
+        val currentUserId = authRepository.getCurrentUserId()
+        return channelsCollection.document(channelId).collection("messages")
+            .orderBy("timestamp", direction = Direction.DESCENDING)
+            .limit(20)
+            .snapshots
+            .map { snapshot ->
+                snapshot.documents.map {
+                    val msg = it.data(ChatMessage.serializer())
+                    msg.copy(isFromMe = msg.userId == currentUserId)
+                }
+                .sortedBy { it.timestamp }
+            }
+            .catch { emit(emptyList()) }
+    }
+
+    override suspend fun getMoreMessages(channelId: String, limit: Int, beforeTimestamp: Long): List<ChatMessage> {
         val uid = authRepository.getCurrentUserId() ?: return emptyList()
         return try {
-            collection.where { "userId" equalTo uid }
+            channelsCollection.document(channelId).collection("messages")
                 .where { "timestamp" lessThan beforeTimestamp }
-                .orderBy("timestamp", direction = dev.gitlive.firebase.firestore.Direction.DESCENDING)
+                .orderBy("timestamp", direction = Direction.DESCENDING)
                 .limit(limit)
                 .get()
                 .documents
-                .map { 
-                    val msg = it.data<ChatMessage>()
+                .map {
+                    val msg = it.data(ChatMessage.serializer())
                     msg.copy(isFromMe = msg.userId == uid)
                 }
                 .sortedBy { it.timestamp }
@@ -64,7 +75,7 @@ class FirebaseChatRepository(
         }
     }
 
-    override suspend fun sendMessage(text: String) {
+    override suspend fun sendMessage(channelId: String, text: String) {
         val userId = authRepository.getCurrentUserId() ?: return
         val senderName = authRepository.getUserName(userId) ?: "User"
         val now = Clock.System.now().toEpochMilliseconds()
@@ -76,8 +87,64 @@ class FirebaseChatRepository(
             text = text,
             sender = MessageSender.USER,
             timestamp = now
-            // isFromMe is computed in getMessages
         )
-        collection.document(id).set(newMessage)
+        
+        val channelRef = channelsCollection.document(channelId)
+        val channel = channelRef.get().data(ChatChannel.serializer())
+        
+        val newUnreadCounts = channel.unreadCounts.toMutableMap()
+        channel.participantIds.forEach { participantId ->
+            if (participantId != userId) {
+                newUnreadCounts[participantId] = (newUnreadCounts[participantId] ?: 0) + 1
+            }
+        }
+
+        channelRef.collection("messages").document(id).set(ChatMessage.serializer(), newMessage)
+        channelRef.update(
+            "lastMessage" to text,
+            "lastMessageTimestamp" to now,
+            "unreadCounts" to newUnreadCounts
+        )
+    }
+
+    override suspend fun createChannelWithUser(otherUserId: String): String {
+        val currentUserId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
+        val currentUserName = authRepository.getUserName(currentUserId) ?: "User"
+        val otherUserName = authRepository.getUserName(otherUserId) ?: "Partner"
+
+        val channelId = if (currentUserId < otherUserId) "${currentUserId}_${otherUserId}" else "${otherUserId}_${currentUserId}"
+        
+        val existing = channelsCollection.document(channelId).get()
+        if (!existing.exists) {
+            val channel = ChatChannel(
+                id = channelId,
+                participantIds = listOf(currentUserId, otherUserId),
+                participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
+                lastMessage = "Started a conversation",
+                lastMessageTimestamp = Clock.System.now().toEpochMilliseconds(),
+                unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
+            )
+            channelsCollection.document(channelId).set(ChatChannel.serializer(), channel)
+        }
+        return channelId
+    }
+
+    override suspend fun markChannelAsRead(channelId: String) {
+        val userId = authRepository.getCurrentUserId() ?: return
+        val channelRef = channelsCollection.document(channelId)
+        val channel = channelRef.get().data(ChatChannel.serializer())
+        
+        val newUnreadCounts = channel.unreadCounts.toMutableMap()
+        newUnreadCounts[userId] = 0
+        
+        channelRef.update("unreadCounts" to newUnreadCounts)
+    }
+
+    override suspend fun getUserName(userId: String): String? {
+        return authRepository.getUserName(userId)
+    }
+
+    override fun getCurrentUserId(): String? {
+        return authRepository.getCurrentUserId()
     }
 }

@@ -15,16 +15,24 @@ class ChatViewModel(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
-    init {
-        observeMessages()
+    private var currentChannelId: String? = null
+
+    fun setChannel(channelId: String) {
+        currentChannelId = channelId
+        observeMessages(channelId)
+        markAsRead(channelId)
     }
 
-    private fun observeMessages() {
+    private fun markAsRead(channelId: String) {
         viewModelScope.launch {
-            repository.getMessages().collect { messages ->
+            repository.markChannelAsRead(channelId)
+        }
+    }
+
+    private fun observeMessages(channelId: String) {
+        viewModelScope.launch {
+            repository.getMessages(channelId).collect { messages ->
                 _uiState.update { state ->
-                    // Merge logic: Keep paged messages (older than the latest batch)
-                    // but replace the latest batch with the new data from the flow
                     val latestOldestTimestamp = messages.firstOrNull()?.timestamp ?: 0L
                     val pagedMessages = state.messages.filter { it.timestamp < latestOldestTimestamp }
                     
@@ -38,6 +46,7 @@ class ChatViewModel(
     }
 
     fun loadMoreMessages() {
+        val channelId = currentChannelId ?: return
         if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreMessages) return
 
         val oldestMessage = _uiState.value.messages.firstOrNull() ?: return
@@ -46,6 +55,7 @@ class ChatViewModel(
             _uiState.update { it.copy(isLoadingMore = true) }
             
             val moreMessages = repository.getMoreMessages(
+                channelId = channelId,
                 limit = 20,
                 beforeTimestamp = oldestMessage.timestamp
             )
@@ -72,12 +82,20 @@ class ChatViewModel(
     }
 
     fun sendMessage() {
+        val channelId = currentChannelId ?: return
         val messageText = _uiState.value.inputText
         if (messageText.isBlank()) return
 
         viewModelScope.launch {
-            repository.sendMessage(messageText)
+            repository.sendMessage(channelId, messageText)
             _uiState.update { it.copy(inputText = "") }
+        }
+    }
+
+    fun createChannel(otherUserId: String) {
+        viewModelScope.launch {
+            val channelId = repository.createChannelWithUser(otherUserId)
+            setChannel(channelId)
         }
     }
 }

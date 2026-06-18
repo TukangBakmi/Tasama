@@ -13,6 +13,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
+import com.example.tasama.presentation.chat.ChatListScreen
 import com.example.tasama.presentation.chat.ChatScreen
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
@@ -101,7 +102,15 @@ fun MainScreen(
                                 AIScreen(viewModel = koinViewModel())
                             }
                             composable(BottomNavItem.Chat.route) {
-                                ChatScreen()
+                                ChatListScreen(
+                                    onChannelClick = { channelId ->
+                                        navController.navigate("chat_room/$channelId")
+                                    }
+                                )
+                            }
+                            composable("chat_room/{channelId}") { backStackEntry ->
+                                val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
+                                ChatScreen(channelId = channelId)
                             }
                             composable(BottomNavItem.Profile.route) {
                                 ProfileScreen()

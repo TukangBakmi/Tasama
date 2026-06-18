@@ -33,9 +33,14 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    channelId: String,
     viewModel: ChatViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(channelId) {
+        viewModel.setChannel(channelId)
+    }
 
     Scaffold(
         topBar = {

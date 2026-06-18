@@ -28,7 +28,7 @@ class ProfileViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val name = authRepository.getUserName(uid)
-            _uiState.update { it.copy(userName = name ?: "User", userEmail = "") } // Email could be fetched if needed
+            _uiState.update { it.copy(userName = name ?: "User", userEmail = "", userId = uid) }
         }
     }
 

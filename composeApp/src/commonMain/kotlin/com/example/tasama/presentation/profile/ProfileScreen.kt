@@ -71,7 +71,7 @@ fun ProfileContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                ProfileHeader(uiState.userName, uiState.userEmail)
+                ProfileHeader(uiState.userName, uiState.userEmail, uiState.userId)
             }
 
             item {
@@ -151,7 +151,7 @@ fun ProfileContent(
 }
 
 @Composable
-fun ProfileHeader(name: String, email: String) {
+fun ProfileHeader(name: String, email: String, userId: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -183,6 +183,25 @@ fun ProfileHeader(name: String, email: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (userId.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "ID: $userId",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy ID",
+                        modifier = Modifier.size(14.dp).clickable {
+                            // Copy to clipboard logic if possible in KMP
+                        },
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                }
+            }
         }
     }
 }

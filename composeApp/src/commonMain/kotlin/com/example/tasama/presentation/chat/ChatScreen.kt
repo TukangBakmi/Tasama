@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import com.example.tasama.domain.model.MessageStatus
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -269,17 +272,44 @@ fun MessageBubble(message: ChatMessage) {
                     }
 
                     if (timeString.isNotEmpty()) {
-                        Text(
-                            text = timeString,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
-                            color = contentColor.copy(alpha = 0.6f)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp)
+                        ) {
+                            Text(
+                                text = timeString,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = contentColor.copy(alpha = 0.6f)
+                            )
+                            if (message.isFromMe) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MessageStatusIcon(message.status)
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun MessageStatusIcon(status: MessageStatus) {
+    val icon = when (status) {
+        MessageStatus.SENT -> Icons.Default.Check
+        MessageStatus.DELIVERED, MessageStatus.READ -> Icons.Default.DoneAll
+    }
+    val tint = if (status == MessageStatus.READ) {
+        Color(0xFF00BFFF) // Blue for read
+    } else {
+        LocalContentColor.current.copy(alpha = 0.5f)
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = status.name,
+        modifier = Modifier.size(14.dp),
+        tint = tint
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

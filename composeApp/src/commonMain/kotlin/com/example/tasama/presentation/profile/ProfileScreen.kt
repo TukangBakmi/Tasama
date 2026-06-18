@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
@@ -32,6 +34,7 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(uiState.exportMessage) {
         uiState.exportMessage?.let {
@@ -51,6 +54,10 @@ fun ProfileScreen(
             onExportExcel = viewModel::exportToExcel,
             onExportPdf = viewModel::exportToPdf,
             onLogout = viewModel::logout,
+            onCopyId = { id ->
+                clipboardManager.setText(AnnotatedString(id))
+                viewModel.onIdCopied()
+            },
             modifier = Modifier.padding(padding)
         )
     }
@@ -62,6 +69,7 @@ fun ProfileContent(
     onExportExcel: () -> Unit,
     onExportPdf: () -> Unit,
     onLogout: () -> Unit,
+    onCopyId: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -71,7 +79,12 @@ fun ProfileContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                ProfileHeader(uiState.userName, uiState.userEmail, uiState.userId)
+                ProfileHeader(
+                    name = uiState.userName,
+                    email = uiState.userEmail,
+                    shortId = uiState.userShortId,
+                    onCopyId = onCopyId
+                )
             }
 
             item {
@@ -151,7 +164,12 @@ fun ProfileContent(
 }
 
 @Composable
-fun ProfileHeader(name: String, email: String, userId: String) {
+fun ProfileHeader(
+    name: String,
+    email: String,
+    shortId: String,
+    onCopyId: (String) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -183,22 +201,26 @@ fun ProfileHeader(name: String, email: String, userId: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (userId.isNotEmpty()) {
+            if (shortId.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onCopyId(shortId) }
+                        .padding(vertical = 2.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "ID: $userId",
+                        text = "ID: $shortId",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         Icons.Default.ContentCopy,
                         contentDescription = "Copy ID",
-                        modifier = Modifier.size(14.dp).clickable {
-                            // Copy to clipboard logic if possible in KMP
-                        },
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -274,7 +296,8 @@ fun ProfilePreview() {
             uiState = ProfileUiState(),
             onExportExcel = {},
             onExportPdf = {},
-            onLogout = {}
+            onLogout = {},
+            onCopyId = {}
         )
     }
 }

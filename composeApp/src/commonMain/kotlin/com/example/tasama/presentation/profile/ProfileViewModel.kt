@@ -28,7 +28,13 @@ class ProfileViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val name = authRepository.getUserName(uid)
-            _uiState.update { it.copy(userName = name ?: "User", userEmail = "", userId = uid) }
+            val shortId = authRepository.getUserShortId(uid)
+            _uiState.update { it.copy(
+                userName = name ?: "User", 
+                userEmail = "", 
+                userId = uid,
+                userShortId = shortId ?: ""
+            ) }
         }
     }
 
@@ -72,5 +78,9 @@ class ProfileViewModel(
 
     fun clearExportMessage() {
         _uiState.update { it.copy(exportMessage = null) }
+    }
+
+    fun onIdCopied() {
+        _uiState.update { it.copy(exportMessage = "ID copied to clipboard") }
     }
 }

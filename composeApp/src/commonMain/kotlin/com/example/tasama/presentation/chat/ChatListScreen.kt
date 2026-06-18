@@ -1,7 +1,7 @@
 package com.example.tasama.presentation.chat
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,13 +9,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,12 +61,30 @@ fun ChatListScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(uiState.channels) { channel ->
-                        ChannelItem(
-                            channel = channel,
-                            currentUserId = viewModel.currentUserId,
-                            onClick = { onChannelClick(channel.id) }
-                        )
+                    items(uiState.channels, key = { it.id }) { channel ->
+                        var showMenu by remember { mutableStateOf(false) }
+                        
+                        Box {
+                            ChannelItem(
+                                channel = channel,
+                                currentUserId = viewModel.currentUserId,
+                                onClick = { onChannelClick(channel.id) },
+                                onLongClick = { showMenu = true }
+                            )
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete Chat") },
+                                    onClick = {
+                                        viewModel.deleteChannel(channel.id)
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                )
+                            }
+                        }
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
@@ -78,7 +99,7 @@ fun ChatListScreen(
                 showAddContactDialog = false
                 viewModel.clearSearch()
             },
-            onSearch = { userId -> viewModel.searchUser(userId) },
+            onSearch = { query -> viewModel.searchUser(query) },
             onAdd = { userId ->
                 viewModel.createChannel(userId)
                 showAddContactDialog = false
@@ -88,11 +109,21 @@ fun ChatListScreen(
 }
 
 @Composable
-fun ChannelItem(channel: ChatChannel, currentUserId: String?, onClick: () -> Unit) {
+fun ChannelItem(
+    channel: ChatChannel, 
+    currentUserId: String?, 
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongClick() }
+                )
+            }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -185,29 +216,29 @@ fun AddContactDialog(
     onSearch: (String) -> Unit,
     onAdd: (String) -> Unit
 ) {
-    var userId by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Contact") },
         text = {
             Column {
-                Text("Enter the User ID of the person you want to chat with.")
+                Text("Enter the 12-digit User ID or UID of the person you want to chat with.")
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
-                        value = userId,
-                        onValueChange = { userId = it },
-                        placeholder = { Text("User ID") },
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("User ID (12 digits)") },
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(
-                        onClick = { onSearch(userId) },
-                        enabled = userId.isNotBlank() && !uiState.isSearchingUser
+                        onClick = { onSearch(query) },
+                        enabled = query.isNotBlank() && !uiState.isSearchingUser
                     ) {
                         if (uiState.isSearchingUser) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
-                            Icon(Icons.Default.Add, contentDescription = "Search")
+                            Icon(Icons.Default.Search, contentDescription = "Search")
                         }
                     }
                 }

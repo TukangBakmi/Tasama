@@ -2,6 +2,7 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.MessageStatus
 import com.example.tasama.domain.repository.ChatRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,12 @@ class ChatViewModel(
                         .distinctBy { it.id }
                         .sortedBy { it.timestamp }
                     state.copy(messages = combined)
+                }
+
+                // Mark unread messages as read
+                val currentUserId = repository.getCurrentUserId()
+                messages.filter { it.userId != currentUserId && it.status != MessageStatus.READ }.forEach { msg ->
+                    repository.markMessageAsRead(channelId, msg.id)
                 }
             }
         }

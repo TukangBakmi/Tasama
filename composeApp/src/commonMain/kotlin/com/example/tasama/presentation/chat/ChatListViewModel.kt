@@ -42,23 +42,44 @@ class ChatListViewModel(
         }
     }
 
-    fun searchUser(userId: String) {
-        if (userId.isBlank()) return
+    fun searchUser(query: String) {
+        if (query.isBlank()) return
+        val currentUid = repository.getCurrentUserId()
         _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
         viewModelScope.launch {
             try {
-                // Since there is no searchUser in ChatRepository, I'll use authRepository if I can, 
-                // but ChatRepository has createChannelWithUser which uses authRepository.getUserName.
-                // Let's assume for now we can get it via a new method in ChatRepository or just use the current logic.
-                // For "real-time user name fetching", I should probably add a method to ChatRepository.
-                val name = repository.getUserName(userId)
-                if (name != null) {
-                    _uiState.update { it.copy(searchedUser = SearchedUser(userId, name), isSearchingUser = false) }
+                val userId = if (query.length == 12 && query.all { it.isDigit() }) {
+                    repository.getUserIdFromShortId(query)
+                } else {
+                    query // Assume it might be a full UID for now, or just fallback
+                }
+
+                if (userId != null) {
+                    if (userId == currentUid) {
+                        _uiState.update { it.copy(error = "You cannot chat with yourself", isSearchingUser = false) }
+                        return@launch
+                    }
+                    val name = repository.getUserName(userId)
+                    if (name != null) {
+                        _uiState.update { it.copy(searchedUser = SearchedUser(userId, name), isSearchingUser = false) }
+                    } else {
+                        _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                    }
                 } else {
                     _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
+            }
+        }
+    }
+
+    fun deleteChannel(channelId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteChannel(channelId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }

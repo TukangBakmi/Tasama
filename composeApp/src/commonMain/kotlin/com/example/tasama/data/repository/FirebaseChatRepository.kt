@@ -3,6 +3,7 @@ package com.example.tasama.data.repository
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import com.example.tasama.domain.model.MessageStatus
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import dev.gitlive.firebase.Firebase
@@ -86,7 +87,8 @@ class FirebaseChatRepository(
             senderName = senderName,
             text = text,
             sender = MessageSender.USER,
-            timestamp = now
+            timestamp = now,
+            status = MessageStatus.SENT
         )
         
         val channelRef = channelsCollection.document(channelId)
@@ -105,6 +107,28 @@ class FirebaseChatRepository(
             "lastMessageTimestamp" to now,
             "unreadCounts" to newUnreadCounts
         )
+
+        // Send Notification (In a real app, this would be handled by a Cloud Function)
+        // For this task, we'll simulate the "trigger" or explain it needs a backend.
+        // However, I can implement a client-side call to a hypothetical notification service 
+        // if I had one, or just document that Firestore Triggers are preferred.
+        // Let's assume we want to call a function to notify other participants.
+        sendPushNotificationToParticipants(channel, newMessage)
+    }
+
+    private suspend fun sendPushNotificationToParticipants(channel: ChatChannel, message: ChatMessage) {
+        val currentUserId = authRepository.getCurrentUserId() ?: return
+        val otherParticipants = channel.participantIds.filter { it != currentUserId }
+        
+        for (participantId in otherParticipants) {
+            val user = authRepository.getUser(participantId)
+            val token = user?.fcmToken
+            if (token != null) {
+                // In a production app, you'd send this to your backend or use Firebase Admin SDK
+                // Cloud Functions are the standard way to handle this on Firestore writes.
+                println("Push notification would be sent to token: $token with message: ${message.text}")
+            }
+        }
     }
 
     override suspend fun createChannelWithUser(otherUserId: String): String {
@@ -138,10 +162,47 @@ class FirebaseChatRepository(
         newUnreadCounts[userId] = 0
         
         channelRef.update("unreadCounts" to newUnreadCounts)
+        
+        // Also mark all messages in this channel as read for this user
+        // Firestore doesn't support multiple inequality filters on different fields.
+        // We filter by userId and then check status in code.
+        val messages = channelRef.collection("messages")
+            .where { "userId" notEqualTo userId }
+            .get()
+            .documents
+        
+        messages.forEach { doc ->
+            val msg = doc.data(ChatMessage.serializer())
+            if (msg.status != MessageStatus.READ) {
+                doc.reference.update("status" to MessageStatus.READ.name)
+            }
+        }
+    }
+
+    override suspend fun deleteChannel(channelId: String) {
+        // In a real app, you might want to only hide it for the user, but request says "delete the room chat"
+        // We'll delete the document and its messages collection.
+        val channelRef = channelsCollection.document(channelId)
+        
+        // Delete messages first
+        val messages = channelRef.collection("messages").get().documents
+        messages.forEach { it.reference.delete() }
+        
+        // Delete channel
+        channelRef.delete()
+    }
+
+    override suspend fun markMessageAsRead(channelId: String, messageId: String) {
+        channelsCollection.document(channelId).collection("messages").document(messageId)
+            .update("status" to MessageStatus.READ.name)
     }
 
     override suspend fun getUserName(userId: String): String? {
         return authRepository.getUserName(userId)
+    }
+
+    override suspend fun getUserIdFromShortId(shortId: String): String? {
+        return authRepository.getUserIdFromShortId(shortId)
     }
 
     override fun getCurrentUserId(): String? {

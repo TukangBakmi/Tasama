@@ -1,5 +1,6 @@
 package com.example.tasama.domain.repository
 
+import com.example.tasama.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
@@ -12,4 +13,8 @@ interface AuthRepository {
     suspend fun sendPasswordResetEmail(email: String)
     fun getCurrentUserId(): String?
     suspend fun getUserName(uid: String): String?
+    suspend fun getUserShortId(uid: String): String?
+    suspend fun getUserIdFromShortId(shortId: String): String?
+    suspend fun updateFcmToken(uid: String, token: String?)
+    suspend fun getUser(uid: String): User?
 }

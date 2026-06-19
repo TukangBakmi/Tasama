@@ -183,40 +183,45 @@ fun ProfileHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .clickable { 
-                    // For now, use a placeholder random avatar URL to simulate picking
-                    val randomId = (1..1000).random()
-                    onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
-                },
-            contentAlignment = Alignment.Center
+            modifier = Modifier.size(80.dp)
         ) {
-            if (profilePictureUrl != null) {
-                // For now, if we had Coil/Kamel we would load it here
-                // Image(painter = ..., contentDescription = null, contentScale = ContentScale.Crop)
-                Text(
-                    text = name.take(1).uppercase(),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            } else {
-                Text(
-                    text = name.take(1).uppercase(),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .clickable {
+                        // For now, use a placeholder random avatar URL to simulate picking
+                        val randomId = (1..1000).random()
+                        onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (profilePictureUrl != null) {
+                    // For now, if we had Coil/Kamel we would load it here
+                    // Image(painter = ..., contentDescription = null, contentScale = ContentScale.Crop)
+                    Text(
+                        text = name.take(1).uppercase(),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text(
+                        text = name.take(1).uppercase(),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
-            
+
             // Add a small edit icon
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

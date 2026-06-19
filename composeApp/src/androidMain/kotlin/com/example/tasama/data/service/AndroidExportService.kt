@@ -2,10 +2,10 @@ package com.example.tasama.data.service
 
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.service.ExportService
-import com.lowagie.text.Document
-import com.lowagie.text.Paragraph
-import com.lowagie.text.pdf.PdfPTable
-import com.lowagie.text.pdf.PdfWriter
+import com.itextpdf.text.Document
+import com.itextpdf.text.Paragraph
+import com.itextpdf.text.pdf.PdfPTable
+import com.itextpdf.text.pdf.PdfWriter
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
 

@@ -48,7 +48,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.poi.ooxml)
-            implementation(libs.openpdf)
+            implementation(libs.itextg)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.androidx.auth.credentials)
             implementation(libs.androidx.auth.play.services)

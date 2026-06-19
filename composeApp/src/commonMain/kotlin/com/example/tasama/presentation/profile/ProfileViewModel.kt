@@ -71,16 +71,19 @@ class ProfileViewModel(
     fun exportToPdf() {
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true) }
-            val transactions = transactionRepository.getTransactions()
-            val bytes = exportService.exportToPdf(transactions)
-            
-            fileService.saveAndShareFile(
-                fileName = "tasama_export_pdf.pdf",
-                content = bytes,
-                mimeType = "application/pdf"
-            )
-
-            _uiState.update { it.copy(isExporting = false, exportMessage = "PDF exported successfully") }
+            try {
+                val transactions = transactionRepository.getTransactions()
+                val bytes = exportService.exportToPdf(transactions)
+                
+                fileService.saveAndShareFile(
+                    fileName = "tasama_export_pdf.pdf",
+                    content = bytes,
+                    mimeType = "application/pdf"
+                )
+                _uiState.update { it.copy(isExporting = false, exportMessage = "PDF exported successfully") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isExporting = false, exportMessage = "Error exporting PDF: ${e.message}") }
+            }
         }
     }
 

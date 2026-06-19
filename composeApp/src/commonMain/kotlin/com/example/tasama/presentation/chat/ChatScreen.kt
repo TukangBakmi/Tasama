@@ -33,9 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.MessageStatus
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -54,56 +52,58 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(36.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer
+            Column {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 4.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Surface(
+                                modifier = Modifier.size(36.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = uiState.channelName.take(1).uppercase(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
                                 Text(
-                                    text = uiState.channelName.take(1).uppercase(),
+                                    uiState.channelName,
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    "online",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                uiState.channelName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Text(
-                                "online",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* More options */ }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    },
+                    actions = {},
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
-            )
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            }
         },
         bottomBar = {
             ChatInput(
@@ -205,8 +205,8 @@ fun ChatContent(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (uiState.isLoadingMore) {
                     item {
@@ -219,8 +219,24 @@ fun ChatContent(
                     }
                 }
 
-                items(uiState.messages, key = { it.id }) { message ->
-                    MessageBubble(message = message)
+                items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
+                    val message = uiState.messages[index]
+                    val date = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
+                        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                    
+                    val showHeader = if (index == 0) true else {
+                        val prevDate = kotlinx.datetime.Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
+                            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                        date != prevDate
+                    }
+                    
+                    Column {
+                        if (showHeader) {
+                            DateHeader(date)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        MessageBubble(message = message)
+                    }
                 }
             }
         }
@@ -237,13 +253,14 @@ fun ChatContent(
             SmallFloatingActionButton(
                 onClick = {
                     coroutineScope.launch {
-                        if (uiState.messages.isNotEmpty()) {
-                            listState.animateScrollToItem(uiState.messages.size - 1)
+                        val totalItems = listState.layoutInfo.totalItemsCount
+                        if (totalItems > 0) {
+                            listState.animateScrollToItem(totalItems - 1)
                         }
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(4.dp)
             ) {
@@ -290,20 +307,20 @@ fun MessageBubble(message: ChatMessage) {
             contentColor = contentColor,
             shape = shape,
             shadowElevation = 0.5.dp,
-            modifier = Modifier.widthIn(max = 300.dp)
+            modifier = Modifier.widthIn(max = 260.dp)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Column {
                     Text(
                         text = message.text,
-                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 20.sp),
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                     
                     val timeString = remember(message.timestamp) {
                         try {
-                            val instant = Instant.fromEpochMilliseconds(message.timestamp)
-                            val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                            val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
+                            val localDateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
                             val hour = localDateTime.hour.toString().padStart(2, '0')
                             val minute = localDateTime.minute.toString().padStart(2, '0')
                             "$hour:$minute"
@@ -353,6 +370,44 @@ fun MessageStatusIcon(status: MessageStatus) {
         modifier = Modifier.size(14.dp),
         tint = tint
     )
+}
+
+@Composable
+fun DateHeader(date: kotlinx.datetime.LocalDate, modifier: Modifier = Modifier) {
+    val dateString = remember(date) {
+        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+        when (date) {
+            now -> "Today"
+            now.minus(kotlinx.datetime.DatePeriod(days = 1)) -> "Yesterday"
+            else -> {
+                val day = date.dayOfMonth.toString().padStart(2, '0')
+                val month = date.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+                val year = if (date.year != now.year) " ${date.year}" else ""
+                "$day $month$year"
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = dateString,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlin.time.Clock
 
 class FirebaseAIChatRepository(
     private val authRepository: AuthRepository
@@ -59,7 +58,7 @@ class FirebaseAIChatRepository(
     override suspend fun saveMessage(message: ChatMessage) {
         try {
             val userId = authRepository.getCurrentUserId() ?: return
-            val now = Clock.System.now().toEpochMilliseconds()
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             val id = message.id.ifEmpty { "ai_msg_$now" }
             val finalMessage = message.copy(id = id, userId = userId)
             collection.document(id).set(finalMessage)

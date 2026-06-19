@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlin.time.Clock
 
 class FirebaseChatRepository(
     private val authRepository: AuthRepository
@@ -79,7 +78,7 @@ class FirebaseChatRepository(
     override suspend fun sendMessage(channelId: String, text: String) {
         val userId = authRepository.getCurrentUserId() ?: return
         val senderName = authRepository.getUserName(userId) ?: "User"
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         val id = "msg_$now"
         val newMessage = ChatMessage(
             id = id,
@@ -145,7 +144,7 @@ class FirebaseChatRepository(
                 participantIds = listOf(currentUserId, otherUserId),
                 participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
                 lastMessage = "Started a conversation",
-                lastMessageTimestamp = Clock.System.now().toEpochMilliseconds(),
+                lastMessageTimestamp = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
                 unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
             )
             channelsCollection.document(channelId).set(ChatChannel.serializer(), channel)

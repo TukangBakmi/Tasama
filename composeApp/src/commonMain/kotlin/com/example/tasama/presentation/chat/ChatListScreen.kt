@@ -1,7 +1,6 @@
 package com.example.tasama.presentation.chat
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -24,10 +23,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatChannel
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
@@ -45,7 +43,19 @@ fun ChatListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Messages") })
+            Column {
+                TopAppBar(
+                    title = { Text("Messages", fontWeight = FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddContactDialog = true }) {
@@ -142,12 +152,12 @@ fun AIAdvisorItem(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
@@ -158,7 +168,7 @@ fun AIAdvisorItem(onClick: () -> Unit) {
                 modifier = Modifier.fillMaxSize()
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -176,7 +186,7 @@ fun AIAdvisorItem(onClick: () -> Unit) {
             }
             Text(
                 text = "Your Personal AI Financial Advisor",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -201,19 +211,19 @@ fun ChannelItem(
                     onLongPress = { onLongClick() }
                 )
             }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -236,11 +246,25 @@ fun ChannelItem(
                     modifier = Modifier.weight(1f)
                 )
                 
-                val timeString = remember(channel.lastMessageTimestamp) {
+                    val timeString = remember(channel.lastMessageTimestamp) {
                     try {
-                        val instant = Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
-                        val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                        "${localDateTime.hour}:${localDateTime.minute.toString().padStart(2, '0')}"
+                        val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
+                        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+                        val localDateTime = instant.toLocalDateTime(tz)
+                        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(tz)
+                        
+                        if (localDateTime.date == now.date) {
+                            val hour = localDateTime.hour.toString().padStart(2, '0')
+                            val minute = localDateTime.minute.toString().padStart(2, '0')
+                            "$hour:$minute"
+                        } else if (localDateTime.date == now.date.minus(kotlinx.datetime.DatePeriod(days = 1))) {
+                            "Yesterday"
+                        } else {
+                            val day = localDateTime.dayOfMonth.toString().padStart(2, '0')
+                            val month = localDateTime.monthNumber.toString().padStart(2, '0')
+                            val year = localDateTime.year.toString().takeLast(2)
+                            "$day/$month/$year"
+                        }
                     } catch (e: Exception) { "" }
                 }
                 Text(
@@ -256,7 +280,7 @@ fun ChannelItem(
             ) {
                 Text(
                     text = channel.lastMessage,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -268,7 +292,7 @@ fun ChannelItem(
                     Box(
                         modifier = Modifier
                             .padding(start = 8.dp)
-                            .size(24.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
@@ -277,7 +301,8 @@ fun ChannelItem(
                             text = unreadCount.toString(),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
                         )
                     }
                 }

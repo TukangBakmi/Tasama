@@ -20,7 +20,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import kotlin.time.Clock
 
 class AIViewModel(
     private val repository: TransactionRepository,
@@ -45,7 +44,7 @@ class AIViewModel(
                         id = "welcome",
                         text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
-                        timestamp = Clock.System.now().toEpochMilliseconds()
+                        timestamp = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
@@ -103,12 +102,13 @@ class AIViewModel(
         val text = _uiState.value.inputText
         if (text.isBlank()) return
 
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
             text = text,
             sender = MessageSender.USER,
-            timestamp = now
+            timestamp = now,
+            isFromMe = true
         )
 
         viewModelScope.launch {
@@ -183,7 +183,7 @@ class AIViewModel(
     }
 
     private suspend fun handleAIResponse(response: String) {
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         var finalReply = response
 
         try {

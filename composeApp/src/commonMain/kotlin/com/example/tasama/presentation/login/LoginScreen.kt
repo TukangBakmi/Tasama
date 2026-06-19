@@ -62,40 +62,39 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Surface(
-                modifier = Modifier.size(100.dp),
-                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.size(80.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 8.dp
+                shadowElevation = 4.dp
             ) {
                 Image(
                     painter = painterResource(Res.drawable.sir_quack),
                     contentDescription = "Tasama Logo",
-                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                    modifier = Modifier.fillMaxSize().padding(12.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "Tasama",
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary
             )
 
             Text(
                 text = if (uiState.isRegister) "Create your account" else "Welcome back!",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Form Card
             Card(
@@ -127,9 +126,8 @@ fun LoginScreen(
                         value = uiState.email,
                         onValueChange = viewModel::onEmailChange,
                         label = { Text("Email") },
-                        placeholder = { Text("Enter your email") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(12.dp),
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true
@@ -140,9 +138,8 @@ fun LoginScreen(
                         value = uiState.password,
                         onValueChange = viewModel::onPasswordChange,
                         label = { Text("Password") },
-                        placeholder = { Text("Enter your password") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(12.dp),
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -216,7 +213,7 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (!uiState.isRegister) {
                 Row(
@@ -233,14 +230,14 @@ fun LoginScreen(
                     HorizontalDivider(modifier = Modifier.weight(1f))
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedButton(
                     onClick = onGoogleSignInClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface
                     )
@@ -249,14 +246,14 @@ fun LoginScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Text("G", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp) // Placeholder for Google Icon
+                        Text("G", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) // Placeholder for Google Icon
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("Continue with Google")
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -265,18 +262,17 @@ fun LoginScreen(
             ) {
                 Text(
                     text = if (uiState.isRegister) "Already have an account? " else "Don't have an account? ",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(onClick = viewModel::toggleMode) {
                     Text(
                         text = if (uiState.isRegister) "Sign In" else "Sign Up",
-                        fontWeight = FontWeight.ExtraBold
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 }

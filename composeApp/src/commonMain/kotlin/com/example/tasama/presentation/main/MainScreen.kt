@@ -1,8 +1,7 @@
 package com.example.tasama.presentation.main
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -93,120 +92,117 @@ fun MainScreen(
                 val pagerState = rememberPagerState(pageCount = { items.size })
                 val scope = rememberCoroutineScope()
 
-                MainContent(
+                NavHost(
                     navController = navController,
-                    items = items,
-                    pagerState = pagerState,
-                    onTabClick = { index ->
-                        scope.launch {
-                            pagerState.animateScrollToPage(index)
+                    startDestination = "tabs",
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    composable(
+                        route = "tabs",
+                        exitTransition = {
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
                         }
-                    },
-                    content = { padding ->
-                        NavHost(
-                            navController = navController,
-                            startDestination = "tabs",
-                            modifier = Modifier.fillMaxSize().padding(padding)
-                        ) {
-                            composable("tabs") {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    beyondViewportPageCount = 2
-                                ) { page ->
-                                    when (items[page]) {
-                                        BottomNavItem.Dashboard -> DashboardScreen(
-                                            viewModel = koinViewModel(),
-                                            onTransactionClick = {}
-                                        )
-                                        BottomNavItem.Savings -> SavingsScreen()
-                                        BottomNavItem.Chat -> ChatListScreen(
-                                            onChannelClick = { channelId ->
-                                                navController.navigate("chat_room/$channelId")
-                                            },
-                                            onAIClick = {
-                                                navController.navigate("ai_chat")
-                                            }
-                                        )
-                                        BottomNavItem.Profile -> ProfileScreen(
-                                            viewModel = koinViewModel()
-                                        )
+                    ) {
+                        val isKeyboardVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
+                        
+                        Scaffold(
+                            bottomBar = {
+                                AnimatedVisibility(
+                                    visible = !isKeyboardVisible,
+                                    enter = slideInVertically(initialOffsetY = { it }),
+                                    exit = slideOutVertically(targetOffsetY = { it })
+                                ) {
+                                    NavigationBar {
+                                        items.forEachIndexed { index, item ->
+                                            val isSelected = pagerState.currentPage == index
+                                            NavigationBarItem(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    scope.launch {
+                                                        pagerState.animateScrollToPage(index)
+                                                    }
+                                                },
+                                                icon = { Text(item.emoji) },
+                                                label = { Text(item.title) }
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                            composable("ai_chat") {
-                                AIScreen(
-                                    viewModel = koinViewModel(),
-                                    onBackClick = { navController.popBackStack() }
-                                )
-                            }
-                            composable("chat_room/{channelId}") { backStackEntry ->
-                                val channelId = backStackEntry.savedStateHandle.get<String>("channelId") ?: ""
-                                ChatScreen(
-                                    channelId = channelId,
-                                    onBackClick = { navController.popBackStack() }
-                                )
+                            },
+                            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                        ) { padding ->
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize().padding(padding),
+                                beyondViewportPageCount = 2
+                            ) { page ->
+                                when (items[page]) {
+                                    BottomNavItem.Dashboard -> DashboardScreen(
+                                        viewModel = koinViewModel(),
+                                        onTransactionClick = {}
+                                    )
+                                    BottomNavItem.Savings -> SavingsScreen()
+                                    BottomNavItem.Chat -> ChatListScreen(
+                                        onChannelClick = { channelId ->
+                                            navController.navigate("chat_room/$channelId")
+                                        },
+                                        onAIClick = {
+                                            navController.navigate("ai_chat")
+                                        }
+                                    )
+                                    BottomNavItem.Profile -> ProfileScreen(
+                                        viewModel = koinViewModel()
+                                    )
+                                }
                             }
                         }
                     }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun MainContent(
-    navController: NavController,
-    items: List<BottomNavItem>,
-    pagerState: PagerState? = null,
-    onTabClick: ((Int) -> Unit)? = null,
-    content: @Composable (PaddingValues) -> Unit
-) {
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-    val isChatRoom = currentRoute?.startsWith("chat_room") == true
-
-    val isKeyboardVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
-
-    val showBottomBar = !isChatRoom && currentRoute != "ai_chat" && !isKeyboardVisible
-
-    Scaffold(
-        bottomBar = {
-            AnimatedVisibility(
-                visible = showBottomBar,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it })
-            ) {
-                NavigationBar {
-                    items.forEachIndexed { index, item ->
-                        val isSelected = pagerState?.currentPage == index
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                if (currentRoute != "tabs") {
-                                    navController.navigate("tabs") {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                                onTabClick?.invoke(index)
-                            },
-                            icon = { Text(item.emoji) },
-                            label = { Text(item.title) }
+                    composable(
+                        route = "ai_chat",
+                        enterTransition = {
+                            slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
+                        },
+                        exitTransition = {
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                        }
+                    ) {
+                        AIScreen(
+                            viewModel = koinViewModel(),
+                            onBackClick = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = "chat_room/{channelId}",
+                        enterTransition = {
+                            slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
+                        },
+                        exitTransition = {
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                        }
+                    ) { backStackEntry ->
+                        val channelId = backStackEntry.savedStateHandle.get<String>("channelId") ?: ""
+                        ChatScreen(
+                            channelId = channelId,
+                            onBackClick = { navController.popBackStack() }
                         )
                     }
                 }
             }
-        },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
-    ) { padding ->
-        // Use the padding values from Scaffold to properly offset the content (mostly just bottom padding for the nav bar)
-        Box(modifier = Modifier.padding(padding)) {
-            content(PaddingValues(0.dp))
         }
     }
 }
@@ -216,15 +212,21 @@ fun MainContent(
 fun MainPreview() {
     val navController = rememberNavController()
     MaterialTheme {
-        MainContent(
-            navController = navController,
-            items = listOf(
-                BottomNavItem.Dashboard,
-                BottomNavItem.Savings,
-                BottomNavItem.Chat,
-                BottomNavItem.Profile
-            ),
-            content = { Text("Content Area") }
-        )
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = true,
+                        onClick = {},
+                        icon = { Text("🏠") },
+                        label = { Text("Home") }
+                    )
+                }
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding)) {
+                Text("Content Area")
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.login
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,7 +24,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import tasama.composeapp.generated.resources.Res
+import tasama.composeapp.generated.resources.sir_quack
 
 @Composable
 fun LoginScreen(
@@ -63,19 +67,17 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Logo/Icon
             Surface(
                 modifier = Modifier.size(100.dp),
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.primary,
                 shadowElevation = 8.dp
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "🦆",
-                        fontSize = 48.sp
-                    )
-                }
+                Image(
+                    painter = painterResource(Res.drawable.sir_quack),
+                    contentDescription = "Tasama Logo",
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -1,5 +1,9 @@
 package com.example.tasama.presentation.main
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -23,7 +27,10 @@ import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.profile.ProfileScreen
 import com.example.tasama.presentation.savings.SavingsScreen
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import tasama.composeapp.generated.resources.Res
+import tasama.composeapp.generated.resources.sir_quack
 
 @Composable
 fun MainScreen(
@@ -47,9 +54,11 @@ fun MainScreen(
                             color = MaterialTheme.colorScheme.primary,
                             shadowElevation = 8.dp
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(text = "🦆", fontSize = 48.sp)
-                            }
+                            Image(
+                                painter = painterResource(Res.drawable.sir_quack),
+                                contentDescription = "Tasama Logo",
+                                modifier = Modifier.fillMaxSize().padding(16.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -70,20 +79,17 @@ fun MainScreen(
             is AuthState.Unauthenticated -> {
                 LoginScreen(
                     onGoogleSignInClick = onGoogleSignInClick,
-                    onLoginSuccess = {
-                        // Managed by AuthState
-                    }
+                    onLoginSuccess = {}
                 )
             }
             is AuthState.Authenticated -> {
                 val items = listOf(
                     BottomNavItem.Dashboard,
                     BottomNavItem.Savings,
-                    BottomNavItem.AIAdvisor,
                     BottomNavItem.Chat,
                     BottomNavItem.Profile
                 )
-                
+
                 val pagerState = rememberPagerState(pageCount = { items.size })
                 val scope = rememberCoroutineScope()
 
@@ -100,7 +106,7 @@ fun MainScreen(
                         NavHost(
                             navController = navController,
                             startDestination = "tabs",
-                            modifier = Modifier.padding(padding)
+                            modifier = Modifier.fillMaxSize().padding(padding)
                         ) {
                             composable("tabs") {
                                 HorizontalPager(
@@ -111,22 +117,35 @@ fun MainScreen(
                                     when (items[page]) {
                                         BottomNavItem.Dashboard -> DashboardScreen(
                                             viewModel = koinViewModel(),
-                                            onTransactionClick = { /* Handle navigation */ }
+                                            onTransactionClick = {}
                                         )
                                         BottomNavItem.Savings -> SavingsScreen()
-                                        BottomNavItem.AIAdvisor -> AIScreen(viewModel = koinViewModel())
                                         BottomNavItem.Chat -> ChatListScreen(
                                             onChannelClick = { channelId ->
                                                 navController.navigate("chat_room/$channelId")
+                                            },
+                                            onAIClick = {
+                                                navController.navigate("ai_chat")
                                             }
                                         )
-                                        BottomNavItem.Profile -> ProfileScreen()
+                                        BottomNavItem.Profile -> ProfileScreen(
+                                            viewModel = koinViewModel()
+                                        )
                                     }
                                 }
                             }
+                            composable("ai_chat") {
+                                AIScreen(
+                                    viewModel = koinViewModel(),
+                                    onBackClick = { navController.popBackStack() }
+                                )
+                            }
                             composable("chat_room/{channelId}") { backStackEntry ->
-                                val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
-                                ChatScreen(channelId = channelId)
+                                val channelId = backStackEntry.savedStateHandle.get<String>("channelId") ?: ""
+                                ChatScreen(
+                                    channelId = channelId,
+                                    onBackClick = { navController.popBackStack() }
+                                )
                             }
                         }
                     }
@@ -144,45 +163,51 @@ fun MainContent(
     onTabClick: ((Int) -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit
 ) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val isChatRoom = currentRoute?.startsWith("chat_room") == true
+
+    val isKeyboardVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
+
+    val showBottomBar = !isChatRoom && currentRoute != "ai_chat" && !isKeyboardVisible
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-
-                items.forEachIndexed { index, item ->
-                    val isSelected = if (currentRoute == "tabs" && pagerState != null) {
-                        pagerState.currentPage == index
-                    } else {
-                        currentRoute == item.route || (item == BottomNavItem.Chat && currentRoute?.startsWith("chat_room") == true)
-                    }
-
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (currentRoute != "tabs") {
-                                navController.navigate("tabs") {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+            AnimatedVisibility(
+                visible = showBottomBar,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
+            ) {
+                NavigationBar {
+                    items.forEachIndexed { index, item ->
+                        val isSelected = pagerState?.currentPage == index
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (currentRoute != "tabs") {
+                                    navController.navigate("tabs") {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            }
-                            onTabClick?.invoke(index)
-                        },
-                        icon = {
-                            Text(item.emoji)
-                        },
-                        label = {
-                            Text(item.title)
-                        }
-                    )
+                                onTabClick?.invoke(index)
+                            },
+                            icon = { Text(item.emoji) },
+                            label = { Text(item.title) }
+                        )
+                    }
                 }
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
-        content(padding)
+        // Use the padding values from Scaffold to properly offset the content (mostly just bottom padding for the nav bar)
+        Box(modifier = Modifier.padding(padding)) {
+            content(PaddingValues(0.dp))
+        }
     }
 }
 
@@ -196,13 +221,10 @@ fun MainPreview() {
             items = listOf(
                 BottomNavItem.Dashboard,
                 BottomNavItem.Savings,
-                BottomNavItem.AIAdvisor,
                 BottomNavItem.Chat,
                 BottomNavItem.Profile
             ),
-            content = {
-                Text("Content Area")
-            }
+            content = { Text("Content Area") }
         )
     }
 }

@@ -5,6 +5,7 @@ data class ProfileUiState(
     val userEmail: String = "john.doe@example.com",
     val userId: String = "",
     val userShortId: String = "",
+    val profilePictureUrl: String? = null,
     val partnerName: String = "Jane Doe",
     val currency: String = "USD",
     val isExporting: Boolean = false,

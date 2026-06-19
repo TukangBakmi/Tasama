@@ -17,12 +17,6 @@ sealed class BottomNavItem(
         "💰"
     )
 
-    data object AIAdvisor : BottomNavItem(
-        "ai_advisor",
-        "AI Advisor",
-        "✨"
-    )
-
     data object Chat : BottomNavItem(
         "chat",
         "Chat",

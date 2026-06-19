@@ -3,6 +3,7 @@ package com.example.tasama.presentation.ai
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,45 +12,146 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
+import tasama.composeapp.generated.resources.Res
+import tasama.composeapp.generated.resources.sir_quack
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIScreen(
-    viewModel: AIViewModel
+    viewModel: AIViewModel,
+    onBackClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    AIContent(
-        uiState = uiState,
-        onInputChange = viewModel::onInputChange,
-        onSendClick = viewModel::sendMessage,
-        onLoadMore = viewModel::loadMoreMessages
-    )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
+    ) {
+        TopAppBar(
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Image(
+                            painter = painterResource(Res.drawable.sir_quack),
+                            contentDescription = "Sir Quack",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            "Sir Quack",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        Text(
+                            "AI Advisor",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            navigationIcon = {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface
+            )
+        )
+
+        AIContent(
+            uiState = uiState,
+            onLoadMore = viewModel::loadMoreMessages,
+            modifier = Modifier.weight(1f)
+        )
+
+        AIInput(
+            message = uiState.inputText,
+            onMessageChange = viewModel::onInputChange,
+            onSend = viewModel::sendMessage
+        )
+    }
+}
+
+@Composable
+fun AIInput(
+    message: String,
+    onMessageChange: (String) -> Unit,
+    onSend: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .navigationBarsPadding(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = message,
+                onValueChange = onMessageChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Tanya Sir Quack...") },
+                shape = RoundedCornerShape(16.dp),
+                maxLines = 4
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = onSend,
+                enabled = message.isNotBlank(),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Kirim")
+            }
+        }
+    }
 }
 
 @Composable
 fun AIContent(
     uiState: AIUiState,
-    onInputChange: (String) -> Unit,
-    onSendClick: () -> Unit,
-    onLoadMore: () -> Unit
+    onLoadMore: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Detect when user scrolls to the top
     val shouldLoadMore by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -62,40 +164,28 @@ fun AIContent(
         }
     }
 
+    LaunchedEffect(uiState.messages.size, uiState.isTyping) {
+        val totalItems = uiState.messages.size + (if (uiState.isTyping) 1 else 0)
+        if (totalItems > 0) {
+            listState.animateScrollToItem(totalItems - 1)
+        }
+    }
+
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore && uiState.hasMoreMessages && !uiState.isLoadingMore) {
             onLoadMore()
         }
     }
 
-    // Auto-scroll to bottom only for new messages (not when loading more)
-    var previousMessageCount by remember { mutableStateOf(uiState.messages.size) }
-    LaunchedEffect(uiState.messages.size, uiState.isTyping) {
-        val newMessageCount = uiState.messages.size
-        val isNewMessageAtBottom = newMessageCount > previousMessageCount && 
-            (uiState.messages.lastOrNull()?.sender == MessageSender.USER || uiState.messages.lastOrNull()?.sender == MessageSender.AI)
-        
-        if (isNewMessageAtBottom || uiState.isTyping) {
-            val totalItems = newMessageCount + (if (uiState.isTyping) 1 else 0)
-            if (totalItems > 0) {
-                listState.animateScrollToItem(totalItems - 1)
-            }
-        }
-        previousMessageCount = newMessageCount
-    }
-
-    // FAB visible when scrolled away from the bottom
     val showScrollToBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val totalItemsCount = layoutInfo.totalItemsCount
             if (totalItemsCount == 0) return@derivedStateOf false
-            
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            if (lastVisibleItem == null) return@derivedStateOf false
-            
+                ?: return@derivedStateOf false
             val isLastItem = lastVisibleItem.index == totalItemsCount - 1
-            if (!isLastItem) true 
+            if (!isLastItem) true
             else {
                 val viewportBottom = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
                 lastVisibleItem.offset + lastVisibleItem.size > viewportBottom
@@ -103,100 +193,64 @@ fun AIContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 16.dp, top = 8.dp)
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                if (uiState.isLoadingMore) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
-                }
-
-                items(uiState.messages, key = { it.id }) { message ->
-                    ChatBubble(message)
-                }
-
-                if (uiState.isTyping) {
-                    item {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Sir Quack sedang mengetik...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+            if (uiState.isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     }
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = uiState.inputText,
-                    onValueChange = onInputChange,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Tanya Sir Quack...") },
-                    shape = RoundedCornerShape(24.dp)
-                )
+            items(uiState.messages, key = { it.id }) { message ->
+                ChatBubble(message)
+            }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Button(
-                    onClick = onSendClick,
-                    enabled = uiState.inputText.isNotBlank(),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("Kirim")
+            if (uiState.isTyping) {
+                item {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Sir Quack sedang mengetik...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
 
-        // Floating Action Button to scroll to bottom
         AnimatedVisibility(
             visible = showScrollToBottom,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 96.dp)
+                .padding(end = 24.dp, bottom = 16.dp)
         ) {
             SmallFloatingActionButton(
                 onClick = {
                     coroutineScope.launch {
                         val totalItems = uiState.messages.size + (if (uiState.isTyping) 1 else 0)
-                        if (totalItems > 0) {
-                            listState.animateScrollToItem(totalItems - 1)
-                        }
+                        if (totalItems > 0) listState.animateScrollToItem(totalItems - 1)
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -238,11 +292,7 @@ fun ChatBubble(message: ChatMessage) {
                 .background(containerColor)
                 .padding(12.dp)
         ) {
-            Text(
-                text = message.text,
-                color = contentColor,
-                fontSize = 14.sp
-            )
+            Text(text = message.text, color = contentColor, fontSize = 14.sp)
         }
     }
 }
@@ -259,8 +309,6 @@ fun AIPreview() {
                     ChatMessage(id = "3", text = "Baik, sudah saya catat ya!", sender = MessageSender.AI)
                 )
             ),
-            onInputChange = {},
-            onSendClick = {},
             onLoadMore = {}
         )
     }

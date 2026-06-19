@@ -22,6 +22,21 @@ class ChatViewModel(
         currentChannelId = channelId
         observeMessages(channelId)
         markAsRead(channelId)
+        loadChannelInfo(channelId)
+    }
+
+    private fun loadChannelInfo(channelId: String) {
+        viewModelScope.launch {
+            val currentUserId = repository.getCurrentUserId() ?: return@launch
+            repository.getChannels().collect { channels ->
+                val channel = channels.find { it.id == channelId }
+                channel?.let {
+                    val otherParticipantName = it.participantNames.entries
+                        .find { entry -> entry.key != currentUserId }?.value ?: "Chat"
+                    _uiState.update { state -> state.copy(channelName = otherParticipantName) }
+                }
+            }
+        }
     }
 
     private fun markAsRead(channelId: String) {

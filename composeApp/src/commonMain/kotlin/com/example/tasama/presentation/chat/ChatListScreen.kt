@@ -1,12 +1,14 @@
 package com.example.tasama.presentation.chat
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -26,12 +28,16 @@ import com.example.tasama.domain.model.ChatChannel
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import tasama.composeapp.generated.resources.Res
+import tasama.composeapp.generated.resources.sir_quack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
     onChannelClick: (String) -> Unit,
+    onAIClick: () -> Unit,
     viewModel: ChatListViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,42 +56,64 @@ fun ChatListScreen(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.channels.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text("No conversations yet", style = MaterialTheme.typography.bodyLarge)
-                    Text("Add a contact by ID to start chatting!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(uiState.channels, key = { it.id }) { channel ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        
-                        Box {
-                            ChannelItem(
-                                channel = channel,
-                                currentUserId = viewModel.currentUserId,
-                                onClick = { onChannelClick(channel.id) },
-                                onLongClick = { showMenu = true }
-                            )
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
+                    // AI Advisor at the very top
+                    item {
+                        AIAdvisorItem(onClick = onAIClick)
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+
+                    if (uiState.channels.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier.fillParentMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete Chat") },
-                                    onClick = {
-                                        viewModel.deleteChannel(channel.id)
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                Text("No conversations yet", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "Add a contact by ID to start chatting!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    } else {
+                        items(uiState.channels, key = { it.id }) { channel ->
+                            var showMenu by remember { mutableStateOf(false) }
+
+                            Box {
+                                ChannelItem(
+                                    channel = channel,
+                                    currentUserId = viewModel.currentUserId,
+                                    onClick = { onChannelClick(channel.id) },
+                                    onLongClick = { showMenu = true }
+                                )
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete Chat") },
+                                        onClick = {
+                                            viewModel.deleteChannel(channel.id)
+                                            showMenu = false
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                    )
+                                }
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
                     }
                 }
             }
@@ -105,6 +133,55 @@ fun ChatListScreen(
                 showAddContactDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun AIAdvisorItem(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(Res.drawable.sir_quack),
+                contentDescription = "Sir Quack",
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Sir Quack",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Text(
+                text = "Your Personal AI Financial Advisor",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

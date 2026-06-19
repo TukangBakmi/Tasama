@@ -128,4 +128,12 @@ class FirebaseAuthRepository : AuthRepository {
             null
         }
     }
+
+    override suspend fun updateProfilePicture(uid: String, url: String) {
+        try {
+            firestore.collection("users").document(uid).update("avatarUrl" to url)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

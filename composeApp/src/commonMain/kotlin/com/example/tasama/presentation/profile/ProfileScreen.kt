@@ -58,6 +58,7 @@ fun ProfileScreen(
                 clipboardManager.setText(AnnotatedString(id))
                 viewModel.onIdCopied()
             },
+            onUpdateProfilePicture = viewModel::updateProfilePicture,
             modifier = Modifier.padding(padding)
         )
     }
@@ -70,6 +71,7 @@ fun ProfileContent(
     onExportPdf: () -> Unit,
     onLogout: () -> Unit,
     onCopyId: (String) -> Unit,
+    onUpdateProfilePicture: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -83,7 +85,9 @@ fun ProfileContent(
                     name = uiState.userName,
                     email = uiState.userEmail,
                     shortId = uiState.userShortId,
-                    onCopyId = onCopyId
+                    profilePictureUrl = uiState.profilePictureUrl,
+                    onCopyId = onCopyId,
+                    onUpdateProfilePicture = onUpdateProfilePicture
                 )
             }
 
@@ -168,7 +172,9 @@ fun ProfileHeader(
     name: String,
     email: String,
     shortId: String,
-    onCopyId: (String) -> Unit
+    profilePictureUrl: String?,
+    onCopyId: (String) -> Unit,
+    onUpdateProfilePicture: (String) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -178,18 +184,50 @@ fun ProfileHeader(
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .size(80.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable { 
+                    // For now, use a placeholder random avatar URL to simulate picking
+                    val randomId = (1..1000).random()
+                    onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
+                },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = name.take(1).uppercase(),
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            if (profilePictureUrl != null) {
+                // For now, if we had Coil/Kamel we would load it here
+                // Image(painter = ..., contentDescription = null, contentScale = ContentScale.Crop)
+                Text(
+                    text = name.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            } else {
+                Text(
+                    text = name.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            
+            // Add a small edit icon
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit Profile Picture",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(20.dp))
         Column {
             Text(
                 text = name,
@@ -297,7 +335,8 @@ fun ProfilePreview() {
             onExportExcel = {},
             onExportPdf = {},
             onLogout = {},
-            onCopyId = {}
+            onCopyId = {},
+            onUpdateProfilePicture = {}
         )
     }
 }

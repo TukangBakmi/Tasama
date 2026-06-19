@@ -27,14 +27,22 @@ class ProfileViewModel(
     private fun loadUserProfile() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            val name = authRepository.getUserName(uid)
-            val shortId = authRepository.getUserShortId(uid)
+            val user = authRepository.getUser(uid)
             _uiState.update { it.copy(
-                userName = name ?: "User", 
-                userEmail = "", 
+                userName = user?.name ?: "User", 
+                userEmail = user?.email ?: "", 
                 userId = uid,
-                userShortId = shortId ?: ""
+                userShortId = user?.shortId ?: "",
+                profilePictureUrl = user?.avatarUrl
             ) }
+        }
+    }
+
+    fun updateProfilePicture(url: String) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            authRepository.updateProfilePicture(uid, url)
+            _uiState.update { it.copy(profilePictureUrl = url) }
         }
     }
 

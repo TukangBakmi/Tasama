@@ -342,7 +342,7 @@ fun Bar(
     maxAmount: Long,
     modifier: Modifier = Modifier
 ) {
-    val targetBarHeightRatio = amount.toFloat() / maxAmount.toFloat()
+    val targetBarHeightRatio = if (maxAmount > 0) amount.toFloat() / maxAmount.toFloat() else 0f
     val animatedRatio by animateFloatAsState(
         targetValue = targetBarHeightRatio,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 1000)
@@ -533,8 +533,8 @@ fun TrendBarPair(
     maxAmount: Long,
     modifier: Modifier = Modifier
 ) {
-    val incomeRatio = trend.income.toFloat() / maxAmount.toFloat()
-    val expenseRatio = trend.expense.toFloat() / maxAmount.toFloat()
+    val incomeRatio = if (maxAmount > 0) trend.income.toFloat() / maxAmount.toFloat() else 0f
+    val expenseRatio = if (maxAmount > 0) trend.expense.toFloat() / maxAmount.toFloat() else 0f
 
     val animatedIncome by animateFloatAsState(
         targetValue = incomeRatio,

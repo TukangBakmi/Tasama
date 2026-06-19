@@ -153,7 +153,11 @@ fun SavingsGoalItem(
     onContributeClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val progress = (goal.currentAmount / goal.targetAmount).toFloat().coerceIn(0f, 1f)
+    val progress = if (goal.targetAmount > 0) {
+        (goal.currentAmount / goal.targetAmount).toFloat().coerceIn(0f, 1f)
+    } else {
+        0f
+    }
     val animatedProgress by animateFloatAsState(targetValue = progress)
 
     Card(

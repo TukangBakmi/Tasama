@@ -25,11 +25,15 @@ generative-ai = "0.4.0-1.0.1"
 ktor = "3.0.3"
 kotlinx-serialization = "1.7.3"
 kotlinx-datetime = "0.6.1"
+okio = "3.9.0"
 firebase-gitlive = "2.4.0"
 firebase-messaging = "2.4.0"
 androidx-auth-credentials = "1.3.0"
 androidx-auth-play-services = "1.3.0"
 googleid = "1.1.1"
+datastore = "1.2.1"
+play-services-location = "21.3.0"
+google-maps-compose = "6.4.1"
 
 [libraries]
 androidx-auth-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidx-auth-credentials" }
@@ -73,6 +77,12 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 firebase-auth = { module = "dev.gitlive:firebase-auth", version.ref = "firebase-gitlive" }
 firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "firebase-gitlive" }
 firebase-messaging = { module = "dev.gitlive:firebase-messaging", version.ref = "firebase-messaging" }
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "play-services-location" }
+google-maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "google-maps-compose" }
+google-maps = { group = "com.google.android.gms", name = "play-services-maps", version = "19.0.0" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

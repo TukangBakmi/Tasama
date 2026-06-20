@@ -1,0 +1,69 @@
+package com.example.tasama.presentation.partner
+
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import com.example.tasama.domain.model.User
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import kotlinx.coroutines.yield
+
+@Composable
+actual fun MapContent(
+    modifier: Modifier,
+    partner: User?
+) {
+    val partnerLocation = remember(partner?.latitude, partner?.longitude) {
+        if (partner?.latitude != null && partner.longitude != null) {
+            LatLng(partner.latitude, partner.longitude)
+        } else {
+            LatLng(0.0, 0.0)
+        }
+    }
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(partnerLocation, 15f)
+    }
+
+    val markerState = rememberMarkerState(position = partnerLocation)
+    val uiSettings = remember { MapUiSettings(zoomControlsEnabled = false) }
+
+    LaunchedEffect(partnerLocation) {
+        markerState.position = partnerLocation
+        
+        if (partnerLocation.latitude != 0.0 || partnerLocation.longitude != 0.0) {
+            val currentTarget = cameraPositionState.position.target
+            if (currentTarget.latitude != partnerLocation.latitude || 
+                currentTarget.longitude != partnerLocation.longitude) {
+                
+                yield() // Give the UI a frame to attach before animating
+                try {
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLng(partnerLocation)
+                    )
+                } catch (e: Exception) {
+                    // Silently handle animation interruptions
+                }
+            }
+        }
+    }
+
+    GoogleMap(
+        modifier = modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        uiSettings = uiSettings,
+        contentPadding = WindowInsets(0).asPaddingValues()
+    ) {
+        if (partnerLocation.latitude != 0.0 || partnerLocation.longitude != 0.0) {
+            Marker(
+                state = markerState,
+                title = partner?.name ?: "Partner",
+                snippet = "Last updated: ${partner?.lastLocationUpdate ?: "Unknown"}"
+            )
+        }
+    }
+}

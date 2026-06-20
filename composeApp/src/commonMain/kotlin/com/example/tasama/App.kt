@@ -1,11 +1,15 @@
 package com.example.tasama
 
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.di.initKoin
+import com.example.tasama.domain.model.AppTheme
 import com.example.tasama.presentation.main.MainScreen
+import com.example.tasama.presentation.main.MainViewModel
+import com.example.tasama.presentation.theme.TasamaTheme
 import org.koin.compose.KoinContext
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 @Preview
@@ -13,7 +17,16 @@ fun App(
     onGoogleSignInClick: () -> Unit = {}
 ) {
     KoinContext {
-        MaterialTheme {
+        val viewModel: MainViewModel = koinViewModel()
+        val settings by viewModel.settings.collectAsState()
+
+        val isDarkTheme = when (settings.theme) {
+            AppTheme.LIGHT -> false
+            AppTheme.DARK -> true
+            AppTheme.SYSTEM -> isSystemInDarkTheme()
+        }
+
+        TasamaTheme(darkTheme = isDarkTheme) {
             MainScreen(onGoogleSignInClick = onGoogleSignInClick)
         }
     }

@@ -32,17 +32,6 @@ kotlin {
     
     jvm()
     
-    js {
-        browser()
-        binaries.executable()
-    }
-    
-    /*@OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
-        binaries.executable()
-    }*/
-    
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
@@ -53,6 +42,9 @@ kotlin {
             implementation(libs.androidx.auth.credentials)
             implementation(libs.androidx.auth.play.services)
             implementation(libs.googleid)
+            implementation(libs.play.services.location)
+            implementation(libs.google.maps.compose)
+            implementation(libs.google.maps)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -77,6 +69,8 @@ kotlin {
             implementation(libs.firebase.firestore)
             implementation(libs.firebase.auth)
             implementation(libs.firebase.messaging)
+            implementation(libs.datastore.preferences)
+            implementation(libs.okio)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

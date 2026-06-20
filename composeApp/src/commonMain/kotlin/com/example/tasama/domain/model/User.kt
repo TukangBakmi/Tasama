@@ -9,5 +9,9 @@ data class User(
     val email: String = "",
     val name: String = "",
     val avatarUrl: String? = null,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    val partnerId: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val lastLocationUpdate: Long? = null
 )

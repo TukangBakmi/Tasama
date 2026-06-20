@@ -23,6 +23,12 @@ sealed class BottomNavItem(
         "💬"
     )
 
+    data object Partner : BottomNavItem(
+        "partner",
+        "Partner",
+        "❤️"
+    )
+
     data object Profile : BottomNavItem(
         "profile",
         "Profile",

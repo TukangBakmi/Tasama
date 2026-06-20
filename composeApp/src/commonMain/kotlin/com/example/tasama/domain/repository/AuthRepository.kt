@@ -18,4 +18,7 @@ interface AuthRepository {
     suspend fun updateFcmToken(uid: String, token: String?)
     suspend fun getUser(uid: String): User?
     suspend fun updateProfilePicture(uid: String, url: String)
+    suspend fun updateLocation(uid: String, lat: Double, lon: Double)
+    suspend fun linkPartner(uid: String, partnerShortId: String): Result<Unit>
+    suspend fun unlinkPartner(uid: String): Result<Unit>
 }

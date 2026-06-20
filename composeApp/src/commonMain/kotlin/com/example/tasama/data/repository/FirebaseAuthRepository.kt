@@ -7,6 +7,7 @@ import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.datetime.Clock
 
 class FirebaseAuthRepository : AuthRepository {
     private val auth = Firebase.auth
@@ -134,6 +135,53 @@ class FirebaseAuthRepository : AuthRepository {
             firestore.collection("users").document(uid).update("avatarUrl" to url)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    override suspend fun updateLocation(uid: String, lat: Double, lon: Double) {
+        try {
+            firestore.collection("users").document(uid).update(
+                "latitude" to lat,
+                "longitude" to lon,
+                "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun linkPartner(uid: String, partnerShortId: String): Result<Unit> {
+        return try {
+            val partnerUid = getUserIdFromShortId(partnerShortId)
+                ?: return Result.failure(Exception("Partner not found"))
+
+            if (partnerUid == uid) {
+                return Result.failure(Exception("You cannot link with yourself"))
+            }
+
+            // Update both users
+            firestore.collection("users").document(uid).update("partnerId" to partnerUid)
+            firestore.collection("users").document(partnerUid).update("partnerId" to uid)
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun unlinkPartner(uid: String): Result<Unit> {
+        return try {
+            val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            val partnerId = user.partnerId
+
+            if (partnerId != null) {
+                firestore.collection("users").document(uid).update("partnerId" to null)
+                firestore.collection("users").document(partnerId).update("partnerId" to null)
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

@@ -61,7 +61,8 @@ fun ChatListScreen(
             FloatingActionButton(onClick = { showAddContactDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Add Contact")
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (uiState.isLoading) {

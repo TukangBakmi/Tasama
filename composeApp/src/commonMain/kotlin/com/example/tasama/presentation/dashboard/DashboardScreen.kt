@@ -28,9 +28,11 @@ import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.presentation.components.DonutChart
 import com.example.tasama.presentation.components.LineChart
 
+import org.koin.compose.viewmodel.koinViewModel
+
 @Composable
 fun DashboardScreen(
-    viewModel: DashboardViewModel,
+    viewModel: DashboardViewModel = koinViewModel(),
     onTransactionClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -45,7 +47,8 @@ fun DashboardScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Transaction")
             }
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             DashboardContent(

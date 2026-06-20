@@ -103,7 +103,8 @@ fun AIScreen(
                 onMessageChange = viewModel::onInputChange,
                 onSend = viewModel::sendMessage
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         AIContent(
             uiState = uiState,

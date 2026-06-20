@@ -43,7 +43,8 @@ fun SavingsScreen(
                     }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         SavingsContent(
             uiState = uiState,

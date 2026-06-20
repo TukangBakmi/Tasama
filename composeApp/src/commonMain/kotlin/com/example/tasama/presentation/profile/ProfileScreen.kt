@@ -25,6 +25,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.window.Dialog
+import com.example.tasama.domain.model.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,10 +40,17 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboardManager = LocalClipboardManager.current
 
-    LaunchedEffect(uiState.exportMessage) {
+    // Combined side-effect handler with yield() for attachment safety
+    LaunchedEffect(uiState.exportMessage, uiState.error) {
         uiState.exportMessage?.let {
+            kotlinx.coroutines.yield()
             snackbarHostState.showSnackbar(it)
             viewModel.clearExportMessage()
+        }
+        uiState.error?.let {
+            kotlinx.coroutines.yield()
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
         }
     }
 
@@ -47,8 +58,14 @@ fun ProfileScreen(
         topBar = {
             TopAppBar(title = { Text("Profile") })
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0)
     ) { padding ->
+        var showThemeDialog by remember { mutableStateOf(false) }
+        var showCurrencyDialog by remember { mutableStateOf(false) }
+        var showLinkPartnerDialog by remember { mutableStateOf(false) }
+        var showUnlinkConfirmDialog by remember { mutableStateOf(false) }
+
         ProfileContent(
             uiState = uiState,
             onExportExcel = viewModel::exportToExcel,
@@ -59,9 +76,155 @@ fun ProfileScreen(
                 viewModel.onIdCopied()
             },
             onUpdateProfilePicture = viewModel::updateProfilePicture,
+            onThemeClick = { showThemeDialog = true },
+            onCurrencyClick = { showCurrencyDialog = true },
+            onPartnerClick = {
+                if (uiState.partnerId == null) {
+                    showLinkPartnerDialog = true
+                } else {
+                    showUnlinkConfirmDialog = true
+                }
+            },
             modifier = Modifier.padding(padding)
         )
+
+        if (showLinkPartnerDialog) {
+            LinkPartnerDialog(
+                onDismiss = { showLinkPartnerDialog = false },
+                onConfirm = { shortId ->
+                    viewModel.linkPartner(shortId)
+                    showLinkPartnerDialog = false
+                }
+            )
+        }
+
+        if (showUnlinkConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showUnlinkConfirmDialog = false },
+                title = { Text("Unlink Partner") },
+                text = { Text("Are you sure you want to unlink from your partner? This will remove the connection for both of you.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.unlinkPartner()
+                            showUnlinkConfirmDialog = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Unlink")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUnlinkConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showThemeDialog) {
+            SettingsSelectionDialog(
+                title = "Select Theme",
+                options = AppTheme.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
+                selectedIndex = AppTheme.entries.indexOf(uiState.theme),
+                onDismiss = { showThemeDialog = false },
+                onSelect = { index ->
+                    viewModel.updateTheme(AppTheme.entries[index])
+                    showThemeDialog = false
+                }
+            )
+        }
+
+        if (showCurrencyDialog) {
+            val currencies = listOf("IDR", "USD", "EUR", "GBP", "JPY")
+            SettingsSelectionDialog(
+                title = "Select Currency",
+                options = currencies,
+                selectedIndex = currencies.indexOf(uiState.currency).coerceAtLeast(0),
+                onDismiss = { showCurrencyDialog = false },
+                onSelect = { index ->
+                    viewModel.updateCurrency(currencies[index])
+                    showCurrencyDialog = false
+                }
+            )
+        }
     }
+}
+
+@Composable
+fun SettingsSelectionDialog(
+    title: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEachIndexed { index, option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(index) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = index == selectedIndex,
+                            onClick = { onSelect(index) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(option)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun LinkPartnerDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var shortId by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Link Partner") },
+        text = {
+            Column {
+                Text("Enter your partner's 12-digit ID to link your accounts.")
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = shortId,
+                    onValueChange = { if (it.length <= 12) shortId = it },
+                    label = { Text("Partner ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(shortId) },
+                enabled = shortId.length == 12
+            ) {
+                Text("Link")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -72,6 +235,9 @@ fun ProfileContent(
     onLogout: () -> Unit,
     onCopyId: (String) -> Unit,
     onUpdateProfilePicture: (String) -> Unit,
+    onThemeClick: () -> Unit,
+    onCurrencyClick: () -> Unit,
+    onPartnerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -92,14 +258,14 @@ fun ProfileContent(
             }
 
             item {
-                SectionTitle("Partnership")
+                SectionTitle("Relationship")
             }
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.Person,
+                    icon = Icons.Default.Favorite,
                     title = "Partner",
-                    subtitle = uiState.partnerName,
-                    onClick = {}
+                    subtitle = uiState.partnerName ?: "Not linked (Tap to link)",
+                    onClick = onPartnerClick
                 )
             }
 
@@ -126,9 +292,18 @@ fun ProfileContent(
             }
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.Settings,
-                    title = "App Settings",
-                    onClick = {}
+                    icon = Icons.Default.Palette,
+                    title = "Theme",
+                    subtitle = uiState.theme.name.lowercase().replaceFirstChar { it.uppercase() },
+                    onClick = onThemeClick
+                )
+            }
+            item {
+                ProfileMenuItem(
+                    icon = Icons.Default.AttachMoney,
+                    title = "Currency",
+                    subtitle = uiState.currency,
+                    onClick = onCurrencyClick
                 )
             }
             item {
@@ -141,7 +316,7 @@ fun ProfileContent(
             }
         }
 
-        if (uiState.isExporting) {
+        if (uiState.isExporting || uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -159,7 +334,7 @@ fun ProfileContent(
                     ) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Exporting data...")
+                        Text(if (uiState.isExporting) "Exporting data..." else "Loading...")
                     }
                 }
             }
@@ -341,7 +516,10 @@ fun ProfilePreview() {
             onExportPdf = {},
             onLogout = {},
             onCopyId = {},
-            onUpdateProfilePicture = {}
+            onUpdateProfilePicture = {},
+            onThemeClick = {},
+            onCurrencyClick = {},
+            onPartnerClick = {}
         )
     }
 }

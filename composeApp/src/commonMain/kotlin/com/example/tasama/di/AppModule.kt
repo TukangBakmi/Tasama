@@ -17,13 +17,19 @@ import com.example.tasama.presentation.chat.ChatViewModel
 import com.example.tasama.presentation.dashboard.DashboardViewModel
 import com.example.tasama.presentation.login.LoginViewModel
 import com.example.tasama.presentation.main.MainViewModel
+import com.example.tasama.presentation.partner.PartnerViewModel
 import com.example.tasama.presentation.profile.ProfileViewModel
 import com.example.tasama.presentation.savings.SavingsViewModel
 import com.example.tasama.presentation.transaction.TransactionViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
+import com.example.tasama.data.repository.DataStoreSettingsRepository
+import com.example.tasama.domain.repository.SettingsRepository
+
 val appModule = module {
+
+    single<SettingsRepository> { DataStoreSettingsRepository(get()) }
 
     single<TransactionRepository> {
         FirebaseTransactionRepository(get())
@@ -51,7 +57,8 @@ val appModule = module {
     viewModel { SavingsViewModel(get()) }
     viewModel { ChatViewModel(get()) }
     viewModel { ChatListViewModel(get()) }
-    viewModel { ProfileViewModel(get(), get(), get(), get()) }
-    viewModel { MainViewModel(get()) }
+    viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
+    viewModel { PartnerViewModel(get()) }
+    viewModel { MainViewModel(get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

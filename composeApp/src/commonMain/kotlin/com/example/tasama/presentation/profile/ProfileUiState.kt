@@ -1,13 +1,19 @@
 package com.example.tasama.presentation.profile
 
+import com.example.tasama.domain.model.AppTheme
+
 data class ProfileUiState(
     val userName: String = "John Doe",
     val userEmail: String = "john.doe@example.com",
     val userId: String = "",
     val userShortId: String = "",
     val profilePictureUrl: String? = null,
-    val partnerName: String = "Jane Doe",
+    val partnerId: String? = null,
+    val partnerName: String? = null,
     val currency: String = "USD",
+    val theme: AppTheme = AppTheme.SYSTEM,
     val isExporting: Boolean = false,
-    val exportMessage: String? = null
+    val exportMessage: String? = null,
+    val isLoading: Boolean = false,
+    val error: String? = null
 )

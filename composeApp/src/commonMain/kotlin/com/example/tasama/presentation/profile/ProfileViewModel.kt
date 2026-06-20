@@ -2,7 +2,9 @@ package com.example.tasama.presentation.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.AppTheme
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.domain.service.ExportService
 import com.example.tasama.domain.service.FileService
@@ -14,6 +16,7 @@ import kotlinx.coroutines.launch
 class ProfileViewModel(
     private val authRepository: AuthRepository,
     private val transactionRepository: TransactionRepository,
+    private val settingsRepository: SettingsRepository,
     private val exportService: ExportService,
     private val fileService: FileService
 ) : ViewModel() {
@@ -22,20 +25,79 @@ class ProfileViewModel(
 
     init {
         loadUserProfile()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(
+                    theme = settings.theme,
+                    currency = settings.currency
+                ) }
+            }
+        }
     }
 
     private fun loadUserProfile() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getUser(uid)
+            var partnerName: String? = null
+            if (user?.partnerId != null) {
+                partnerName = authRepository.getUser(user.partnerId)?.name
+            }
+            
             _uiState.update { it.copy(
                 userName = user?.name ?: "User", 
                 userEmail = user?.email ?: "", 
                 userId = uid,
                 userShortId = user?.shortId ?: "",
-                profilePictureUrl = user?.avatarUrl
+                profilePictureUrl = user?.avatarUrl,
+                partnerId = user?.partnerId,
+                partnerName = partnerName,
+                isLoading = false
             ) }
         }
+    }
+
+    fun linkPartner(partnerShortId: String) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val result = authRepository.linkPartner(uid, partnerShortId)
+            if (result.isSuccess) {
+                loadUserProfile()
+                _uiState.update { it.copy(exportMessage = "Partner linked successfully") }
+            } else {
+                _uiState.update { it.copy(
+                    isLoading = false, 
+                    error = result.exceptionOrNull()?.message ?: "Failed to link partner"
+                ) }
+            }
+        }
+    }
+
+    fun unlinkPartner() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val result = authRepository.unlinkPartner(uid)
+            if (result.isSuccess) {
+                loadUserProfile()
+                _uiState.update { it.copy(exportMessage = "Partner unlinked") }
+            } else {
+                _uiState.update { it.copy(
+                    isLoading = false,
+                    error = result.exceptionOrNull()?.message ?: "Failed to unlink partner"
+                ) }
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 
     fun updateProfilePicture(url: String) {
@@ -93,5 +155,17 @@ class ProfileViewModel(
 
     fun onIdCopied() {
         _uiState.update { it.copy(exportMessage = "ID copied to clipboard") }
+    }
+
+    fun updateTheme(theme: AppTheme) {
+        viewModelScope.launch {
+            settingsRepository.updateTheme(theme)
+        }
+    }
+
+    fun updateCurrency(currency: String) {
+        viewModelScope.launch {
+            settingsRepository.updateCurrency(currency)
+        }
     }
 }

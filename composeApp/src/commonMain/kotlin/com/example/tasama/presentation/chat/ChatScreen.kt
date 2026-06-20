@@ -111,7 +111,8 @@ fun ChatScreen(
                 onMessageChange = viewModel::onMessageChange,
                 onSend = viewModel::sendMessage
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         ChatContent(
             uiState = uiState,

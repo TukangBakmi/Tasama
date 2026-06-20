@@ -2,7 +2,9 @@ package com.example.tasama.presentation.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -16,8 +18,12 @@ sealed class AuthState {
 }
 
 class MainViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
+    val settings: StateFlow<AppSettings> = settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+
     val authState: StateFlow<AuthState> = authRepository.userId
         .map { uid ->
             if (uid != null) AuthState.Authenticated else AuthState.Unauthenticated

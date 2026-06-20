@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +24,7 @@ import com.example.tasama.presentation.chat.ChatListScreen
 import com.example.tasama.presentation.chat.ChatScreen
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
+import com.example.tasama.presentation.partner.PartnerScreen
 import com.example.tasama.presentation.profile.ProfileScreen
 import com.example.tasama.presentation.savings.SavingsScreen
 import kotlinx.coroutines.launch
@@ -86,6 +88,7 @@ fun MainScreen(
                     BottomNavItem.Dashboard,
                     BottomNavItem.Savings,
                     BottomNavItem.Chat,
+                    BottomNavItem.Partner,
                     BottomNavItem.Profile
                 )
 
@@ -106,10 +109,13 @@ fun MainScreen(
                             slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
                         }
                     ) {
-                        val isKeyboardVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
+                        val scope = rememberCoroutineScope()
                         
                         Scaffold(
                             bottomBar = {
+                                val density = LocalDensity.current
+                                val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+                                
                                 AnimatedVisibility(
                                     visible = !isKeyboardVisible,
                                     enter = slideInVertically(initialOffsetY = { it }),
@@ -132,30 +138,28 @@ fun MainScreen(
                                     }
                                 }
                             },
-                            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                            contentWindowInsets = WindowInsets(0)
                         ) { padding ->
                             HorizontalPager(
                                 state = pagerState,
-                                modifier = Modifier.fillMaxSize().padding(padding),
-                                beyondViewportPageCount = 2
+                                modifier = Modifier.fillMaxSize(),
+                                beyondViewportPageCount = 0
                             ) { page ->
-                                when (items[page]) {
-                                    BottomNavItem.Dashboard -> DashboardScreen(
-                                        viewModel = koinViewModel(),
-                                        onTransactionClick = {}
-                                    )
-                                    BottomNavItem.Savings -> SavingsScreen()
-                                    BottomNavItem.Chat -> ChatListScreen(
-                                        onChannelClick = { channelId ->
-                                            navController.navigate("chat_room/$channelId")
-                                        },
-                                        onAIClick = {
-                                            navController.navigate("ai_chat")
-                                        }
-                                    )
-                                    BottomNavItem.Profile -> ProfileScreen(
-                                        viewModel = koinViewModel()
-                                    )
+                                Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                                    when (items[page]) {
+                                        BottomNavItem.Dashboard -> DashboardScreen(onTransactionClick = {})
+                                        BottomNavItem.Savings -> SavingsScreen()
+                                        BottomNavItem.Chat -> ChatListScreen(
+                                            onChannelClick = { channelId ->
+                                                navController.navigate("chat_room/$channelId")
+                                            },
+                                            onAIClick = {
+                                                navController.navigate("ai_chat")
+                                            }
+                                        )
+                                        BottomNavItem.Partner -> PartnerScreen()
+                                        BottomNavItem.Profile -> ProfileScreen()
+                                    }
                                 }
                             }
                         }

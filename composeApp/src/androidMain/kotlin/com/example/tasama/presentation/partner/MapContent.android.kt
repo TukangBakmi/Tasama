@@ -21,16 +21,22 @@ actual fun MapContent(
         if (partner?.latitude != null && partner.longitude != null) {
             LatLng(partner.latitude, partner.longitude)
         } else {
-            LatLng(0.0, 0.0)
+            // Default to a visible location if no partner data yet
+            LatLng(-6.2000, 106.8166) 
         }
     }
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(partnerLocation, 15f)
+        position = CameraPosition.fromLatLngZoom(partnerLocation, 12f)
     }
 
     val markerState = rememberMarkerState(position = partnerLocation)
-    val uiSettings = remember { MapUiSettings(zoomControlsEnabled = false) }
+    val uiSettings = remember { 
+        MapUiSettings(
+            zoomControlsEnabled = true,
+            myLocationButtonEnabled = true
+        ) 
+    }
 
     LaunchedEffect(partnerLocation) {
         markerState.position = partnerLocation
@@ -56,7 +62,11 @@ actual fun MapContent(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
         uiSettings = uiSettings,
-        contentPadding = WindowInsets(0).asPaddingValues()
+        contentPadding = WindowInsets(0).asPaddingValues(),
+        properties = MapProperties(
+            isMyLocationEnabled = true,
+            mapType = MapType.NORMAL
+        )
     ) {
         if (partnerLocation.latitude != 0.0 || partnerLocation.longitude != 0.0) {
             Marker(

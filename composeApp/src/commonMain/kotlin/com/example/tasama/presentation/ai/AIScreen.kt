@@ -32,7 +32,7 @@ import kotlinx.datetime.*
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import tasama.composeapp.generated.resources.Res
-import tasama.composeapp.generated.resources.sir_quack
+import tasama.composeapp.generated.resources.logo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +57,7 @@ fun AIScreen(
                                 color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Image(
-                                    painter = painterResource(Res.drawable.sir_quack),
+                                    painter = painterResource(Res.drawable.logo),
                                     contentDescription = "Sir Quack",
                                     modifier = Modifier.fillMaxSize()
                                 )

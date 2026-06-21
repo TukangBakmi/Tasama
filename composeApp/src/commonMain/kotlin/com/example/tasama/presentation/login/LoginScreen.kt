@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
-import tasama.composeapp.generated.resources.sir_quack
+import tasama.composeapp.generated.resources.logo
 
 @Composable
 fun LoginScreen(
@@ -88,7 +88,7 @@ fun LoginScreen(
                 shadowElevation = 4.dp
             ) {
                 Image(
-                    painter = painterResource(Res.drawable.sir_quack),
+                    painter = painterResource(Res.drawable.logo),
                     contentDescription = "Tasama Logo",
                     modifier = Modifier.fillMaxSize().padding(12.dp)
                 )

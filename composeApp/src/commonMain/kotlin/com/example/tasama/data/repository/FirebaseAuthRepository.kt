@@ -142,6 +142,14 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun updateDisplayName(uid: String, name: String) {
+        try {
+            firestore.collection("users").document(uid).update("name" to name)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override suspend fun updateLocation(uid: String, lat: Double, lon: Double) {
         try {
             firestore.collection("users").document(uid).update(

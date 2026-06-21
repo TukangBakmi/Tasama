@@ -10,11 +10,12 @@ data class ProfileUiState(
     val profilePictureUrl: String? = null,
     val partnerId: String? = null,
     val partnerName: String? = null,
-    val currency: String = "USD",
+    val currency: String = "IDR",
     val theme: AppTheme = AppTheme.SYSTEM,
     val isExporting: Boolean = false,
     val exportMessage: String? = null,
     val isLoading: Boolean = false,
+    val isUpdating: Boolean = false,
     val error: String? = null,
     val isGuest: Boolean = false
 )

@@ -1,5 +1,6 @@
 package com.example.tasama.presentation.profile
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,9 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.window.Dialog
 import com.example.tasama.domain.model.AppTheme
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import tasama.composeapp.generated.resources.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +70,8 @@ fun ProfileScreen(
         var showCurrencyDialog by remember { mutableStateOf(false) }
         var showLinkPartnerDialog by remember { mutableStateOf(false) }
         var showUnlinkConfirmDialog by remember { mutableStateOf(false) }
+        var showEditNameDialog by remember { mutableStateOf(false) }
+        var showAvatarSelectionDialog by remember { mutableStateOf(false) }
 
         ProfileContent(
             uiState = uiState,
@@ -77,6 +83,8 @@ fun ProfileScreen(
                 viewModel.onIdCopied()
             },
             onUpdateProfilePicture = viewModel::updateProfilePicture,
+            onEditName = { showEditNameDialog = true },
+            onEditAvatar = { showAvatarSelectionDialog = true },
             onThemeClick = { showThemeDialog = true },
             onCurrencyClick = { showCurrencyDialog = true },
             onPartnerClick = {
@@ -88,6 +96,30 @@ fun ProfileScreen(
             },
             modifier = Modifier.padding(padding)
         )
+
+        if (showEditNameDialog) {
+            EditNameDialog(
+                currentName = uiState.userName,
+                onDismiss = { showEditNameDialog = false },
+                onConfirm = { newName ->
+                    viewModel.updateDisplayName(newName)
+                    showEditNameDialog = false
+                }
+            )
+        }
+
+        if (showAvatarSelectionDialog) {
+            AvatarSelectionDialog(
+                onDismiss = { showAvatarSelectionDialog = false },
+                onAvatarSelected = { avatarRes ->
+                    // Since updateProfilePicture expects a URL (string), 
+                    // we'll store the resource name or a specific convention.
+                    // For now, let's pass the resource name as the "URL".
+                    viewModel.updateProfilePicture(avatarRes)
+                    showAvatarSelectionDialog = false
+                }
+            )
+        }
 
         if (showLinkPartnerDialog) {
             LinkPartnerDialog(
@@ -150,6 +182,111 @@ fun ProfileScreen(
             )
         }
     }
+}
+
+@Composable
+fun EditNameDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var name by remember { mutableStateOf(currentName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Name") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Display Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun AvatarSelectionDialog(
+    onDismiss: () -> Unit,
+    onAvatarSelected: (String) -> Unit
+) {
+    val avatars = listOf(
+        Res.drawable.Avatar1, Res.drawable.Avatar2, Res.drawable.Avatar3,
+        Res.drawable.Avatar4, Res.drawable.Avatar5, Res.drawable.Avatar6,
+        Res.drawable.Avatar7, Res.drawable.Avatar8, Res.drawable.Avatar9
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose Avatar") },
+        text = {
+            Column {
+                Text("Select an avatar from the gallery or pick from your phone.")
+                Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.height(240.dp)
+                ) {
+                    items(avatars.size) { index ->
+                        val avatarRes = avatars[index]
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .clip(CircleShape)
+                                .clickable { 
+                                    // Extract resource name to store it
+                                    onAvatarSelected("avatar_${index + 1}")
+                                }
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(avatarRes),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedButton(
+                    onClick = {
+                        // TODO: Implement actual gallery picker when integrated
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Pick from Gallery")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -236,6 +373,8 @@ fun ProfileContent(
     onLogout: () -> Unit,
     onCopyId: (String) -> Unit,
     onUpdateProfilePicture: (String) -> Unit,
+    onEditName: () -> Unit,
+    onEditAvatar: () -> Unit,
     onThemeClick: () -> Unit,
     onCurrencyClick: () -> Unit,
     onPartnerClick: () -> Unit,
@@ -255,7 +394,8 @@ fun ProfileContent(
                     profilePictureUrl = uiState.profilePictureUrl,
                     isGuest = uiState.isGuest,
                     onCopyId = onCopyId,
-                    onUpdateProfilePicture = onUpdateProfilePicture
+                    onEditName = onEditName,
+                    onEditAvatar = onEditAvatar
                 )
             }
 
@@ -358,7 +498,8 @@ fun ProfileHeader(
     profilePictureUrl: String?,
     isGuest: Boolean,
     onCopyId: (String) -> Unit,
-    onUpdateProfilePicture: (String) -> Unit
+    onEditName: () -> Unit,
+    onEditAvatar: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -376,23 +517,40 @@ fun ProfileHeader(
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .then(
                         if (!isGuest) {
-                            Modifier.clickable {
-                                // For now, use a placeholder random avatar URL to simulate picking
-                                val randomId = (1..1000).random()
-                                onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
-                            }
+                            Modifier.clickable { onEditAvatar() }
                         } else Modifier
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 if (profilePictureUrl != null) {
-                    // For now, if we had Coil/Kamel we would load it here
-                    // Image(painter = ..., contentDescription = null, contentScale = ContentScale.Crop)
-                    Text(
-                        text = name.take(1).uppercase(),
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    val avatarRes = when (profilePictureUrl) {
+                        "avatar_1" -> Res.drawable.Avatar1
+                        "avatar_2" -> Res.drawable.Avatar2
+                        "avatar_3" -> Res.drawable.Avatar3
+                        "avatar_4" -> Res.drawable.Avatar4
+                        "avatar_5" -> Res.drawable.Avatar5
+                        "avatar_6" -> Res.drawable.Avatar6
+                        "avatar_7" -> Res.drawable.Avatar7
+                        "avatar_8" -> Res.drawable.Avatar8
+                        "avatar_9" -> Res.drawable.Avatar9
+                        else -> null
+                    }
+                    
+                    if (avatarRes != null) {
+                        Image(
+                            painter = painterResource(avatarRes),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        // Fallback to initial
+                        Text(
+                            text = name.take(1).uppercase(),
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 } else {
                     Text(
                         text = name.take(1).uppercase(),
@@ -410,6 +568,7 @@ fun ProfileHeader(
                         .size(24.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
+                        .clickable { onEditAvatar() }
                         .padding(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -424,11 +583,25 @@ fun ProfileHeader(
         }
         Spacer(modifier = Modifier.width(20.dp))
         Column {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(enabled = !isGuest) { onEditName() }
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (!isGuest) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit Name",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Text(
                 text = email,
                 style = MaterialTheme.typography.bodyMedium,
@@ -573,6 +746,8 @@ fun ProfilePreview() {
             onLogout = {},
             onCopyId = {},
             onUpdateProfilePicture = {},
+            onEditName = {},
+            onEditAvatar = {},
             onThemeClick = {},
             onCurrencyClick = {},
             onPartnerClick = {}

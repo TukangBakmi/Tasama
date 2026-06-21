@@ -3,6 +3,7 @@ package com.example.tasama.presentation.main
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -11,6 +12,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,16 +55,21 @@ fun MainScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            modifier = Modifier.size(100.dp),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            shadowElevation = 8.dp
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .shadow(8.dp, androidx.compose.foundation.shape.CircleShape)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(Color.Transparent),
+                            contentAlignment = Alignment.Center
                         ) {
                             Image(
                                 painter = painterResource(Res.drawable.logo),
                                 contentDescription = "Tasama Logo",
-                                modifier = Modifier.fillMaxSize().padding(16.dp)
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .scale(1.1f),
+                                contentScale = ContentScale.Crop
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))

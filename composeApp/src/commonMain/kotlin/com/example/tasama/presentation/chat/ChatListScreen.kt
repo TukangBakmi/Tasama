@@ -29,7 +29,7 @@ import kotlinx.datetime.*
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
-import tasama.composeapp.generated.resources.logo
+import tasama.composeapp.generated.resources.sir_quack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,7 +164,7 @@ fun AIAdvisorItem(onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(Res.drawable.logo),
+                painter = painterResource(Res.drawable.sir_quack),
                 contentDescription = "Sir Quack",
                 modifier = Modifier.fillMaxSize()
             )

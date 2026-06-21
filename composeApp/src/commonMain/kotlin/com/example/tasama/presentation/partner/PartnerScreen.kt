@@ -36,8 +36,10 @@ fun PartnerScreen(
             TopAppBar(
                 title = { Text("Partner Tracker") },
                 actions = {
-                    IconButton(onClick = { /* Refresh logic already in VM init */ }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    if (!uiState.isGuest && uiState.isLinked) {
+                        IconButton(onClick = { /* Refresh logic already in VM init */ }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
                     }
                 }
             )
@@ -45,13 +47,51 @@ fun PartnerScreen(
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            if (!uiState.isLinked) {
+            if (uiState.isGuest) {
+                GuestPartnerContent(onLogin = viewModel::logout)
+            } else if (!uiState.isLinked) {
                 NotLinkedContent()
             } else if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
                 PartnerMapContent(uiState.partner)
             }
+        }
+    }
+}
+
+@Composable
+fun GuestPartnerContent(onLogin: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.Favorite,
+            contentDescription = null,
+            modifier = Modifier.size(100.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            "Guest Account",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Partner features are only available for registered users. Sign in to link with your partner and see each other's location.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = onLogin,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Login / Sign Up")
         }
     }
 }

@@ -140,10 +140,16 @@ fun MainScreen(
                             },
                             contentWindowInsets = WindowInsets(0)
                         ) { padding ->
+                            val currentItem = items[pagerState.currentPage]
+                            val isGuest = (authState as? AuthState.Authenticated)?.isGuest == true
+                            
                             HorizontalPager(
                                 state = pagerState,
                                 modifier = Modifier.fillMaxSize(),
-                                beyondViewportPageCount = 0
+                                beyondViewportPageCount = 0,
+                                userScrollEnabled = if (currentItem == BottomNavItem.Partner) {
+                                    isGuest
+                                } else true
                             ) { page ->
                                 Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                                     when (items[page]) {

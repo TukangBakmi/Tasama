@@ -51,12 +51,12 @@ val appModule = module {
         FirebaseAIChatRepository(get())
     }
 
-    viewModel { DashboardViewModel(get()) }
-    viewModel { TransactionViewModel(get()) }
-    viewModel { AIViewModel(get(), get(), get()) }
-    viewModel { SavingsViewModel(get()) }
-    viewModel { ChatViewModel(get()) }
-    viewModel { ChatListViewModel(get()) }
+    viewModel { DashboardViewModel(get(), get()) }
+    viewModel { TransactionViewModel(get(), get()) }
+    viewModel { AIViewModel(get(), get(), get(), get()) }
+    viewModel { SavingsViewModel(get(), get()) }
+    viewModel { ChatViewModel(get(), get()) }
+    viewModel { ChatListViewModel(get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
     viewModel { PartnerViewModel(get()) }
     viewModel { MainViewModel(get(), get()) }

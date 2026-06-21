@@ -16,6 +16,7 @@ interface AuthRepository {
     suspend fun getUserShortId(uid: String): String?
     suspend fun getUserIdFromShortId(shortId: String): String?
     suspend fun updateFcmToken(uid: String, token: String?)
+    suspend fun isGuest(): Boolean
     suspend fun getUser(uid: String): User?
     suspend fun updateProfilePicture(uid: String, url: String)
     suspend fun updateLocation(uid: String, lat: Double, lon: Double)

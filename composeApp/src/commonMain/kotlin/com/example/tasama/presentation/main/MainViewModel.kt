@@ -7,14 +7,15 @@ import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed class AuthState {
-    object Loading : AuthState()
-    object Authenticated : AuthState()
-    object Unauthenticated : AuthState()
+    data object Loading : AuthState()
+    data class Authenticated(val isGuest: Boolean) : AuthState()
+    data object Unauthenticated : AuthState()
 }
 
 class MainViewModel(
@@ -24,9 +25,16 @@ class MainViewModel(
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val authState: StateFlow<AuthState> = authRepository.userId
-        .map { uid ->
-            if (uid != null) AuthState.Authenticated else AuthState.Unauthenticated
+        .flatMapLatest { uid ->
+            flow {
+                if (uid != null) {
+                    emit(AuthState.Authenticated(isGuest = authRepository.isGuest()))
+                } else {
+                    emit(AuthState.Unauthenticated)
+                }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState.Loading)
 }

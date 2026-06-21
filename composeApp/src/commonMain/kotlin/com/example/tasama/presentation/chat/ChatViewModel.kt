@@ -3,20 +3,42 @@ package com.example.tasama.presentation.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.MessageStatus
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
-    private val repository: ChatRepository
+    private val repository: ChatRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
     private var currentChannelId: String? = null
+    private var messagesJob: Job? = null
+    private var channelInfoJob: Job? = null
+
+    init {
+        observeUserSession()
+    }
+
+    private fun observeUserSession() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid == null) {
+                    messagesJob?.cancel()
+                    channelInfoJob?.cancel()
+                    _uiState.value = ChatUiState()
+                    currentChannelId = null
+                }
+            }
+        }
+    }
 
     fun setChannel(channelId: String) {
         currentChannelId = channelId
@@ -26,7 +48,8 @@ class ChatViewModel(
     }
 
     private fun loadChannelInfo(channelId: String) {
-        viewModelScope.launch {
+        channelInfoJob?.cancel()
+        channelInfoJob = viewModelScope.launch {
             val currentUserId = repository.getCurrentUserId() ?: return@launch
             repository.getChannels().collect { channels ->
                 val channel = channels.find { it.id == channelId }
@@ -46,7 +69,8 @@ class ChatViewModel(
     }
 
     private fun observeMessages(channelId: String) {
-        viewModelScope.launch {
+        messagesJob?.cancel()
+        messagesJob = viewModelScope.launch {
             repository.getMessages(channelId).collect { messages ->
                 _uiState.update { state ->
                     val latestOldestTimestamp = messages.firstOrNull()?.timestamp ?: 0L

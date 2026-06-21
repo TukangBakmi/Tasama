@@ -122,6 +122,10 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun isGuest(): Boolean {
+        return auth.currentUser?.isAnonymous ?: false
+    }
+
     override suspend fun getUser(uid: String): User? {
         return try {
             firestore.collection("users").document(uid).get().data<User>()

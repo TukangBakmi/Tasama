@@ -24,8 +24,24 @@ class ProfileViewModel(
     val uiState = _uiState.asStateFlow()
 
     init {
-        loadUserProfile()
+        observeUser()
         observeSettings()
+    }
+
+    private fun observeUser() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid != null) {
+                    loadUserProfile(uid)
+                } else {
+                    // Reset state on logout
+                    _uiState.update { ProfileUiState(
+                        theme = it.theme,
+                        currency = it.currency
+                    ) }
+                }
+            }
+        }
     }
 
     private fun observeSettings() {
@@ -39,25 +55,26 @@ class ProfileViewModel(
         }
     }
 
-    private fun loadUserProfile() {
-        val uid = authRepository.getCurrentUserId() ?: return
+    private fun loadUserProfile(uid: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getUser(uid)
+            val isGuest = authRepository.isGuest()
             var partnerName: String? = null
             if (user?.partnerId != null) {
                 partnerName = authRepository.getUser(user.partnerId)?.name
             }
             
             _uiState.update { it.copy(
-                userName = user?.name ?: "User", 
-                userEmail = user?.email ?: "", 
+                userName = user?.name ?: "Guest", 
+                userEmail = user?.email ?: "Guest session",
                 userId = uid,
                 userShortId = user?.shortId ?: "",
                 profilePictureUrl = user?.avatarUrl,
                 partnerId = user?.partnerId,
                 partnerName = partnerName,
-                isLoading = false
+                isLoading = false,
+                isGuest = isGuest
             ) }
         }
     }
@@ -68,7 +85,7 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.linkPartner(uid, partnerShortId)
             if (result.isSuccess) {
-                loadUserProfile()
+                loadUserProfile(uid)
                 _uiState.update { it.copy(exportMessage = "Partner linked successfully") }
             } else {
                 _uiState.update { it.copy(
@@ -85,7 +102,7 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.unlinkPartner(uid)
             if (result.isSuccess) {
-                loadUserProfile()
+                loadUserProfile(uid)
                 _uiState.update { it.copy(exportMessage = "Partner unlinked") }
             } else {
                 _uiState.update { it.copy(

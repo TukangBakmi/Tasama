@@ -3,25 +3,44 @@ package com.example.tasama.presentation.savings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SavingsViewModel(
-    private val repository: SavingsRepository
+    private val repository: SavingsRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SavingsUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var dataJob: Job? = null
+
     init {
-        loadSavings()
+        observeUserSession()
+    }
+
+    private fun observeUserSession() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid == null) {
+                    dataJob?.cancel()
+                    _uiState.value = SavingsUiState()
+                } else {
+                    loadSavings()
+                }
+            }
+        }
     }
 
     private fun loadSavings() {
-        viewModelScope.launch {
+        dataJob?.cancel()
+        dataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             repository.getSavingsGoals().collect { goals ->
                 _uiState.update { 

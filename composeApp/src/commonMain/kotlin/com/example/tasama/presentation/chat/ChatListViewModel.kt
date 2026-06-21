@@ -2,29 +2,48 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatListViewModel(
-    private val repository: ChatRepository
+    private val repository: ChatRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatListUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var dataJob: Job? = null
+
     val currentUserId: String?
         get() = repository.getCurrentUserId()
 
     init {
-        loadChannels()
+        observeUserSession()
+    }
+
+    private fun observeUserSession() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid == null) {
+                    dataJob?.cancel()
+                    _uiState.value = ChatListUiState()
+                } else {
+                    loadChannels()
+                }
+            }
+        }
     }
 
     private fun loadChannels() {
-        _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
+        dataJob?.cancel()
+        dataJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             repository.getChannels().collect { channels ->
                 _uiState.update { it.copy(channels = channels, isLoading = false) }
             }

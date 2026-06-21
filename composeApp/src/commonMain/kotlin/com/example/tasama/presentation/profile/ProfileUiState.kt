@@ -3,8 +3,8 @@ package com.example.tasama.presentation.profile
 import com.example.tasama.domain.model.AppTheme
 
 data class ProfileUiState(
-    val userName: String = "John Doe",
-    val userEmail: String = "john.doe@example.com",
+    val userName: String = "",
+    val userEmail: String = "",
     val userId: String = "",
     val userShortId: String = "",
     val profilePictureUrl: String? = null,
@@ -15,5 +15,6 @@ data class ProfileUiState(
     val isExporting: Boolean = false,
     val exportMessage: String? = null,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isGuest: Boolean = false
 )

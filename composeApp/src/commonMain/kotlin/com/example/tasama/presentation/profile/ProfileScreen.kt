@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
@@ -252,39 +253,46 @@ fun ProfileContent(
                     email = uiState.userEmail,
                     shortId = uiState.userShortId,
                     profilePictureUrl = uiState.profilePictureUrl,
+                    isGuest = uiState.isGuest,
                     onCopyId = onCopyId,
                     onUpdateProfilePicture = onUpdateProfilePicture
                 )
             }
 
-            item {
-                SectionTitle("Relationship")
-            }
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Favorite,
-                    title = "Partner",
-                    subtitle = uiState.partnerName ?: "Not linked (Tap to link)",
-                    onClick = onPartnerClick
-                )
-            }
+            if (uiState.isGuest) {
+                item {
+                    GuestWarningCard(onLogin = onLogout)
+                }
+            } else {
+                item {
+                    SectionTitle("Relationship")
+                }
+                item {
+                    ProfileMenuItem(
+                        icon = Icons.Default.Favorite,
+                        title = "Partner",
+                        subtitle = uiState.partnerName ?: "Not linked (Tap to link)",
+                        onClick = onPartnerClick
+                    )
+                }
 
-            item {
-                SectionTitle("Data Export")
-            }
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Share,
-                    title = "Export to Excel",
-                    onClick = onExportExcel
-                )
-            }
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.PictureAsPdf,
-                    title = "Export to PDF",
-                    onClick = onExportPdf
-                )
+                item {
+                    SectionTitle("Data Export")
+                }
+                item {
+                    ProfileMenuItem(
+                        icon = Icons.Default.Share,
+                        title = "Export to Excel",
+                        onClick = onExportExcel
+                    )
+                }
+                item {
+                    ProfileMenuItem(
+                        icon = Icons.Default.PictureAsPdf,
+                        title = "Export to PDF",
+                        onClick = onExportPdf
+                    )
+                }
             }
 
             item {
@@ -348,6 +356,7 @@ fun ProfileHeader(
     email: String,
     shortId: String,
     profilePictureUrl: String?,
+    isGuest: Boolean,
     onCopyId: (String) -> Unit,
     onUpdateProfilePicture: (String) -> Unit
 ) {
@@ -365,11 +374,15 @@ fun ProfileHeader(
                     .fillMaxSize()
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .clickable {
-                        // For now, use a placeholder random avatar URL to simulate picking
-                        val randomId = (1..1000).random()
-                        onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
-                    },
+                    .then(
+                        if (!isGuest) {
+                            Modifier.clickable {
+                                // For now, use a placeholder random avatar URL to simulate picking
+                                val randomId = (1..1000).random()
+                                onUpdateProfilePicture("https://i.pravatar.cc/300?u=$randomId")
+                            }
+                        } else Modifier
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 if (profilePictureUrl != null) {
@@ -389,22 +402,24 @@ fun ProfileHeader(
                 }
             }
 
-            // Add a small edit icon
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit Profile Picture",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(14.dp)
-                )
+            if (!isGuest) {
+                // Add a small edit icon
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit Profile Picture",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.width(20.dp))
@@ -441,6 +456,47 @@ fun ProfileHeader(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun GuestWarningCard(onLogin: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Guest Account",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "You are currently logged in as a guest. Your data is temporary. Sign in to sync your data across devices and link with a partner.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onLogin,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Login / Sign Up")
             }
         }
     }

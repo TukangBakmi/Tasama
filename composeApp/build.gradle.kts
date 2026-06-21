@@ -127,6 +127,8 @@ android {
 dependencies {
     debugImplementation(libs.compose.uiTooling)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
 }
 
 compose.desktop {

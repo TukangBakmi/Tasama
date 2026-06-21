@@ -8,7 +8,9 @@ import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.AIChatRepository
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.TransactionRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,18 +26,35 @@ import kotlinx.serialization.json.longOrNull
 class AIViewModel(
     private val repository: TransactionRepository,
     private val aiChatRepository: AIChatRepository,
-    private val groqService: GroqService
+    private val groqService: GroqService,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AIUiState())
     val uiState: StateFlow<AIUiState> = _uiState.asStateFlow()
 
+    private var dataJob: Job? = null
+
     init {
-        observeMessages()
+        observeUserSession()
+    }
+
+    private fun observeUserSession() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid == null) {
+                    dataJob?.cancel()
+                    _uiState.value = AIUiState()
+                } else {
+                    observeMessages()
+                }
+            }
+        }
     }
 
     private fun observeMessages() {
-        viewModelScope.launch {
+        dataJob?.cancel()
+        dataJob = viewModelScope.launch {
             aiChatRepository.getMessages().collect { messages ->
                 if (messages.isEmpty()) {
                     // Only save welcome if we are sure there is no history (after initial check)

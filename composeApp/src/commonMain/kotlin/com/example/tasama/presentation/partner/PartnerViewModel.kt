@@ -14,7 +14,8 @@ data class PartnerUiState(
     val partner: User? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isLinked: Boolean = false
+    val isLinked: Boolean = false,
+    val isGuest: Boolean = false
 )
 
 class PartnerViewModel(
@@ -24,12 +25,25 @@ class PartnerViewModel(
     val uiState = _uiState.asStateFlow()
 
     init {
-        loadPartnerData()
-        startLocationUpdates()
+        observeUser()
     }
 
-    private fun loadPartnerData() {
-        val uid = authRepository.getCurrentUserId() ?: return
+    private fun observeUser() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid != null) {
+                    val isGuest = authRepository.isGuest()
+                    _uiState.update { it.copy(isGuest = isGuest) }
+                    loadPartnerData(uid)
+                    startLocationUpdates(uid)
+                } else {
+                    _uiState.value = PartnerUiState()
+                }
+            }
+        }
+    }
+
+    private fun loadPartnerData(uid: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getUser(uid)
@@ -49,14 +63,15 @@ class PartnerViewModel(
         }
     }
 
-    private fun startLocationUpdates() {
+    private fun startLocationUpdates(uid: String) {
         viewModelScope.launch {
             while (true) {
-                val uid = authRepository.getCurrentUserId() ?: break
                 val user = authRepository.getUser(uid)
                 if (user?.partnerId != null) {
                     val partner = authRepository.getUser(user.partnerId)
                     _uiState.update { it.copy(partner = partner) }
+                } else {
+                    _uiState.update { it.copy(partner = null, isLinked = false) }
                 }
                 delay(30000) // Update every 30 seconds
             }
@@ -67,6 +82,12 @@ class PartnerViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             authRepository.updateLocation(uid, lat, lon)
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.signOut()
         }
     }
 }

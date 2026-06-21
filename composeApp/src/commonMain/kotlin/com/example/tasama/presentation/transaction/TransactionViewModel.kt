@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +13,8 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class TransactionViewModel(
-    private val repository: TransactionRepository
+    private val repository: TransactionRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState =
@@ -22,7 +24,19 @@ class TransactionViewModel(
         _uiState.asStateFlow()
 
     init {
-        loadData()
+        observeUserSession()
+    }
+
+    private fun observeUserSession() {
+        viewModelScope.launch {
+            authRepository.userId.collect { uid ->
+                if (uid == null) {
+                    _uiState.value = TransactionUiState()
+                } else {
+                    loadData()
+                }
+            }
+        }
     }
 
     fun loadData() {

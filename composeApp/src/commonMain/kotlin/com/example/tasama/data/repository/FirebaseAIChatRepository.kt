@@ -5,6 +5,7 @@ import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
+import kotlinx.datetime.Clock as KtClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -58,7 +59,7 @@ class FirebaseAIChatRepository(
     override suspend fun saveMessage(message: ChatMessage) {
         try {
             val userId = authRepository.getCurrentUserId() ?: return
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            val now = KtClock.System.now().toEpochMilliseconds()
             val id = message.id.ifEmpty { "ai_msg_$now" }
             val finalMessage = message.copy(id = id, userId = userId)
             collection.document(id).set(finalMessage)

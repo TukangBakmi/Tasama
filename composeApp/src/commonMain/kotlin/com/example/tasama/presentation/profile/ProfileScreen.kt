@@ -32,8 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.window.Dialog
 import com.example.tasama.domain.model.AppTheme
+import io.kamel.image.KamelImage
+import io.kamel.image.asyncPainterResource
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.compose.PickerResultLauncher
+import io.github.vinceglb.filekit.core.PickerType
+import io.github.vinceglb.filekit.core.PlatformFile
 import tasama.composeapp.generated.resources.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +51,17 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboardManager = LocalClipboardManager.current
 
-    // Combined side-effect handler with yield() for attachment safety
+    val pickerLauncher = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        title = "Select Profile Picture",
+        onResult = { file: PlatformFile? ->
+            if (file != null) {
+                viewModel.uploadProfilePicture(file)
+            }
+        }
+    )
+
+    // Combined side effect handler with yield() for attachment safety
     LaunchedEffect(uiState.exportMessage, uiState.error) {
         uiState.exportMessage?.let {
             kotlinx.coroutines.yield()
@@ -112,12 +128,13 @@ fun ProfileScreen(
             AvatarSelectionDialog(
                 onDismiss = { showAvatarSelectionDialog = false },
                 onAvatarSelected = { avatarRes ->
-                    // Since updateProfilePicture expects a URL (string), 
+                    // Since updateProfilePicture expects a URL (string),
                     // we'll store the resource name or a specific convention.
                     // For now, let's pass the resource name as the "URL".
                     viewModel.updateProfilePicture(avatarRes)
                     showAvatarSelectionDialog = false
-                }
+                },
+                pickerLauncher = pickerLauncher
             )
         }
 
@@ -223,7 +240,8 @@ fun EditNameDialog(
 @Composable
 fun AvatarSelectionDialog(
     onDismiss: () -> Unit,
-    onAvatarSelected: (String) -> Unit
+    onAvatarSelected: (String) -> Unit,
+    pickerLauncher: PickerResultLauncher
 ) {
     val avatars = listOf(
         Res.drawable.Avatar1, Res.drawable.Avatar2, Res.drawable.Avatar3,
@@ -250,7 +268,7 @@ fun AvatarSelectionDialog(
                             modifier = Modifier
                                 .aspectRatio(1f)
                                 .clip(CircleShape)
-                                .clickable { 
+                                .clickable {
                                     // Extract resource name to store it
                                     onAvatarSelected("avatar_${index + 1}")
                                 }
@@ -264,13 +282,13 @@ fun AvatarSelectionDialog(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 OutlinedButton(
                     onClick = {
-                        // TODO: Implement actual gallery picker when integrated
                         onDismiss()
+                        pickerLauncher.launch()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -535,13 +553,33 @@ fun ProfileHeader(
                         "avatar_9" -> Res.drawable.Avatar9
                         else -> null
                     }
-                    
+
                     if (avatarRes != null) {
                         Image(
                             painter = painterResource(avatarRes),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
+                        )
+                    } else if (profilePictureUrl.startsWith("http")) {
+                        KamelImage(
+                            resource = asyncPainterResource(data = profilePictureUrl),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            onLoading = { progress ->
+                                CircularProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            },
+                            onFailure = {
+                                Text(
+                                    text = name.take(1).uppercase(),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         )
                     } else {
                         // Fallback to initial

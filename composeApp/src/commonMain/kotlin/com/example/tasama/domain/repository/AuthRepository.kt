@@ -18,6 +18,7 @@ interface AuthRepository {
     suspend fun updateFcmToken(uid: String, token: String?)
     suspend fun isGuest(): Boolean
     suspend fun getUser(uid: String): User?
+    suspend fun uploadProfilePicture(uid: String, bytes: ByteArray): String
     suspend fun updateProfilePicture(uid: String, url: String)
     suspend fun updateDisplayName(uid: String, name: String)
     suspend fun updateLocation(uid: String, lat: Double, lon: Double)

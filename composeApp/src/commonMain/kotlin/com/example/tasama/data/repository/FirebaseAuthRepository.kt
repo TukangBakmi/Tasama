@@ -5,9 +5,12 @@ import com.example.tasama.domain.repository.AuthRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.storage.storage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.Clock
+import kotlinx.coroutines.flow.last
+import kotlinx.datetime.Clock as KtClock
 
 class FirebaseAuthRepository : AuthRepository {
     private val auth = Firebase.auth
@@ -41,7 +44,6 @@ class FirebaseAuthRepository : AuthRepository {
                 name = name
             )
             firestore.collection("users").document(user.uid).set(userData)
-            // Also store a mapping for quick lookup if needed, or just use query
         }
     }
 
@@ -54,7 +56,6 @@ class FirebaseAuthRepository : AuthRepository {
     }
 
     override suspend fun signInWithGoogle(idToken: String) {
-        // Note: idToken is obtained from the platform-specific Google Sign-In flow
         val credential = dev.gitlive.firebase.auth.GoogleAuthProvider.credential(idToken, null)
         val result = auth.signInWithCredential(credential)
         val user = result.user
@@ -134,6 +135,16 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun uploadProfilePicture(uid: String, bytes: ByteArray): String {
+        val ref = Firebase.storage.reference("profile_pictures/$uid.jpg")
+        val data = createStorageData(bytes)
+        // Ensure the upload completes before proceeding
+        kotlinx.coroutines.flow.flow {
+            emit(ref.putData(data))
+        }.collect { }
+        return ref.getDownloadUrl()
+    }
+
     override suspend fun updateProfilePicture(uid: String, url: String) {
         try {
             firestore.collection("users").document(uid).update("avatarUrl" to url)
@@ -155,7 +166,7 @@ class FirebaseAuthRepository : AuthRepository {
             firestore.collection("users").document(uid).update(
                 "latitude" to lat,
                 "longitude" to lon,
-                "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
+                "lastLocationUpdate" to KtClock.System.now().toEpochMilliseconds()
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -171,7 +182,6 @@ class FirebaseAuthRepository : AuthRepository {
                 return Result.failure(Exception("You cannot link with yourself"))
             }
 
-            // Update both users
             firestore.collection("users").document(uid).update("partnerId" to partnerUid)
             firestore.collection("users").document(partnerUid).update("partnerId" to uid)
 

@@ -8,6 +8,7 @@ import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.domain.service.ExportService
 import com.example.tasama.domain.service.FileService
+import io.github.vinceglb.filekit.core.PlatformFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -123,6 +124,21 @@ class ProfileViewModel(
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateProfilePicture(uid, url)
             _uiState.update { it.copy(profilePictureUrl = url, isUpdating = false) }
+        }
+    }
+
+    fun uploadProfilePicture(file: PlatformFile) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(isUpdating = true) }
+                val bytes = file.readBytes()
+                val url = authRepository.uploadProfilePicture(uid, bytes)
+                authRepository.updateProfilePicture(uid, url)
+                _uiState.update { it.copy(profilePictureUrl = url, isUpdating = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isUpdating = false, error = "Failed to upload: ${e.message}") }
+            }
         }
     }
 

@@ -47,6 +47,9 @@ kotlin {
             implementation(libs.google.maps)
         }
         commonMain.dependencies {
+            implementation(libs.filekit.compose)
+            implementation(libs.filekit.core)
+            implementation(libs.kamel)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -66,8 +69,10 @@ kotlin {
             implementation(libs.ktor.client.logging)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.firebase.firestore)
             implementation(libs.firebase.auth)
+            implementation(libs.firebase.storage)
             implementation(libs.firebase.messaging)
             implementation(libs.datastore.preferences)
             implementation(libs.okio)

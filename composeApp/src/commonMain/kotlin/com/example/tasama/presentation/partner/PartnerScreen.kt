@@ -36,8 +36,8 @@ fun PartnerScreen(
             TopAppBar(
                 title = { Text("Partner Tracker") },
                 actions = {
-                    if (!uiState.isGuest && uiState.isLinked) {
-                        IconButton(onClick = { /* Refresh logic already in VM init */ }) {
+                    if (!uiState.isGuest) {
+                        IconButton(onClick = { viewModel.refresh() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
                     }

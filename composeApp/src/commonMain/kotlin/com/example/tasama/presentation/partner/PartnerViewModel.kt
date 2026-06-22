@@ -5,9 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class PartnerUiState(
@@ -30,12 +28,24 @@ class PartnerViewModel(
 
     private fun observeUser() {
         viewModelScope.launch {
-            authRepository.userId.collect { uid ->
+            authRepository.userId.collectLatest { uid ->
                 if (uid != null) {
                     val isGuest = authRepository.isGuest()
-                    _uiState.update { it.copy(isGuest = isGuest) }
-                    loadPartnerData(uid)
-                    startLocationUpdates(uid)
+                    _uiState.update { it.copy(
+                        isGuest = isGuest,
+                        isLoading = true,
+                        partner = null,
+                        isLinked = false
+                    ) }
+                    
+                    // Initial load
+                    refreshPartnerData(uid)
+                    
+                    // Periodic updates (automatically cancelled when uid changes or is null)
+                    while (true) {
+                        delay(30000)
+                        refreshPartnerData(uid)
+                    }
                 } else {
                     _uiState.value = PartnerUiState()
                 }
@@ -43,38 +53,29 @@ class PartnerViewModel(
         }
     }
 
-    private fun loadPartnerData(uid: String) {
+    fun refresh() {
+        val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val user = authRepository.getUser(uid)
-            if (user?.partnerId != null) {
-                val partner = authRepository.getUser(user.partnerId)
-                _uiState.update { it.copy(
-                    partner = partner,
-                    isLinked = true,
-                    isLoading = false
-                ) }
-            } else {
-                _uiState.update { it.copy(
-                    isLinked = false,
-                    isLoading = false
-                ) }
-            }
+            refreshPartnerData(uid)
         }
     }
 
-    private fun startLocationUpdates(uid: String) {
-        viewModelScope.launch {
-            while (true) {
-                val user = authRepository.getUser(uid)
-                if (user?.partnerId != null) {
-                    val partner = authRepository.getUser(user.partnerId)
-                    _uiState.update { it.copy(partner = partner) }
-                } else {
-                    _uiState.update { it.copy(partner = null, isLinked = false) }
-                }
-                delay(30000) // Update every 30 seconds
-            }
+    private suspend fun refreshPartnerData(uid: String) {
+        val user = authRepository.getUser(uid)
+        if (user?.partnerId != null) {
+            val partner = authRepository.getUser(user.partnerId)
+            _uiState.update { it.copy(
+                partner = partner,
+                isLinked = true,
+                isLoading = false
+            ) }
+        } else {
+            _uiState.update { it.copy(
+                partner = null,
+                isLinked = false,
+                isLoading = false
+            ) }
         }
     }
 

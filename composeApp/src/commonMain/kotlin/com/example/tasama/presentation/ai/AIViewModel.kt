@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock as KtClock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
@@ -63,7 +64,7 @@ class AIViewModel(
                         id = "welcome",
                         text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
-                        timestamp = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                        timestamp = KtClock.System.now().toEpochMilliseconds()
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
@@ -121,7 +122,7 @@ class AIViewModel(
         val text = _uiState.value.inputText
         if (text.isBlank()) return
 
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val now = KtClock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
             text = text,
@@ -202,7 +203,7 @@ class AIViewModel(
     }
 
     private suspend fun handleAIResponse(response: String) {
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val now = KtClock.System.now().toEpochMilliseconds()
         var finalReply = response
 
         try {

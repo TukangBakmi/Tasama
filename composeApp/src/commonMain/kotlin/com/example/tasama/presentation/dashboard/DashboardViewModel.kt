@@ -12,13 +12,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock as KtClock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
 
 class DashboardViewModel(
     private val repository: TransactionRepository,
@@ -71,7 +71,7 @@ class DashboardViewModel(
             .sumOf { it.amount }
 
         // Calculate weekly spending (last 7 days)
-        val nowEpoch = Clock.System.now().toEpochMilliseconds()
+        val nowEpoch = KtClock.System.now().toEpochMilliseconds()
         val systemTZ = TimeZone.currentSystemDefault()
         val today = Instant.fromEpochMilliseconds(nowEpoch).toLocalDateTime(systemTZ).date
 

@@ -6,11 +6,8 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
 import dev.gitlive.firebase.storage.storage
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.last
-import kotlinx.datetime.Clock as KtClock
+import kotlinx.coroutines.flow.*
+import kotlin.time.Clock
 
 class FirebaseAuthRepository : AuthRepository {
     private val auth = Firebase.auth
@@ -84,7 +81,7 @@ class FirebaseAuthRepository : AuthRepository {
     override suspend fun getUserName(uid: String): String? {
         return try {
             firestore.collection("users").document(uid).get().data<User>().name
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -92,14 +89,16 @@ class FirebaseAuthRepository : AuthRepository {
     override suspend fun getUserShortId(uid: String): String? {
         return try {
             val user = firestore.collection("users").document(uid).get().data<User>()
-            if (user.shortId.isEmpty()) {
+            user.shortId.ifEmpty {
                 val newShortId = generateShortId()
-                firestore.collection("users").document(uid).update("shortId" to newShortId)
+                firestore.collection("users")
+                    .document(uid)
+                    .updateFields {
+                        "shortId" to newShortId
+                    }
                 newShortId
-            } else {
-                user.shortId
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -110,14 +109,18 @@ class FirebaseAuthRepository : AuthRepository {
                 .where { "shortId" equalTo shortId }
                 .get()
             query.documents.firstOrNull()?.data<User>()?.id
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
     override suspend fun updateFcmToken(uid: String, token: String?) {
         try {
-            firestore.collection("users").document(uid).update("fcmToken" to token)
+            firestore.collection("users")
+                .document(uid)
+                .updateFields {
+                    "fcmToken" to token
+                }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -130,24 +133,53 @@ class FirebaseAuthRepository : AuthRepository {
     override suspend fun getUser(uid: String): User? {
         return try {
             firestore.collection("users").document(uid).get().data<User>()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
+    override fun getUserFlow(uid: String): Flow<User?> {
+        return firestore.collection("users").document(uid).snapshots.map { snapshot ->
+            try {
+                snapshot.data<User>()
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     override suspend fun uploadProfilePicture(uid: String, bytes: ByteArray): String {
-        val ref = Firebase.storage.reference("profile_pictures/$uid.jpg")
-        val data = createStorageData(bytes)
-        // Ensure the upload completes before proceeding
-        kotlinx.coroutines.flow.flow {
-            emit(ref.putData(data))
-        }.collect { }
-        return ref.getDownloadUrl()
+        try {
+            // Using the default storage bucket from google-services.json
+            val storage = Firebase.storage
+            val ref = storage.reference.child("profile_pictures/${uid}.jpg")
+            val data = createStorageData(bytes)
+            
+            println("Starting upload to: ${ref.path}")
+            
+            // GitLive Firebase: putData returns a Flow<UploadState>.
+            // We must collect the flow to await the upload's completion.
+            ref.putData(data)
+            
+            println("Upload completed successfully. Fetching download URL...")
+            return ref.getDownloadUrl()
+        } catch (e: Exception) {
+            println("Firebase Storage Error: ${e.message}")
+            if (e.message?.contains("404") == true) {
+                println("HINT: A 404 error usually means the Storage bucket is not initialized.")
+                println("Go to Firebase Console -> Storage and click 'Get Started' to initialize it.")
+            }
+            throw e
+        }
     }
 
     override suspend fun updateProfilePicture(uid: String, url: String) {
         try {
-            firestore.collection("users").document(uid).update("avatarUrl" to url)
+            firestore.collection("users")
+                .document(uid)
+                .updateFields {
+                    "avatarUrl" to url
+                }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -155,7 +187,11 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateDisplayName(uid: String, name: String) {
         try {
-            firestore.collection("users").document(uid).update("name" to name)
+            firestore.collection("users")
+                .document(uid)
+                .updateFields {
+                    "name" to name
+                }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -166,7 +202,7 @@ class FirebaseAuthRepository : AuthRepository {
             firestore.collection("users").document(uid).update(
                 "latitude" to lat,
                 "longitude" to lon,
-                "lastLocationUpdate" to KtClock.System.now().toEpochMilliseconds()
+                "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
             )
         } catch (e: Exception) {
             e.printStackTrace()

@@ -32,8 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.window.Dialog
 import com.example.tasama.domain.model.AppTheme
-import io.kamel.image.KamelImage
-import io.kamel.image.asyncPainterResource
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
@@ -540,6 +542,7 @@ fun ProfileHeader(
                     ),
                 contentAlignment = Alignment.Center
             ) {
+                println("Profile URL = $profilePictureUrl")
                 if (profilePictureUrl != null) {
                     val avatarRes = when (profilePictureUrl) {
                         "avatar_1" -> Res.drawable.Avatar1
@@ -562,24 +565,14 @@ fun ProfileHeader(
                             contentScale = ContentScale.Crop
                         )
                     } else if (profilePictureUrl.startsWith("http")) {
-                        KamelImage(
-                            resource = asyncPainterResource(data = profilePictureUrl),
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalPlatformContext.current)
+                                .data(profilePictureUrl)
+                                .crossfade(true)
+                                .build(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            onLoading = { progress ->
-                                CircularProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            },
-                            onFailure = {
-                                Text(
-                                    text = name.take(1).uppercase(),
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
+                            contentScale = ContentScale.Crop
                         )
                     } else {
                         // Fallback to initial

@@ -12,6 +12,9 @@ import io.github.vinceglb.filekit.core.PlatformFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
@@ -29,17 +32,45 @@ class ProfileViewModel(
         observeSettings()
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun observeUser() {
         viewModelScope.launch {
-            authRepository.userId.collect { uid ->
+            authRepository.userId.flatMapLatest { uid ->
                 if (uid != null) {
-                    loadUserProfile(uid)
+                    authRepository.getUserFlow(uid).map { user -> uid to user }
+                } else {
+                    flowOf(null to null)
+                }
+            }.collect { (uid, user) ->
+                if (uid != null) {
+                    val isGuest = authRepository.isGuest()
+                    var partnerName: String? = null
+                    val partnerId = user?.partnerId
+                    if (partnerId != null) {
+                        partnerName = authRepository.getUser(partnerId)?.name
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            userName = user?.name ?: "Guest",
+                            userEmail = user?.email ?: "Guest session",
+                            userId = uid,
+                            userShortId = user?.shortId ?: "",
+                            profilePictureUrl = user?.avatarUrl,
+                            partnerId = partnerId,
+                            partnerName = partnerName,
+                            isLoading = false,
+                            isGuest = isGuest
+                        )
+                    }
                 } else {
                     // Reset state on logout
-                    _uiState.update { ProfileUiState(
-                        theme = it.theme,
-                        currency = it.currency
-                    ) }
+                    _uiState.update {
+                        ProfileUiState(
+                            theme = it.theme,
+                            currency = it.currency
+                        )
+                    }
                 }
             }
         }
@@ -56,29 +87,7 @@ class ProfileViewModel(
         }
     }
 
-    private fun loadUserProfile(uid: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val user = authRepository.getUser(uid)
-            val isGuest = authRepository.isGuest()
-            var partnerName: String? = null
-            if (user?.partnerId != null) {
-                partnerName = authRepository.getUser(user.partnerId)?.name
-            }
-            
-            _uiState.update { it.copy(
-                userName = user?.name ?: "Guest", 
-                userEmail = user?.email ?: "Guest session",
-                userId = uid,
-                userShortId = user?.shortId ?: "",
-                profilePictureUrl = user?.avatarUrl,
-                partnerId = user?.partnerId,
-                partnerName = partnerName,
-                isLoading = false,
-                isGuest = isGuest
-            ) }
-        }
-    }
+    // loadUserProfile is no longer needed as observeUser handles it reactively
 
     fun linkPartner(partnerShortId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
@@ -86,7 +95,6 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.linkPartner(uid, partnerShortId)
             if (result.isSuccess) {
-                loadUserProfile(uid)
                 _uiState.update { it.copy(exportMessage = "Partner linked successfully") }
             } else {
                 _uiState.update { it.copy(
@@ -103,7 +111,6 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.unlinkPartner(uid)
             if (result.isSuccess) {
-                loadUserProfile(uid)
                 _uiState.update { it.copy(exportMessage = "Partner unlinked") }
             } else {
                 _uiState.update { it.copy(
@@ -123,7 +130,7 @@ class ProfileViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateProfilePicture(uid, url)
-            _uiState.update { it.copy(profilePictureUrl = url, isUpdating = false) }
+            _uiState.update { it.copy(isUpdating = false) }
         }
     }
 
@@ -135,7 +142,7 @@ class ProfileViewModel(
                 val bytes = file.readBytes()
                 val url = authRepository.uploadProfilePicture(uid, bytes)
                 authRepository.updateProfilePicture(uid, url)
-                _uiState.update { it.copy(profilePictureUrl = url, isUpdating = false) }
+                _uiState.update { it.copy(isUpdating = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isUpdating = false, error = "Failed to upload: ${e.message}") }
             }
@@ -147,7 +154,7 @@ class ProfileViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateDisplayName(uid, name)
-            _uiState.update { it.copy(userName = name, isUpdating = false) }
+            _uiState.update { it.copy(isUpdating = false) }
         }
     }
 

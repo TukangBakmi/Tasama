@@ -37,10 +37,12 @@ google-maps-compose = "6.4.1"
 googleServices = "4.4.2"
 google-maps = "19.0.0"
 filekit = "0.8.8"
-kamel = "1.0.9"
+coil3 = "3.0.0-rc01"
+# kamel = "1.0.9"
 
 [libraries]
-kamel = { module = "media.kamel:kamel-image", version.ref = "kamel" }
+# kamel-decoder = { module = "media.kamel:kamel-decoder-image-bitmap", version.ref = "kamel" }
+# kamel-image = { module = "media.kamel:kamel-image", version.ref = "kamel" }
 androidx-auth-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidx-auth-credentials" }
 androidx-auth-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidx-auth-play-services" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
@@ -92,6 +94,8 @@ google-maps-compose = { group = "com.google.maps.android", name = "maps-compose"
 google-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "google-maps" }
 filekit-compose = { module = "io.github.vinceglb:filekit-compose", version.ref = "filekit" }
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekit" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
+coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

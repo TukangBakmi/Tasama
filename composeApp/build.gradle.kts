@@ -49,7 +49,8 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.filekit.compose)
             implementation(libs.filekit.core)
-            implementation(libs.kamel)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

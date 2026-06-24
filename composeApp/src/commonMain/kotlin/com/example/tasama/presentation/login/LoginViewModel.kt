@@ -96,26 +96,6 @@ class LoginViewModel(
         }
     }
 
-    fun onGoogleSignInSuccess(idToken: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                authRepository.signInWithGoogle(idToken)
-                _uiState.update { 
-                    it.copy(
-                        isLoggedIn = true, 
-                        isLoading = false,
-                        email = "",
-                        password = "",
-                        name = ""
-                    ) 
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Google Sign-In failed", isLoading = false) }
-            }
-        }
-    }
-
     fun loginAnonymously() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }

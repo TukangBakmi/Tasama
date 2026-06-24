@@ -18,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,10 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatChannel
 import kotlinx.datetime.*
+import kotlinx.datetime.number
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -135,13 +137,11 @@ fun ChatListScreen(
         AddContactDialog(
             uiState = uiState,
             onDismiss = { 
-                showAddContactDialog = false
                 viewModel.clearSearch()
             },
             onSearch = { query -> viewModel.searchUser(query) },
             onAdd = { userId ->
                 viewModel.createChannel(userId)
-                showAddContactDialog = false
             }
         )
     }
@@ -249,24 +249,28 @@ fun ChannelItem(
                 
                     val timeString = remember(channel.lastMessageTimestamp) {
                     try {
-                        val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
-                        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+                        val instant = Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
+                        val tz = TimeZone.currentSystemDefault()
                         val localDateTime = instant.toLocalDateTime(tz)
-                        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(tz)
-                        
-                        if (localDateTime.date == now.date) {
-                            val hour = localDateTime.hour.toString().padStart(2, '0')
-                            val minute = localDateTime.minute.toString().padStart(2, '0')
-                            "$hour:$minute"
-                        } else if (localDateTime.date == now.date.minus(kotlinx.datetime.DatePeriod(days = 1))) {
-                            "Yesterday"
-                        } else {
-                            val day = localDateTime.dayOfMonth.toString().padStart(2, '0')
-                            val month = localDateTime.monthNumber.toString().padStart(2, '0')
-                            val year = localDateTime.year.toString().takeLast(2)
-                            "$day/$month/$year"
+                        val now = Clock.System.now().toLocalDateTime(tz)
+
+                        when (localDateTime.date) {
+                            now.date -> {
+                                val hour = localDateTime.hour.toString().padStart(2, '0')
+                                val minute = localDateTime.minute.toString().padStart(2, '0')
+                                "$hour:$minute"
+                            }
+                            now.date.minus(DatePeriod(days = 1)) -> {
+                                "Yesterday"
+                            }
+                            else -> {
+                                val day = localDateTime.day.toString().padStart(2, '0')
+                                val month = localDateTime.month.number.toString().padStart(2, '0')
+                                val year = localDateTime.year.toString().takeLast(2)
+                                "$day/$month/$year"
+                            }
                         }
-                    } catch (e: Exception) { "" }
+                    } catch (_: Exception) { "" }
                 }
                 Text(
                     text = timeString,

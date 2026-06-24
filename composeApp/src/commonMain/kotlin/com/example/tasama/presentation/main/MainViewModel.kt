@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 sealed class AuthState {
     data object Loading : AuthState()
@@ -20,7 +19,7 @@ sealed class AuthState {
 
 class MainViewModel(
     private val authRepository: AuthRepository,
-    private val settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())

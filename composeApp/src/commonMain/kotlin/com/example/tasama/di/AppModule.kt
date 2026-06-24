@@ -1,6 +1,5 @@
 package com.example.tasama.di
 
-import com.example.tasama.data.remote.GroqService
 import com.example.tasama.data.repository.FirebaseAIChatRepository
 import com.example.tasama.data.repository.FirebaseAuthRepository
 import com.example.tasama.data.repository.FirebaseChatRepository

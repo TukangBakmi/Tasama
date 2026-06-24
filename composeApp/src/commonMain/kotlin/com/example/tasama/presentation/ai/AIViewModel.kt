@@ -16,13 +16,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock as KtClock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlin.time.Clock
 
 class AIViewModel(
     private val repository: TransactionRepository,
@@ -64,7 +64,7 @@ class AIViewModel(
                         id = "welcome",
                         text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
-                        timestamp = KtClock.System.now().toEpochMilliseconds()
+                        timestamp = Clock.System.now().toEpochMilliseconds()
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
@@ -122,7 +122,7 @@ class AIViewModel(
         val text = _uiState.value.inputText
         if (text.isBlank()) return
 
-        val now = KtClock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
             text = text,
@@ -203,7 +203,7 @@ class AIViewModel(
     }
 
     private suspend fun handleAIResponse(response: String) {
-        val now = KtClock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         var finalReply = response
 
         try {
@@ -218,36 +218,32 @@ class AIViewModel(
                 val isTransaction = jsonElement["is_transaction"]?.jsonPrimitive?.booleanOrNull ?: false
                 if (isTransaction) {
                     val transactionsArray = jsonElement["transactions"]?.jsonArray
-                    if (transactionsArray != null) {
-                        transactionsArray.forEachIndexed { index, item ->
-                            val data = item.jsonObject
-                            val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
-                            val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
-                            val amount = data["amount"]?.jsonPrimitive?.longOrNull ?: 0L
-                            val category = data["category"]?.jsonPrimitive?.content ?: "General"
-                            val note = data["note"]?.jsonPrimitive?.content ?: ""
-                            
-                            // Simpan ke Firestore
-                            repository.addTransaction(
-                                Transaction(
-                                    id = "ai_${now}_$index",
-                                    amount = amount,
-                                    type = type,
-                                    category = category,
-                                    note = note,
-                                    createdAt = now
-                                )
+                    transactionsArray?.forEachIndexed { index, item ->
+                        val data = item.jsonObject
+                        val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
+                        val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
+                        val amount = data["amount"]?.jsonPrimitive?.longOrNull ?: 0L
+                        val category = data["category"]?.jsonPrimitive?.content ?: "General"
+                        val note = data["note"]?.jsonPrimitive?.content ?: ""
+
+                        // Simpan ke Firestore
+                        repository.addTransaction(
+                            Transaction(
+                                id = "ai_${now}_$index",
+                                amount = amount,
+                                type = type,
+                                category = category,
+                                note = note,
+                                createdAt = now
                             )
-                        }
+                        )
                     }
                     finalReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
                 } else {
                     finalReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
                 }
             }
-        } catch (e: Exception) {
-            // Jika gagal parsing, gunakan response asli
-        }
+        } catch (_: Exception) { }
 
         val aiMessage = ChatMessage(
             id = "ai_$now",

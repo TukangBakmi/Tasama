@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.example.tasama.domain.service.FileService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -13,7 +15,9 @@ class AndroidFileService(private val context: Context) : FileService {
         if (!cacheDir.exists()) cacheDir.mkdirs()
         
         val file = File(cacheDir, fileName)
-        FileOutputStream(file).use { it.write(content) }
+        withContext(Dispatchers.IO) {
+            FileOutputStream(file).use { it.write(content) }
+        }
 
         val contentUri = FileProvider.getUriForFile(
             context,

@@ -102,11 +102,11 @@ class FirebaseChatRepository(
         }
 
         channelRef.collection("messages").document(id).set(ChatMessage.serializer(), newMessage)
-        channelRef.update(
-            "lastMessage" to text,
-            "lastMessageTimestamp" to now,
-            "unreadCounts" to newUnreadCounts
-        )
+        channelRef.updateFields {
+            "lastMessage" to (text as Any?)
+            "lastMessageTimestamp" to (now as Any?)
+            "unreadCounts" to (newUnreadCounts as Any?)
+        }
 
         // Send Notification (In a real app, this would be handled by a Cloud Function)
         // For this task, we'll simulate the "trigger" or explain it needs a backend.
@@ -161,7 +161,7 @@ class FirebaseChatRepository(
         val newUnreadCounts = channel.unreadCounts.toMutableMap()
         newUnreadCounts[userId] = 0
         
-        channelRef.update("unreadCounts" to newUnreadCounts)
+        channelRef.updateFields { "unreadCounts" to newUnreadCounts }
         
         // Also mark all messages in this channel as read for this user
         // Firestore doesn't support multiple inequality filters on different fields.
@@ -174,7 +174,7 @@ class FirebaseChatRepository(
         messages.forEach { doc ->
             val msg = doc.data(ChatMessage.serializer())
             if (msg.status != MessageStatus.READ) {
-                doc.reference.update("status" to MessageStatus.READ.name)
+                doc.reference.updateFields { "status" to MessageStatus.READ.name }
             }
         }
     }
@@ -194,7 +194,7 @@ class FirebaseChatRepository(
 
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {
         channelsCollection.document(channelId).collection("messages").document(messageId)
-            .update("status" to MessageStatus.READ.name)
+            .updateFields { "status" to MessageStatus.READ.name }
     }
 
     override suspend fun getUserName(userId: String): String? {

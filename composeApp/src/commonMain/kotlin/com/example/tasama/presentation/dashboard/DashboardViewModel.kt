@@ -12,13 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock as KtClock
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 
 class DashboardViewModel(
     private val repository: TransactionRepository,
@@ -71,9 +70,9 @@ class DashboardViewModel(
             .sumOf { it.amount }
 
         // Calculate weekly spending (last 7 days)
-        val nowEpoch = KtClock.System.now().toEpochMilliseconds()
+        val nowEpoch = Clock.System.now().toEpochMilliseconds()
         val systemTZ = TimeZone.currentSystemDefault()
-        val today = Instant.fromEpochMilliseconds(nowEpoch).toLocalDateTime(systemTZ).date
+        val today = kotlin.time.Instant.fromEpochMilliseconds(nowEpoch).toLocalDateTime(systemTZ).date
 
         val last7Days = (0..6).map { i ->
             today.minus(i, DateTimeUnit.DAY)
@@ -83,7 +82,7 @@ class DashboardViewModel(
 
         val weeklySpending = last7Days.map { date ->
             val dayAmount = expenseTransactions.filter {
-                Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date == date
+                kotlin.time.Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date == date
             }.sumOf { it.amount }
 
             DailySpending(
@@ -118,7 +117,7 @@ class DashboardViewModel(
 
         val monthlyTrends = last6Months.map { (year, month) ->
             val monthTransactions = transactions.filter {
-                val txDate = Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date
+                val txDate = kotlin.time.Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date
                 txDate.year == year && txDate.month == month
             }
             val monthIncome = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
@@ -134,7 +133,7 @@ class DashboardViewModel(
         // Calculate balance history (last 7 days cumulative)
         val sortedTxs = transactions.sortedBy { it.createdAt }
         val balanceHistory = last7Days.map { date ->
-            val endOfDay = Instant.fromEpochMilliseconds(
+            val endOfDay = kotlin.time.Instant.fromEpochMilliseconds(
                 date.atStartOfDayIn(systemTZ).toEpochMilliseconds() + 86400000 - 1
             ).toEpochMilliseconds()
 
@@ -147,7 +146,7 @@ class DashboardViewModel(
             )
         }
 
-        _uiState.update {
+        _uiState.update { it ->
             it.copy(
                 balance = income - expense,
                 income = income,

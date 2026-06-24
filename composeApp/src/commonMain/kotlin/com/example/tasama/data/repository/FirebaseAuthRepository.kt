@@ -199,11 +199,11 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateLocation(uid: String, lat: Double, lon: Double) {
         try {
-            firestore.collection("users").document(uid).update(
-                "latitude" to lat,
-                "longitude" to lon,
+            firestore.collection("users").document(uid).updateFields {
+                "latitude" to lat
+                "longitude" to lon
                 "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
-            )
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -218,8 +218,8 @@ class FirebaseAuthRepository : AuthRepository {
                 return Result.failure(Exception("You cannot link with yourself"))
             }
 
-            firestore.collection("users").document(uid).update("partnerId" to partnerUid)
-            firestore.collection("users").document(partnerUid).update("partnerId" to uid)
+            firestore.collection("users").document(uid).updateFields { "partnerId" to partnerUid }
+            firestore.collection("users").document(partnerUid).updateFields { "partnerId" to uid }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -233,8 +233,8 @@ class FirebaseAuthRepository : AuthRepository {
             val partnerId = user.partnerId
 
             if (partnerId != null) {
-                firestore.collection("users").document(uid).update("partnerId" to null)
-                firestore.collection("users").document(partnerId).update("partnerId" to null)
+                firestore.collection("users").document(uid).updateFields { "partnerId" to null }
+                firestore.collection("users").document(partnerId).updateFields { "partnerId" to null }
             }
 
             Result.success(Unit)

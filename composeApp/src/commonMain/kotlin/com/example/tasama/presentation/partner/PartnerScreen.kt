@@ -6,22 +6,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.User
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.Clock
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -168,7 +163,7 @@ fun PartnerMapContent(partner: User?) {
                             fontWeight = FontWeight.Bold
                         )
                         val lastUpdateText = partner.lastLocationUpdate?.let {
-                            val dt = Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
+                            val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
                             "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
                         } ?: "Location unknown"
                         

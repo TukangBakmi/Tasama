@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.Clock as KtClock
+import kotlin.time.Clock
 
 class FirebaseSavingsRepository(
     private val authRepository: AuthRepository
@@ -38,8 +38,8 @@ class FirebaseSavingsRepository(
 
     override suspend fun addSavingsGoal(goal: SavingsGoal) {
         val userId = authRepository.getCurrentUserId() ?: return
-        val now = KtClock.System.now().toEpochMilliseconds()
-        val id = if (goal.id.isEmpty()) "goal_$now" else goal.id
+        val now = Clock.System.now().toEpochMilliseconds()
+        val id = goal.id.ifEmpty { "goal_$now" }
         val doc = collection.document(id)
         val finalGoal = goal.copy(id = id, userId = userId)
         doc.set(finalGoal)
@@ -95,7 +95,7 @@ class FirebaseSavingsRepository(
                 userId = uid,
                 userName = userName,
                 amount = amount,
-                timestamp = KtClock.System.now().toEpochMilliseconds()
+                timestamp = Clock.System.now().toEpochMilliseconds()
             )
             
             val updatedContributions = goal.contributions + newContribution

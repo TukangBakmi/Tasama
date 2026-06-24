@@ -1,7 +1,6 @@
 package com.example.tasama.auth
 
 import android.content.Context
-import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
@@ -65,7 +64,4 @@ class GoogleSignInHelper(private val context: Context) {
         }
     }
 
-    suspend fun signOut() {
-        credentialManager.clearCredentialState(ClearCredentialStateRequest())
-    }
 }

@@ -51,7 +51,7 @@ actual fun MapContent(
                     cameraPositionState.animate(
                         CameraUpdateFactory.newLatLng(partnerLocation)
                     )
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Silently handle animation interruptions
                 }
             }

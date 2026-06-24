@@ -138,10 +138,4 @@ class ChatViewModel(
         }
     }
 
-    fun createChannel(otherUserId: String) {
-        viewModelScope.launch {
-            val channelId = repository.createChannelWithUser(otherUserId)
-            setChannel(channelId)
-        }
-    }
 }

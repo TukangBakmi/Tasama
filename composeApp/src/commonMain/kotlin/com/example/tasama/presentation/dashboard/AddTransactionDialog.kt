@@ -66,7 +66,7 @@ fun AddTransactionDialog(
 
                 Text("Category", style = MaterialTheme.typography.labelMedium)
                 
-                ScrollableTabRow(
+                SecondaryScrollableTabRow(
                     selectedTabIndex = categories.indexOf(category).coerceAtLeast(0),
                     edgePadding = 0.dp,
                     divider = {},
@@ -95,7 +95,7 @@ fun AddTransactionDialog(
                         )
                     )
                 },
-                enabled = amount.isNotEmpty() && amount.toLongOrNull() ?: 0L > 0
+                enabled = amount.isNotEmpty() && (amount.toLongOrNull() ?: 0L) > 0
             ) {
                 Text("Save")
             }

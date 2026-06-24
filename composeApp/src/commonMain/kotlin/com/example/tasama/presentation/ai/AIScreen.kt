@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,9 +29,12 @@ import com.example.tasama.domain.model.MessageSender
 import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.painterResource
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -269,12 +271,12 @@ fun AIContent(
 
             items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
                 val message = uiState.messages[index]
-                val date = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
-                    .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                val date = Instant.fromEpochMilliseconds(message.timestamp)
+                    .toLocalDateTime(TimeZone.currentSystemDefault()).date
                 
                 val showHeader = if (index == 0) true else {
-                    val prevDate = kotlinx.datetime.Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
-                        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                    val prevDate = Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
+                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
                     date != prevDate
                 }
                 
@@ -385,12 +387,12 @@ fun MessageBubble(message: ChatMessage) {
                     
                     val timeString = remember(message.timestamp) {
                         try {
-                            val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
-                            val localDateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+                            val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                            val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
                             val hour = localDateTime.hour.toString().padStart(2, '0')
                             val minute = localDateTime.minute.toString().padStart(2, '0')
                             "$hour:$minute"
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             ""
                         }
                     }
@@ -411,14 +413,14 @@ fun MessageBubble(message: ChatMessage) {
 }
 
 @Composable
-fun DateHeader(date: kotlinx.datetime.LocalDate, modifier: Modifier = Modifier) {
+fun DateHeader(date: LocalDate, modifier: Modifier = Modifier) {
     val dateString = remember(date) {
-        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         when (date) {
             now -> "Today"
-            now.minus(kotlinx.datetime.DatePeriod(days = 1)) -> "Yesterday"
+            now.minus(DatePeriod(days = 1)) -> "Yesterday"
             else -> {
-                val day = date.dayOfMonth.toString().padStart(2, '0')
+                val day = date.day.toString().padStart(2, '0')
                 val month = date.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
                 val year = if (date.year != now.year) " ${date.year}" else ""
                 "$day $month$year"

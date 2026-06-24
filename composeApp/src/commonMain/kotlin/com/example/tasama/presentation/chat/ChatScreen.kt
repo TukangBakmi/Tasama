@@ -3,12 +3,10 @@ package com.example.tasama.presentation.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,14 +16,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +31,10 @@ import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.MessageStatus
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -170,10 +169,10 @@ fun ChatContent(
             val layoutInfo = listState.layoutInfo
             val totalItemsCount = layoutInfo.totalItemsCount
             if (totalItemsCount == 0) return@derivedStateOf false
-            
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            if (lastVisibleItem == null) return@derivedStateOf false
-            
+
+            val lastVisibleItem =
+                layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
+
             val isLastItem = lastVisibleItem.index == totalItemsCount - 1
             if (!isLastItem) true 
             else {
@@ -222,12 +221,12 @@ fun ChatContent(
 
                 items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
                     val message = uiState.messages[index]
-                    val date = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
-                        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                    val date = Instant.fromEpochMilliseconds(message.timestamp)
+                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
                     
                     val showHeader = if (index == 0) true else {
-                        val prevDate = kotlinx.datetime.Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
-                            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+                        val prevDate = Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
+                            .toLocalDateTime(TimeZone.currentSystemDefault()).date
                         date != prevDate
                     }
                     
@@ -320,12 +319,12 @@ fun MessageBubble(message: ChatMessage) {
                     
                     val timeString = remember(message.timestamp) {
                         try {
-                            val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(message.timestamp)
-                            val localDateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+                            val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                            val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
                             val hour = localDateTime.hour.toString().padStart(2, '0')
                             val minute = localDateTime.minute.toString().padStart(2, '0')
                             "$hour:$minute"
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             ""
                         }
                     }
@@ -374,14 +373,14 @@ fun MessageStatusIcon(status: MessageStatus) {
 }
 
 @Composable
-fun DateHeader(date: kotlinx.datetime.LocalDate, modifier: Modifier = Modifier) {
+fun DateHeader(date: LocalDate, modifier: Modifier = Modifier) {
     val dateString = remember(date) {
-        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         when (date) {
             now -> "Today"
-            now.minus(kotlinx.datetime.DatePeriod(days = 1)) -> "Yesterday"
+            now.minus(DatePeriod(days = 1)) -> "Yesterday"
             else -> {
-                val day = date.dayOfMonth.toString().padStart(2, '0')
+                val day = date.day.toString().padStart(2, '0')
                 val month = date.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
                 val year = if (date.year != now.year) " ${date.year}" else ""
                 "$day $month$year"

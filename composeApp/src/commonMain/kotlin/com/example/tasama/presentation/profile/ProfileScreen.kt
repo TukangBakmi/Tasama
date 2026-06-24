@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,7 +31,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.window.Dialog
 import com.example.tasama.domain.model.AppTheme
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -100,7 +100,6 @@ fun ProfileScreen(
                 clipboardManager.setText(AnnotatedString(id))
                 viewModel.onIdCopied()
             },
-            onUpdateProfilePicture = viewModel::updateProfilePicture,
             onEditName = { showEditNameDialog = true },
             onEditAvatar = { showAvatarSelectionDialog = true },
             onThemeClick = { showThemeDialog = true },
@@ -275,7 +274,7 @@ fun AvatarSelectionDialog(
                                     onAvatarSelected("avatar_${index + 1}")
                                 }
                         ) {
-                            androidx.compose.foundation.Image(
+                            Image(
                                 painter = painterResource(avatarRes),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
@@ -392,7 +391,6 @@ fun ProfileContent(
     onExportPdf: () -> Unit,
     onLogout: () -> Unit,
     onCopyId: (String) -> Unit,
-    onUpdateProfilePicture: (String) -> Unit,
     onEditName: () -> Unit,
     onEditAvatar: () -> Unit,
     onThemeClick: () -> Unit,
@@ -476,7 +474,7 @@ fun ProfileContent(
             }
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.ExitToApp,
+                    icon = Icons.AutoMirrored.Filled.ExitToApp,
                     title = "Logout",
                     titleColor = MaterialTheme.colorScheme.error,
                     onClick = onLogout
@@ -776,7 +774,6 @@ fun ProfilePreview() {
             onExportPdf = {},
             onLogout = {},
             onCopyId = {},
-            onUpdateProfilePicture = {},
             onEditName = {},
             onEditAvatar = {},
             onThemeClick = {},

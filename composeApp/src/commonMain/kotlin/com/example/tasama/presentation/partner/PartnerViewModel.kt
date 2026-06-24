@@ -41,7 +41,7 @@ class PartnerViewModel(
                     // Initial load
                     refreshPartnerData(uid)
                     
-                    // Periodic updates (automatically cancelled when uid changes or is null)
+                    // Periodic updates (automatically canceled when uid changes or is null)
                     while (true) {
                         delay(30000)
                         refreshPartnerData(uid)

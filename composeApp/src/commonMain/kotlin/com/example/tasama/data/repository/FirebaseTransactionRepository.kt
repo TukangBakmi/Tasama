@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.Clock as KtClock
+import kotlin.time.Clock
 
 class FirebaseTransactionRepository(
     private val authRepository: AuthRepository
@@ -22,7 +22,7 @@ class FirebaseTransactionRepository(
         val userId = authRepository.getCurrentUserId() ?: return emptyList()
         return try {
             collection.where { "userId" equalTo userId }.get().documents.map { it.data() }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -41,8 +41,8 @@ class FirebaseTransactionRepository(
 
     override suspend fun addTransaction(transaction: Transaction) {
         val userId = authRepository.getCurrentUserId() ?: return
-        val now = KtClock.System.now().toEpochMilliseconds()
-        val id = if (transaction.id.isEmpty()) "tx_$now" else transaction.id
+        val now = Clock.System.now().toEpochMilliseconds()
+        val id = transaction.id.ifEmpty { "tx_$now" }
         val doc = collection.document(id)
         val finalTransaction = transaction.copy(id = id, userId = userId, createdAt = if (transaction.createdAt == 0L) now else transaction.createdAt)
         doc.set(finalTransaction)

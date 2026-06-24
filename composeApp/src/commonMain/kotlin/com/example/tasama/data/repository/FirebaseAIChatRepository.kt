@@ -5,13 +5,13 @@ import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
-import kotlinx.datetime.Clock as KtClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.time.Clock
 
 class FirebaseAIChatRepository(
     private val authRepository: AuthRepository
@@ -51,7 +51,7 @@ class FirebaseAIChatRepository(
                 .documents
                 .map { it.data<ChatMessage>() }
                 .sortedBy { it.timestamp }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -59,7 +59,7 @@ class FirebaseAIChatRepository(
     override suspend fun saveMessage(message: ChatMessage) {
         try {
             val userId = authRepository.getCurrentUserId() ?: return
-            val now = KtClock.System.now().toEpochMilliseconds()
+            val now = Clock.System.now().toEpochMilliseconds()
             val id = message.id.ifEmpty { "ai_msg_$now" }
             val finalMessage = message.copy(id = id, userId = userId)
             collection.document(id).set(finalMessage)

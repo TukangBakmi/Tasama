@@ -6,7 +6,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,9 +19,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
@@ -104,7 +101,6 @@ fun MainScreen(
                 )
 
                 val pagerState = rememberPagerState(pageCount = { items.size })
-                val scope = rememberCoroutineScope()
 
                 NavHost(
                     navController = navController,
@@ -231,7 +227,6 @@ fun MainScreen(
 @Preview
 @Composable
 fun MainPreview() {
-    val navController = rememberNavController()
     MaterialTheme {
         Scaffold(
             bottomBar = {

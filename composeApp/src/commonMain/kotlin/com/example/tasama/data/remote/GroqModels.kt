@@ -1,5 +1,6 @@
 package com.example.tasama.data.remote
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -7,7 +8,8 @@ data class GroqRequest(
     val model: String = "llama-3.1-8b-instant",
     val messages: List<GroqMessage>,
     val temperature: Double = 0.7,
-    val max_completion_tokens: Int = 1024
+    @SerialName("max_completion_tokens")
+    val maxCompletionTokens: Int = 1024
 )
 
 @Serializable

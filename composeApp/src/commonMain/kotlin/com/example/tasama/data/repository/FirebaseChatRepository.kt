@@ -1,5 +1,6 @@
 package com.example.tasama.data.repository
 
+import com.example.tasama.data.remote.FcmService
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
@@ -18,7 +19,8 @@ import kotlinx.coroutines.flow.map
 import kotlin.time.Clock
 
 class FirebaseChatRepository(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val fcmService: FcmService
 ) : ChatRepository {
     private val firestore = Firebase.firestore
     private val channelsCollection = firestore.collection("chat_channels")
@@ -123,9 +125,11 @@ class FirebaseChatRepository(
             val user = authRepository.getUser(participantId)
             val token = user?.fcmToken
             if (token != null) {
-                // In a production app, you'd send this to your backend or use Firebase Admin SDK
-                // Cloud Functions are the standard way to handle this on Firestore writes.
-                println("Push notification would be sent to token: $token with message: ${message.text}")
+                fcmService.sendNotification(
+                    token = token,
+                    title = message.senderName,
+                    body = message.text
+                )
             }
         }
     }

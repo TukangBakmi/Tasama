@@ -25,6 +25,18 @@ fun PartnerScreen(
     viewModel: PartnerViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { error ->
+            viewModel.clearError()
+            snackbarHostState.showSnackbar(error)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
 
     Scaffold(
         topBar = {

@@ -11,7 +11,8 @@ data class DashboardUiState(
     val categorySpending: List<CategorySpending> = emptyList(),
     val monthlyTrends: List<MonthlyTrend> = emptyList(),
     val balanceHistory: List<BalancePoint> = emptyList(),
-    val showAddTransactionDialog: Boolean = false
+    val showAddTransactionDialog: Boolean = false,
+    val error: String? = null
 )
 
 data class BalancePoint(

@@ -7,5 +7,6 @@ data class AIUiState(
     val inputText: String = "",
     val isTyping: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val hasMoreMessages: Boolean = true
+    val hasMoreMessages: Boolean = true,
+    val error: String? = null
 )

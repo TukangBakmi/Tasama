@@ -36,6 +36,10 @@ import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.logo
 
+val LocalSnackbarHostState = compositionLocalOf<SnackbarHostState> {
+    error("No SnackbarHostState provided")
+}
+
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = koinViewModel(),
@@ -43,186 +47,244 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     val authState by viewModel.authState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        when (authState) {
-            is AuthState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .shadow(8.dp, androidx.compose.foundation.shape.CircleShape)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(Color.Transparent),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(Res.drawable.logo),
-                                contentDescription = "Tasama Logo",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .scale(1.1f),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Tasama",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(32.dp),
-                            strokeWidth = 3.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-            is AuthState.Unauthenticated -> {
-                LoginScreen(
-                    onGoogleSignInClick = onGoogleSignInClick,
-                    onLoginSuccess = {}
-                )
-            }
-            is AuthState.Authenticated -> {
-                val items = listOf(
-                    BottomNavItem.Dashboard,
-                    BottomNavItem.Savings,
-                    BottomNavItem.Chat,
-                    BottomNavItem.Partner,
-                    BottomNavItem.Profile
-                )
-
-                val pagerState = rememberPagerState(pageCount = { items.size })
-
-                NavHost(
-                    navController = navController,
-                    startDestination = "tabs",
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    composable(
-                        route = "tabs",
-                        exitTransition = {
-                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-                        },
-                        popEnterTransition = {
-                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
-                        }
-                    ) {
-                        val scope = rememberCoroutineScope()
-                        
-                        Scaffold(
-                            bottomBar = {
-                                val density = LocalDensity.current
-                                val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
-                                
-                                AnimatedVisibility(
-                                    visible = !isKeyboardVisible,
-                                    enter = slideInVertically(initialOffsetY = { it }),
-                                    exit = slideOutVertically(targetOffsetY = { it })
-                                ) {
-                                    NavigationBar {
-                                        items.forEachIndexed { index, item ->
-                                            val isSelected = pagerState.currentPage == index
-                                            NavigationBarItem(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    scope.launch {
-                                                        pagerState.animateScrollToPage(index)
-                                                    }
-                                                },
-                                                icon = { Text(item.emoji) },
-                                                label = { Text(item.title) }
-                                            )
-                                        }
-                                    }
-                                }
-                            },
-                            contentWindowInsets = WindowInsets(0)
-                        ) { padding ->
-                            val currentItem = items[pagerState.currentPage]
-                            val isGuest = (authState as? AuthState.Authenticated)?.isGuest == true
-                            
-                            HorizontalPager(
-                                state = pagerState,
+    CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Scaffold(
+                snackbarHost = {
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier
+                            .systemBarsPadding()
+                            .padding(bottom = 80.dp)
+                    )
+                },
+                contentWindowInsets = WindowInsets(0)
+            ) { globalPadding ->
+                Box(modifier = Modifier.padding(globalPadding)) {
+                    when (authState) {
+                        is AuthState.Loading -> {
+                            Box(
                                 modifier = Modifier.fillMaxSize(),
-                                beyondViewportPageCount = 0,
-                                userScrollEnabled = if (currentItem == BottomNavItem.Partner) {
-                                    isGuest
-                                } else true
-                            ) { page ->
-                                Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                                    when (items[page]) {
-                                        BottomNavItem.Dashboard -> DashboardScreen(onTransactionClick = {})
-                                        BottomNavItem.Savings -> SavingsScreen()
-                                        BottomNavItem.Chat -> ChatListScreen(
-                                            onChannelClick = { channelId ->
-                                                navController.navigate("chat_room/$channelId")
-                                            },
-                                            onAIClick = {
-                                                navController.navigate("ai_chat")
-                                            }
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .shadow(8.dp, androidx.compose.foundation.shape.CircleShape)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(Color.Transparent),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            painter = painterResource(Res.drawable.logo),
+                                            contentDescription = "Tasama Logo",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .scale(1.1f),
+                                            contentScale = ContentScale.Crop
                                         )
-                                        BottomNavItem.Partner -> PartnerScreen()
-                                        BottomNavItem.Profile -> ProfileScreen()
                                     }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Tasama",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        strokeWidth = 3.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
-                    }
-                    composable(
-                        route = "ai_chat",
-                        enterTransition = {
-                            slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
-                        },
-                        exitTransition = {
-                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-                        },
-                        popEnterTransition = {
-                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
-                        },
-                        popExitTransition = {
-                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+
+                        is AuthState.Unauthenticated -> {
+                            LoginScreen(
+                                onGoogleSignInClick = onGoogleSignInClick,
+                                onLoginSuccess = {}
+                            )
                         }
-                    ) {
-                        AIScreen(
-                            viewModel = koinViewModel(),
-                            onBackClick = { navController.popBackStack() }
-                        )
-                    }
-                    composable(
-                        route = "chat_room/{channelId}",
-                        enterTransition = {
-                            slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
-                        },
-                        exitTransition = {
-                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-                        },
-                        popEnterTransition = {
-                            slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
-                        },
-                        popExitTransition = {
-                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+
+                        is AuthState.Authenticated -> {
+                            val items = listOf(
+                                BottomNavItem.Dashboard,
+                                BottomNavItem.Savings,
+                                BottomNavItem.Chat,
+                                BottomNavItem.Partner,
+                                BottomNavItem.Profile
+                            )
+
+                            val pagerState = rememberPagerState(pageCount = { items.size })
+                            val hasPartner by viewModel.hasPartner.collectAsState()
+
+                            NavHost(
+                                navController = navController,
+                                startDestination = "tabs",
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                composable(
+                                    route = "tabs",
+                                    exitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeOut(animationSpec = tween(300))
+                                    },
+                                    popEnterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeIn(animationSpec = tween(300))
+                                    }
+                                ) {
+                                    val scope = rememberCoroutineScope()
+
+                                    Scaffold(
+                                        bottomBar = {
+                                            val density = LocalDensity.current
+                                            val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+
+                                            AnimatedVisibility(
+                                                visible = !isKeyboardVisible,
+                                                enter = slideInVertically(initialOffsetY = { it }),
+                                                exit = slideOutVertically(targetOffsetY = { it })
+                                            ) {
+                                                NavigationBar {
+                                                    items.forEachIndexed { index, item ->
+                                                        val isSelected = pagerState.currentPage == index
+                                                        NavigationBarItem(
+                                                            selected = isSelected,
+                                                            onClick = {
+                                                                scope.launch {
+                                                                    pagerState.animateScrollToPage(index)
+                                                                }
+                                                            },
+                                                            icon = { Text(item.emoji) },
+                                                            label = { Text(item.title) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        contentWindowInsets = WindowInsets(0)
+                                    ) { padding ->
+                                        val currentItem = items[pagerState.currentPage]
+                                        val isGuest = (authState as? AuthState.Authenticated)?.isGuest == true
+
+                                        HorizontalPager(
+                                            state = pagerState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            beyondViewportPageCount = 0,
+                                            userScrollEnabled = if (currentItem == BottomNavItem.Partner) {
+                                                !hasPartner
+                                            } else true
+                                        ) { page ->
+                                            Box(
+                                                modifier = Modifier.fillMaxSize()
+                                                    .padding(padding)
+                                            ) {
+                                                when (items[page]) {
+                                                    BottomNavItem.Dashboard -> DashboardScreen(
+                                                        onTransactionClick = {})
+
+                                                    BottomNavItem.Savings -> SavingsScreen()
+                                                    BottomNavItem.Chat -> ChatListScreen(
+                                                        onChannelClick = { channelId ->
+                                                            navController.navigate("chat_room/$channelId")
+                                                        },
+                                                        onAIClick = {
+                                                            navController.navigate("ai_chat")
+                                                        }
+                                                    )
+
+                                                    BottomNavItem.Partner -> PartnerScreen()
+                                                    BottomNavItem.Profile -> ProfileScreen()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                composable(
+                                    route = "ai_chat",
+                                    enterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    },
+                                    exitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeOut(animationSpec = tween(300))
+                                    },
+                                    popEnterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeIn(animationSpec = tween(300))
+                                    },
+                                    popExitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                ) {
+                                    AIScreen(
+                                        viewModel = koinViewModel(),
+                                        onBackClick = { navController.popBackStack() }
+                                    )
+                                }
+                                composable(
+                                    route = "chat_room/{channelId}",
+                                    enterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    },
+                                    exitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeOut(animationSpec = tween(300))
+                                    },
+                                    popEnterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeIn(animationSpec = tween(300))
+                                    },
+                                    popExitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                ) { backStackEntry ->
+                                    val channelId =
+                                        backStackEntry.arguments?.getString("channelId") ?: ""
+                                    ChatScreen(
+                                        channelId = channelId,
+                                        onBackClick = { navController.popBackStack() }
+                                    )
+                                }
+                            }
                         }
-                    ) { backStackEntry ->
-                        val channelId = backStackEntry.savedStateHandle.get<String>("channelId") ?: ""
-                        ChatScreen(
-                            channelId = channelId,
-                            onBackClick = { navController.popBackStack() }
-                        )
                     }
                 }
             }
         }
     }
 }
+
 
 @Preview
 @Composable

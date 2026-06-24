@@ -1,5 +1,6 @@
 package com.example.tasama.di
 
+import com.example.tasama.data.remote.FcmService
 import com.example.tasama.data.remote.GroqService
 import com.example.tasama.data.service.JvmExportService
 import com.example.tasama.data.service.JvmFileService
@@ -12,4 +13,5 @@ actual val platformModule: Module = module {
     single<ExportService> { JvmExportService() }
     single<FileService> { JvmFileService() }
     single { GroqService(apiKey = System.getenv("GROQ_API_KEY") ?: "") }
+    single { FcmService(serverKey = System.getenv("FCM_SERVER_KEY") ?: "") }
 }

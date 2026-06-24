@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -15,11 +16,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,7 +44,17 @@ fun ChatListScreen(
     viewModel: ChatListViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     var showAddContactDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { uiState.error }
+            .filterNotNull()
+            .collect { error ->
+                viewModel.clearError()
+                snackbarHostState.showSnackbar(error)
+            }
+    }
 
     Scaffold(
         topBar = {
@@ -136,12 +149,14 @@ fun ChatListScreen(
     if (showAddContactDialog) {
         AddContactDialog(
             uiState = uiState,
-            onDismiss = { 
+            onDismiss = {
+                showAddContactDialog = false
                 viewModel.clearSearch()
             },
             onSearch = { query -> viewModel.searchUser(query) },
             onAdd = { userId ->
                 viewModel.createChannel(userId)
+                showAddContactDialog = false
             }
         )
     }
@@ -334,8 +349,15 @@ fun AddContactDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text("User ID (12 digits)") },
+                        onValueChange = {
+                            // Only allow numbers and max 12 digits
+                            if (it.all { char -> char.isDigit() } && it.length <= 12) {
+                                query = it
+                            }
+                        },
+                        label = { Text("User ID") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(
@@ -348,15 +370,6 @@ fun AddContactDialog(
                             Icon(Icons.Default.Search, contentDescription = "Search")
                         }
                     }
-                }
-                
-                if (uiState.error != null) {
-                    Text(
-                        text = uiState.error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
 
                 uiState.searchedUser?.let { user ->

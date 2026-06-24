@@ -8,5 +8,6 @@ data class SavingsUiState(
     val showAddGoalDialog: Boolean = false,
     val showInviteCollaboratorDialog: Boolean = false,
     val showContributeDialog: Boolean = false,
-    val selectedGoalId: String? = null
+    val selectedGoalId: String? = null,
+    val error: String? = null
 )

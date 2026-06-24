@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 sealed class AuthState {
@@ -36,4 +37,15 @@ class MainViewModel(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState.Loading)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val hasPartner: StateFlow<Boolean> = authRepository.userId
+        .flatMapLatest { uid ->
+            if (uid != null) {
+                authRepository.getUserFlow(uid).map { it?.partnerId != null }
+            } else {
+                flow { emit(false) }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 }

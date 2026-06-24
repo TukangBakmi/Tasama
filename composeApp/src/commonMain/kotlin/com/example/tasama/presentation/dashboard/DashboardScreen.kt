@@ -27,6 +27,8 @@ import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.presentation.components.DonutChart
 import com.example.tasama.presentation.components.LineChart
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterNotNull
 
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -36,6 +38,16 @@ fun DashboardScreen(
     onTransactionClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { uiState.error }
+            .filterNotNull()
+            .collect { error ->
+                viewModel.clearError()
+                snackbarHostState.showSnackbar(error)
+            }
+    }
 
     Scaffold(
         floatingActionButton = {

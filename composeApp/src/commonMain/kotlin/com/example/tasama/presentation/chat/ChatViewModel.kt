@@ -127,14 +127,22 @@ class ChatViewModel(
         _uiState.update { it.copy(inputText = message) }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
     fun sendMessage() {
         val channelId = currentChannelId ?: return
         val messageText = _uiState.value.inputText
         if (messageText.isBlank()) return
 
         viewModelScope.launch {
-            repository.sendMessage(channelId, messageText)
-            _uiState.update { it.copy(inputText = "") }
+            try {
+                repository.sendMessage(channelId, messageText)
+                _uiState.update { it.copy(inputText = "") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
+            }
         }
     }
 

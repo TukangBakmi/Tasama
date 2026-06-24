@@ -55,19 +55,31 @@ class SavingsViewModel(
 
     fun addGoal(goal: SavingsGoal) {
         viewModelScope.launch {
-            repository.addSavingsGoal(goal)
+            try {
+                repository.addSavingsGoal(goal)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to add goal") }
+            }
         }
     }
 
     fun updateGoal(goal: SavingsGoal) {
         viewModelScope.launch {
-            repository.updateSavingsGoal(goal)
+            try {
+                repository.updateSavingsGoal(goal)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to update goal") }
+            }
         }
     }
 
     fun deleteGoal(id: String) {
         viewModelScope.launch {
-            repository.deleteSavingsGoal(id)
+            try {
+                repository.deleteSavingsGoal(id)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete goal") }
+            }
         }
     }
 
@@ -90,8 +102,12 @@ class SavingsViewModel(
     fun inviteCollaborator(email: String) {
         val goalId = _uiState.value.selectedGoalId ?: return
         viewModelScope.launch {
-            repository.inviteByEmail(goalId, email)
-            onDismissInvite()
+            try {
+                repository.inviteByEmail(goalId, email)
+                onDismissInvite()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to invite collaborator") }
+            }
         }
     }
 
@@ -106,8 +122,16 @@ class SavingsViewModel(
     fun contribute(amount: Double) {
         val goalId = _uiState.value.selectedGoalId ?: return
         viewModelScope.launch {
-            repository.contribute(goalId, amount)
-            onDismissContribute()
+            try {
+                repository.contribute(goalId, amount)
+                onDismissContribute()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to add contribution") }
+            }
         }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.tasama.di
 
 import com.example.tasama.BuildConfig
+import com.example.tasama.data.remote.FcmService
 import com.example.tasama.data.remote.GroqService
 import com.example.tasama.data.service.AndroidExportService
 import com.example.tasama.data.service.AndroidFileService
@@ -18,4 +19,5 @@ actual val platformModule: Module = module {
     single<ExportService> { AndroidExportService() }
     single<FileService> { AndroidFileService(androidContext()) }
     single { GroqService(apiKey = BuildConfig.GROQ_API_KEY) }
+    single { FcmService(serverKey = BuildConfig.FCM_SERVER_KEY) }
 }

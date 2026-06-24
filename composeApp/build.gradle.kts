@@ -108,7 +108,9 @@ android {
             localProperties.load(localPropertiesFile.inputStream())
         }
         val groqKey = localProperties.getProperty("GROQ_API_KEY") ?: ""
+        val fcmKey = localProperties.getProperty("FCM_SERVER_KEY") ?: ""
         buildConfigField("String", "GROQ_API_KEY", "\"$groqKey\"")
+        buildConfigField("String", "FCM_SERVER_KEY", "\"$fcmKey\"")
     }
     buildFeatures {
         buildConfig = true

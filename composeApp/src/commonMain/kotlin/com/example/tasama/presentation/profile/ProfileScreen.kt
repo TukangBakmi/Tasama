@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -17,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.tasama.domain.model.AppTheme
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -42,6 +45,8 @@ import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.compose.PickerResultLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PlatformFile
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import tasama.composeapp.generated.resources.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +55,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     val clipboardManager = LocalClipboardManager.current
 
     val pickerLauncher = rememberFilePickerLauncher(
@@ -63,17 +68,23 @@ fun ProfileScreen(
         }
     )
 
-    // Combined side effect handler with yield() for attachment safety
-    LaunchedEffect(uiState.exportMessage, uiState.error) {
-        uiState.exportMessage?.let {
-            kotlinx.coroutines.yield()
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearExportMessage()
+    // Side effect handlers using snapshotFlow to prevent cancellation when state is cleared
+    LaunchedEffect(Unit) {
+        launch {
+            snapshotFlow { uiState.exportMessage }
+                .filterNotNull()
+                .collect { message ->
+                    viewModel.clearExportMessage()
+                    snackbarHostState.showSnackbar(message)
+                }
         }
-        uiState.error?.let {
-            kotlinx.coroutines.yield()
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearError()
+        launch {
+            snapshotFlow { uiState.error }
+                .filterNotNull()
+                .collect { error ->
+                    viewModel.clearError()
+                    snackbarHostState.showSnackbar(error)
+                }
         }
     }
 
@@ -81,7 +92,6 @@ fun ProfileScreen(
         topBar = {
             TopAppBar(title = { Text("Profile") })
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
         var showThemeDialog by remember { mutableStateOf(false) }
@@ -361,8 +371,14 @@ fun LinkPartnerDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = shortId,
-                    onValueChange = { if (it.length <= 12) shortId = it },
+                    onValueChange = {
+                        // Only allow numbers and max 12 digits
+                        if (it.all { char -> char.isDigit() } && it.length <= 12) {
+                            shortId = it
+                        }
+                    },
                     label = { Text("Partner ID") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

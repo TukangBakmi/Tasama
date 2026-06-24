@@ -7,5 +7,6 @@ data class ChatUiState(
     val inputText: String = "",
     val isLoadingMore: Boolean = false,
     val hasMoreMessages: Boolean = true,
-    val channelName: String = "Chat"
+    val channelName: String = "Chat",
+    val error: String? = null
 )

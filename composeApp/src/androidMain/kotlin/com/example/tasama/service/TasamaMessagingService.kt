@@ -16,8 +16,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
-class TasamaMessagingService : FirebaseMessagingService() {
-    private val authRepository: AuthRepository by inject()
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+
+class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
+    private val authRepository: AuthRepository by lazy { getKoin().get() }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onNewToken(token: String) {
@@ -33,6 +36,7 @@ class TasamaMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         
+        // Check if message contains a notification payload
         val title = message.notification?.title ?: message.data["title"]
         val body = message.notification?.body ?: message.data["body"]
         
@@ -48,7 +52,7 @@ class TasamaMessagingService : FirebaseMessagingService() {
         val channel = NotificationChannel(
             channelId,
             "Chat Messages",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         )
         notificationManager.createNotificationChannel(channel)
 
@@ -62,12 +66,14 @@ class TasamaMessagingService : FirebaseMessagingService() {
         )
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // TODO: Use app icon
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
 
-        notificationManager.notify(0, notificationBuilder.build())
+        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
     }
 }

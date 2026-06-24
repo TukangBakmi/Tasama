@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +30,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.MessageStatus
+import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -44,9 +46,19 @@ fun ChatScreen(
     onBackClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = LocalSnackbarHostState.current
 
     LaunchedEffect(channelId) {
         viewModel.setChannel(channelId)
+    }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { uiState.error }
+            .filterNotNull()
+            .collect { error ->
+                viewModel.clearError()
+                snackbarHostState.showSnackbar(error)
+            }
     }
 
     Scaffold(

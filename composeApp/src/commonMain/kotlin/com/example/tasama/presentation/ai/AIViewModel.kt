@@ -88,32 +88,40 @@ class AIViewModel(
         _uiState.update { it.copy(inputText = text) }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
     fun loadMoreMessages() {
         if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreMessages) return
 
         val oldestMessage = _uiState.value.messages.firstOrNull { it.id != "welcome" } ?: return
         
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingMore = true) }
-            
-            val moreMessages = aiChatRepository.getMoreMessages(
-                limit = 20,
-                beforeTimestamp = oldestMessage.timestamp
-            )
-            
-            if (moreMessages.isEmpty()) {
-                _uiState.update { it.copy(isLoadingMore = false, hasMoreMessages = false) }
-            } else {
-                _uiState.update { state ->
-                    val combined = (moreMessages + state.messages)
-                        .distinctBy { it.id }
-                        .sortedBy { it.timestamp }
-                    state.copy(
-                        messages = combined,
-                        isLoadingMore = false,
-                        hasMoreMessages = moreMessages.size >= 20
-                    )
+            try {
+                _uiState.update { it.copy(isLoadingMore = true) }
+                
+                val moreMessages = aiChatRepository.getMoreMessages(
+                    limit = 20,
+                    beforeTimestamp = oldestMessage.timestamp
+                )
+                
+                if (moreMessages.isEmpty()) {
+                    _uiState.update { it.copy(isLoadingMore = false, hasMoreMessages = false) }
+                } else {
+                    _uiState.update { state ->
+                        val combined = (moreMessages + state.messages)
+                            .distinctBy { it.id }
+                            .sortedBy { it.timestamp }
+                        state.copy(
+                            messages = combined,
+                            isLoadingMore = false,
+                            hasMoreMessages = moreMessages.size >= 20
+                        )
+                    }
                 }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingMore = false, error = e.message ?: "Failed to load messages") }
             }
         }
     }
@@ -132,14 +140,18 @@ class AIViewModel(
         )
 
         viewModelScope.launch {
-            aiChatRepository.saveMessage(userMessage)
-            _uiState.update {
-                it.copy(
-                    inputText = "",
-                    isTyping = true
-                )
+            try {
+                aiChatRepository.saveMessage(userMessage)
+                _uiState.update {
+                    it.copy(
+                        inputText = "",
+                        isTyping = true
+                    )
+                }
+                processAIResponse(text)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
             }
-            processAIResponse(text)
         }
     }
 

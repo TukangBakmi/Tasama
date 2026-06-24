@@ -106,4 +106,8 @@ class ChatListViewModel(
     fun clearSearch() {
         _uiState.update { it.copy(searchedUser = null, error = null) }
     }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
 }

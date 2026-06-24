@@ -162,7 +162,11 @@ class DashboardViewModel(
 
     fun addTransaction(transaction: Transaction) {
         viewModelScope.launch {
-            repository.addTransaction(transaction)
+            try {
+                repository.addTransaction(transaction)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to add transaction") }
+            }
         }
     }
 
@@ -172,5 +176,9 @@ class DashboardViewModel(
 
     fun onDismissAddTransaction() {
         _uiState.update { it.copy(showAddTransactionDialog = false) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }

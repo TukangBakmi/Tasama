@@ -27,14 +27,17 @@ import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import androidx.compose.ui.tooling.preview.Preview
-import kotlinx.datetime.*
-import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.painterResource
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
 import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.DatePeriod
+import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -271,8 +274,10 @@ fun AIContent(
 
             items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
                 val message = uiState.messages[index]
-                val date = Instant.fromEpochMilliseconds(message.timestamp)
-                    .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                val date = Instant
+                    .fromEpochMilliseconds(message.timestamp)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
+                    .date
                 
                 val showHeader = if (index == 0) true else {
                     val prevDate = Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)

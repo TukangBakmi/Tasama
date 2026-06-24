@@ -9,14 +9,13 @@ import com.example.tasama.domain.repository.ChatRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.firestore
-import dev.gitlive.firebase.firestore.where
-import kotlinx.datetime.Clock as KtClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.time.Clock
 
 class FirebaseChatRepository(
     private val authRepository: AuthRepository
@@ -71,7 +70,7 @@ class FirebaseChatRepository(
                     msg.copy(isFromMe = msg.userId == uid)
                 }
                 .sortedBy { it.timestamp }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -79,7 +78,7 @@ class FirebaseChatRepository(
     override suspend fun sendMessage(channelId: String, text: String) {
         val userId = authRepository.getCurrentUserId() ?: return
         val senderName = authRepository.getUserName(userId) ?: "User"
-        val now = KtClock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val id = "msg_$now"
         val newMessage = ChatMessage(
             id = id,
@@ -145,7 +144,7 @@ class FirebaseChatRepository(
                 participantIds = listOf(currentUserId, otherUserId),
                 participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
                 lastMessage = "Started a conversation",
-                lastMessageTimestamp = KtClock.System.now().toEpochMilliseconds(),
+                lastMessageTimestamp = Clock.System.now().toEpochMilliseconds(),
                 unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
             )
             channelsCollection.document(channelId).set(ChatChannel.serializer(), channel)

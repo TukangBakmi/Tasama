@@ -13,5 +13,6 @@ data class User(
     val partnerId: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val lastLocationUpdate: Long? = null
+    val lastLocationUpdate: Long? = null,
+    val lastActive: Long? = null
 )

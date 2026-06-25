@@ -23,6 +23,7 @@ interface AuthRepository {
     suspend fun updateProfilePicture(uid: String, url: String)
     suspend fun updateDisplayName(uid: String, name: String)
     suspend fun updateLocation(uid: String, lat: Double, lon: Double)
+    suspend fun updateLastActive(uid: String, timestamp: Long? = null)
     suspend fun linkPartner(uid: String, partnerShortId: String): Result<Unit>
     suspend fun unlinkPartner(uid: String): Result<Unit>
 }

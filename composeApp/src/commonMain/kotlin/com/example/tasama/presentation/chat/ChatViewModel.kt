@@ -23,6 +23,8 @@ class ChatViewModel(
     private var messagesJob: Job? = null
     private var channelInfoJob: Job? = null
 
+    private var otherUserJob: Job? = null
+
     init {
         observeUserSession()
     }
@@ -33,6 +35,7 @@ class ChatViewModel(
                 if (uid == null) {
                     messagesJob?.cancel()
                     channelInfoJob?.cancel()
+                    otherUserJob?.cancel()
                     _uiState.value = ChatUiState()
                     currentChannelId = null
                 }
@@ -53,11 +56,26 @@ class ChatViewModel(
             val currentUserId = repository.getCurrentUserId() ?: return@launch
             repository.getChannels().collect { channels ->
                 val channel = channels.find { it.id == channelId }
-                channel?.let {
-                    val otherParticipantName = it.participantNames.entries
+                channel?.let { ch ->
+                    val otherParticipantId = ch.participantIds.find { it != currentUserId }
+                    val otherParticipantName = ch.participantNames.entries
                         .find { entry -> entry.key != currentUserId }?.value ?: "Chat"
+                    
                     _uiState.update { state -> state.copy(channelName = otherParticipantName) }
+                    
+                    if (otherParticipantId != null) {
+                        observeOtherUserStatus(otherParticipantId)
+                    }
                 }
+            }
+        }
+    }
+
+    private fun observeOtherUserStatus(userId: String) {
+        otherUserJob?.cancel()
+        otherUserJob = viewModelScope.launch {
+            authRepository.getUserFlow(userId).collect { user ->
+                _uiState.update { it.copy(otherUser = user) }
             }
         }
     }

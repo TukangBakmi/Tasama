@@ -53,9 +53,11 @@ class MainActivity : ComponentActivity() {
                     if (uid != null) {
                         try {
                             val token = FirebaseMessaging.getInstance().token.await()
+                            android.util.Log.d("FCM", "Token retrieved: $token")
                             authRepository.updateFcmToken(uid, token)
+                            android.util.Log.d("FCM", "Token updated in AuthRepository")
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            android.util.Log.e("FCM", "Failed to get/update token", e)
                         }
                     }
                 }

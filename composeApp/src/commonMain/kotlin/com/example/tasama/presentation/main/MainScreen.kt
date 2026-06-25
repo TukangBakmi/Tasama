@@ -20,6 +20,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.*
 import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
@@ -122,6 +126,28 @@ fun MainScreen(
 
                             val pagerState = rememberPagerState(pageCount = { items.size })
                             val hasPartner by viewModel.hasPartner.collectAsState()
+                            val lifecycleOwner = LocalLifecycleOwner.current
+
+                            LaunchedEffect(lifecycleOwner) {
+                                lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                    while (true) {
+                                        viewModel.updateActiveStatus()
+                                        kotlinx.coroutines.delay(30000) // Heartbeat every 30 seconds
+                                    }
+                                }
+                            }
+
+                            DisposableEffect(lifecycleOwner) {
+                                val observer = LifecycleEventObserver { _, event ->
+                                    if (event == Lifecycle.Event.ON_PAUSE) {
+                                        viewModel.setOffline()
+                                    }
+                                }
+                                lifecycleOwner.lifecycle.addObserver(observer)
+                                onDispose {
+                                    lifecycleOwner.lifecycle.removeObserver(observer)
+                                }
+                            }
 
                             NavHost(
                                 navController = navController,
@@ -269,8 +295,7 @@ fun MainScreen(
                                         )
                                     }
                                 ) { backStackEntry ->
-                                    val channelId =
-                                        backStackEntry.arguments?.getString("channelId") ?: ""
+                                    val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
                                     ChatScreen(
                                         channelId = channelId,
                                         onBackClick = { navController.popBackStack() }

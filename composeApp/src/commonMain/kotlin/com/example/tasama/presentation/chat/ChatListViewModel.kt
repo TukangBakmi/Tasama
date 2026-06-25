@@ -4,9 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.model.ChatChannel
+import com.example.tasama.domain.model.User
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -19,6 +23,7 @@ class ChatListViewModel(
     val uiState = _uiState.asStateFlow()
 
     private var dataJob: Job? = null
+    private var usersJob: Job? = null
 
     val currentUserId: String?
         get() = repository.getCurrentUserId()
@@ -32,6 +37,7 @@ class ChatListViewModel(
             authRepository.userId.collect { uid ->
                 if (uid == null) {
                     dataJob?.cancel()
+                    usersJob?.cancel()
                     _uiState.value = ChatListUiState()
                 } else {
                     loadChannels()
@@ -44,8 +50,30 @@ class ChatListViewModel(
         dataJob?.cancel()
         dataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            repository.getChannels().collect { channels ->
+            repository.getChannels().collectLatest { channels ->
                 _uiState.update { it.copy(channels = channels, isLoading = false) }
+                observeUsersStatus(channels)
+            }
+        }
+    }
+
+    private fun observeUsersStatus(channels: List<ChatChannel>) {
+        usersJob?.cancel()
+        val otherUserIds = channels.flatMap { it.participantIds }
+            .filter { it != currentUserId }
+            .distinct()
+
+        if (otherUserIds.isEmpty()) return
+
+        usersJob = viewModelScope.launch {
+            val userFlows = otherUserIds.map { uid ->
+                authRepository.getUserFlow(uid)
+            }
+
+            combine(userFlows) { users ->
+                users.filterNotNull().associateBy { it.id }
+            }.collect { usersMap ->
+                _uiState.update { it.copy(channelUsers = usersMap) }
             }
         }
     }

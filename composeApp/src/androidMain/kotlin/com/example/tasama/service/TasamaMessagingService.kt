@@ -25,23 +25,35 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        android.util.Log.d("TasamaFCM", "New token generated: $token")
         val uid = authRepository.getCurrentUserId()
         if (uid != null) {
             serviceScope.launch {
-                authRepository.updateFcmToken(uid, token)
+                try {
+                    authRepository.updateFcmToken(uid, token)
+                    android.util.Log.d("TasamaFCM", "Token updated for user: $uid")
+                } catch (e: Exception) {
+                    android.util.Log.e("TasamaFCM", "Failed to update token", e)
+                }
             }
         }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        android.util.Log.d("TasamaFCM", "Message received from: ${message.from}")
+        android.util.Log.d("TasamaFCM", "Notification Payload: ${message.notification?.body}")
+        android.util.Log.d("TasamaFCM", "Data Payload: ${message.data}")
         
         // Check if message contains a notification payload
         val title = message.notification?.title ?: message.data["title"]
         val body = message.notification?.body ?: message.data["body"]
         
         if (title != null && body != null) {
+            android.util.Log.d("TasamaFCM", "Showing notification: $title - $body")
             showNotification(title, body)
+        } else {
+            android.util.Log.w("TasamaFCM", "Message received but title or body is null")
         }
     }
 

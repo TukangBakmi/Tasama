@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 sealed class AuthState {
     data object Loading : AuthState()
@@ -48,4 +49,20 @@ class MainViewModel(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun updateActiveStatus() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            authRepository.updateLastActive(uid)
+        }
+    }
+
+    fun setOffline() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            // Use negative timestamp to signify "explicitly offline" while preserving the time
+            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+            authRepository.updateLastActive(uid, timestamp = now)
+        }
+    }
 }

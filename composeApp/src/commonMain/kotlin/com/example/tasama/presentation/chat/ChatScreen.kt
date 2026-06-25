@@ -91,11 +91,56 @@ fun ChatScreen(
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
-                                Text(
-                                    "online",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                
+                                var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+                                LaunchedEffect(Unit) {
+                                    while (true) {
+                                        kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
+                                        now = Clock.System.now().toEpochMilliseconds()
+                                    }
+                                }
+
+                                val statusText = remember(uiState.otherUser?.lastActive, now) {
+                                    val lastActive = uiState.otherUser?.lastActive ?: 0L
+                                    if (now - lastActive < 10000) {
+                                        "online"
+                                    } else {
+                                        try {
+                                            val instant = Instant.fromEpochMilliseconds(lastActive)
+                                            val tz = TimeZone.currentSystemDefault()
+                                            val lastActiveDateTime = instant.toLocalDateTime(tz)
+                                            val nowDateTime = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz)
+                                            
+                                            val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+
+                                            when (lastActiveDateTime.date) {
+                                                nowDateTime.date -> {
+                                                    "last seen today at $timeStr"
+                                                }
+                                                nowDateTime.date.minus(DatePeriod(days = 1)) -> {
+                                                    "last seen yesterday at $timeStr"
+                                                }
+                                                else -> {
+                                                    val day = lastActiveDateTime.day.toString().padStart(2, '0')
+                                                    val month = lastActiveDateTime.month.number.toString().padStart(2, '0')
+                                                    val year = lastActiveDateTime.year
+                                                    "last seen $day/$month/$year"
+                                                }
+                                            }
+                                        } catch (_: Exception) {
+                                            "offline"
+                                        }
+                                    }
+                                }
+
+                                if (statusText.isNotEmpty()) {
+                                    Text(
+                                        statusText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (statusText == "online") MaterialTheme.colorScheme.primary 
+                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     },

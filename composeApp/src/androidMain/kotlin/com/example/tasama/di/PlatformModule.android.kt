@@ -19,5 +19,10 @@ actual val platformModule: Module = module {
     single<ExportService> { AndroidExportService() }
     single<FileService> { AndroidFileService(androidContext()) }
     single { GroqService(apiKey = BuildConfig.GROQ_API_KEY) }
-    single { FcmService(serverKey = BuildConfig.FCM_SERVER_KEY) }
+    single { 
+        FcmService(
+            projectId = BuildConfig.FCM_PROJECT_ID,
+            accessToken = BuildConfig.FCM_ACCESS_TOKEN
+        ) 
+    }
 }

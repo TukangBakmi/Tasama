@@ -109,27 +109,32 @@ class FirebaseChatRepository(
             "unreadCounts" to (newUnreadCounts as Any?)
         }
 
-        // Send Notification (In a real app, this would be handled by a Cloud Function)
-        // For this task, we'll simulate the "trigger" or explain it needs a backend.
-        // However, I can implement a client-side call to a hypothetical notification service 
-        // if I had one, or just document that Firestore Triggers are preferred.
-        // Let's assume we want to call a function to notify other participants.
-        sendPushNotificationToParticipants(channel, newMessage)
+        // Send Notification
+        try {
+            sendPushNotificationToParticipants(channel, newMessage)
+        } catch (e: Exception) {
+            println("Error triggering notifications: ${e.message}")
+        }
     }
 
     private suspend fun sendPushNotificationToParticipants(channel: ChatChannel, message: ChatMessage) {
         val currentUserId = authRepository.getCurrentUserId() ?: return
         val otherParticipants = channel.participantIds.filter { it != currentUserId }
         
+        println("Sending notifications to participants: $otherParticipants")
         for (participantId in otherParticipants) {
             val user = authRepository.getUser(participantId)
             val token = user?.fcmToken
+            println("Participant $participantId token: ${token?.take(10)}...")
             if (token != null) {
-                fcmService.sendNotification(
+                val success = fcmService.sendNotification(
                     token = token,
                     title = message.senderName,
                     body = message.text
                 )
+                println("Notification sent to $participantId: $success")
+            } else {
+                println("Skipping notification for $participantId: No token found")
             }
         }
     }

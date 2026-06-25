@@ -209,6 +209,16 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun updateLastActive(uid: String, timestamp: Long?) {
+        try {
+            firestore.collection("users").document(uid).updateFields {
+                "lastActive" to (timestamp ?: Clock.System.now().toEpochMilliseconds())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override suspend fun linkPartner(uid: String, partnerShortId: String): Result<Unit> {
         return try {
             val partnerUid = getUserIdFromShortId(partnerShortId)

@@ -13,5 +13,10 @@ actual val platformModule: Module = module {
     single<ExportService> { JvmExportService() }
     single<FileService> { JvmFileService() }
     single { GroqService(apiKey = System.getenv("GROQ_API_KEY") ?: "") }
-    single { FcmService(serverKey = System.getenv("FCM_SERVER_KEY") ?: "") }
+    single { 
+        FcmService(
+            projectId = System.getenv("FCM_PROJECT_ID") ?: "",
+            accessToken = System.getenv("FCM_ACCESS_TOKEN") ?: ""
+        ) 
+    }
 }

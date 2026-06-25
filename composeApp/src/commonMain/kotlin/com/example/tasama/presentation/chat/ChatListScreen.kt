@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatChannel
+import com.example.tasama.domain.model.User
 import kotlinx.datetime.*
 import kotlinx.datetime.number
 import org.jetbrains.compose.resources.painterResource
@@ -46,6 +48,14 @@ fun ChatListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     var showAddContactDialog by remember { mutableStateOf(false) }
+    
+    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30000) // Update every 30 seconds
+            now = Clock.System.now().toEpochMilliseconds()
+        }
+    }
 
     LaunchedEffect(Unit) {
         snapshotFlow { uiState.error }
@@ -112,11 +122,15 @@ fun ChatListScreen(
                     } else {
                         items(uiState.channels, key = { it.id }) { channel ->
                             var showMenu by remember { mutableStateOf(false) }
+                            val otherUserId = channel.participantIds.find { it != viewModel.currentUserId }
+                            val otherUser = otherUserId?.let { uiState.channelUsers[it] }
 
                             Box {
                                 ChannelItem(
                                     channel = channel,
                                     currentUserId = viewModel.currentUserId,
+                                    otherUser = otherUser,
+                                    now = now,
                                     onClick = { onChannelClick(channel.id) },
                                     onLongClick = { showMenu = true }
                                 )
@@ -215,6 +229,8 @@ fun AIAdvisorItem(onClick: () -> Unit) {
 fun ChannelItem(
     channel: ChatChannel, 
     currentUserId: String?, 
+    otherUser: User?,
+    now: Long,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -231,13 +247,39 @@ fun ChannelItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.size(48.dp)
         ) {
-            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            
+            // Online status indicator
+            val isOnline = remember(otherUser?.lastActive, now) {
+                val lastActive = otherUser?.lastActive ?: 0L
+                lastActive != 0L && (now - lastActive < 10000)
+            }
+            
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(2.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(if (isOnline) Color(0xFF4CAF50) else Color.Gray)
+                )
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -246,11 +288,13 @@ fun ChannelItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val otherParticipants = channel.participantNames.filterKeys { it != currentUserId }
-                val displayName = if (otherParticipants.isNotEmpty()) {
-                    otherParticipants.values.joinToString(", ")
-                } else {
-                    channel.participantNames.values.joinToString(", ")
+                val displayName = otherUser?.name ?: run {
+                    val otherParticipants = channel.participantNames.filterKeys { it != currentUserId }
+                    if (otherParticipants.isNotEmpty()) {
+                        otherParticipants.values.joinToString(", ")
+                    } else {
+                        channel.participantNames.values.joinToString(", ")
+                    }
                 }
 
                 Text(
@@ -262,7 +306,7 @@ fun ChannelItem(
                     modifier = Modifier.weight(1f)
                 )
                 
-                    val timeString = remember(channel.lastMessageTimestamp) {
+                val timeString = remember(channel.lastMessageTimestamp) {
                     try {
                         val instant = Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
                         val tz = TimeZone.currentSystemDefault()

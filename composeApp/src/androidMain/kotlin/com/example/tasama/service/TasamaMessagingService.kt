@@ -45,16 +45,17 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         val title = message.notification?.title ?: message.data["title"]
         val body = message.notification?.body ?: message.data["body"]
         val senderName = message.data["sender_name"] ?: title // Fallback to title
+        val channelIdData = message.data["channelId"]
         
         if (title != null && body != null) {
-            android.util.Log.d("TasamaFCM", "Showing notification: $title - $body")
-            showNotification(title, body, senderName)
+            android.util.Log.d("TasamaFCM", "Showing notification: $title - $body, channelId: $channelIdData")
+            showNotification(title, body, senderName, channelIdData)
         } else {
             android.util.Log.w("TasamaFCM", "Message received but title/body is missing. Data: ${message.data}")
         }
     }
 
-    private fun showNotification(title: String, body: String, senderName: String?) {
+    private fun showNotification(title: String, body: String, senderName: String?, channelIdData: String?) {
         val channelId = "chat_messages"
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
@@ -71,6 +72,9 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            if (channelIdData != null) {
+                putExtra("channelId", channelIdData)
+            }
         }
 
         val pendingIntent = PendingIntent.getActivity(

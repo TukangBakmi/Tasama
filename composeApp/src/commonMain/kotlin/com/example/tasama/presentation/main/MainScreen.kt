@@ -47,11 +47,20 @@ val LocalSnackbarHostState = compositionLocalOf<SnackbarHostState> {
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = koinViewModel(),
+    initialChannelId: String? = null,
+    onChannelNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val authState by viewModel.authState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(initialChannelId, authState) {
+        if (initialChannelId != null && authState is AuthState.Authenticated) {
+            navController.navigate("chat_room/$initialChannelId")
+            onChannelNavigated()
+        }
+    }
 
     CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

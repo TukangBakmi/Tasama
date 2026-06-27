@@ -10,7 +10,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -25,6 +28,8 @@ class MainActivity : ComponentActivity() {
     
     private val authRepository: AuthRepository by inject()
     private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by inject()
+
+    private var initialChannelId by mutableStateOf<String?>(null)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -42,6 +47,8 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         askPermissions()
+
+        initialChannelId = intent.getStringExtra("channelId")
 
         val googleSignInHelper = GoogleSignInHelper(this)
 
@@ -64,6 +71,8 @@ class MainActivity : ComponentActivity() {
             }
 
             App(
+                initialChannelId = initialChannelId,
+                onChannelNavigated = { initialChannelId = null },
                 onGoogleSignInClick = {
                     scope.launch {
                         android.util.Log.d("GoogleSignIn", "Sign-in button clicked")
@@ -82,6 +91,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             )
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra("channelId")?.let {
+            initialChannelId = it
         }
     }
 

@@ -12,6 +12,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 @Preview
 fun App(
+    initialChannelId: String? = null,
+    onChannelNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
     val viewModel: MainViewModel = koinViewModel()
@@ -24,6 +26,10 @@ fun App(
     }
 
     TasamaTheme(darkTheme = isDarkTheme) {
-        MainScreen(onGoogleSignInClick = onGoogleSignInClick)
+        MainScreen(
+            initialChannelId = initialChannelId,
+            onChannelNavigated = onChannelNavigated,
+            onGoogleSignInClick = onGoogleSignInClick
+        )
     }
 }

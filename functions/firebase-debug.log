@@ -1,0 +1,125 @@
+[debug] [2026-06-27T13:09:12.728Z] ----------------------------------------------------------------------
+[debug] [2026-06-27T13:09:12.731Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\alber\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:onMessageCreated
+[debug] [2026-06-27T13:09:12.732Z] CLI Version:   15.22.2
+[debug] [2026-06-27T13:09:12.732Z] Platform:      win32
+[debug] [2026-06-27T13:09:12.732Z] Node Version:  v20.18.1
+[debug] [2026-06-27T13:09:12.732Z] Detected Agent: unknown
+[debug] [2026-06-27T13:09:12.732Z] Time:          Sat Jun 27 2026 20:09:12 GMT+0700 (Western Indonesia Time)
+[debug] [2026-06-27T13:09:12.733Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-27T13:09:15.259Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-27T13:09:15.260Z] > authorizing via signed-in user (albertardiansyah06@gmail.com)
+[debug] [2026-06-27T13:09:15.260Z] [iam] checking project tasama-aecc9 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-06-27T13:09:15.261Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:15.262Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:15.263Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9:testIamPermissions [none]
+[debug] [2026-06-27T13:09:15.263Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9:testIamPermissions  x-goog-user-project=tasama-aecc9
+[debug] [2026-06-27T13:09:15.263Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-06-27T13:09:15.793Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9:testIamPermissions 200
+[debug] [2026-06-27T13:09:15.793Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-06-27T13:09:15.794Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:15.794Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:15.794Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/tasama-aecc9/serviceAccounts/tasama-aecc9@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-06-27T13:09:15.794Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/tasama-aecc9/serviceAccounts/tasama-aecc9@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-06-27T13:09:17.096Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/tasama-aecc9/serviceAccounts/tasama-aecc9@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-06-27T13:09:17.096Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/tasama-aecc9/serviceAccounts/tasama-aecc9@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'tasama-aecc9'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-06-27T13:09:17.100Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:17.100Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:17.101Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 [none]
+[debug] [2026-06-27T13:09:17.400Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 200
+[debug] [2026-06-27T13:09:17.400Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 {"projectNumber":"761665195026","projectId":"tasama-aecc9","lifecycleState":"ACTIVE","name":"Tasama","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-06-15T12:50:54.512Z","parent":{"type":"organization","id":"134631280414"}}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-06-27T13:09:17.403Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:17.403Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:17.403Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tasama-aecc9/adminSdkConfig [none]
+[debug] [2026-06-27T13:09:18.400Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tasama-aecc9/adminSdkConfig 200
+[debug] [2026-06-27T13:09:18.400Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tasama-aecc9/adminSdkConfig {"projectId":"tasama-aecc9","storageBucket":"tasama-aecc9.firebasestorage.app"}
+[debug] [2026-06-27T13:09:18.400Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:18.400Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:18.400Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/tasama-aecc9/configs [none]
+[debug] [2026-06-27T13:09:18.956Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/tasama-aecc9/configs 200
+[debug] [2026-06-27T13:09:18.956Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/tasama-aecc9/configs {}
+[debug] [2026-06-27T13:09:18.958Z] Validating nodejs source
+[warn] !  functions: Runtime Node.js 20 was deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] !  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] !  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-06-27T13:09:19.840Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Tasama",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.5.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.9.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2026-06-27T13:09:19.841Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-06-27T13:09:19.842Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-06-27T13:09:19.850Z] Found firebase-functions binary at 'C:\Users\alber\AndroidStudioProjects\Tasama\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8709
+
+[debug] [2026-06-27T13:09:20.444Z] Got response from /__/functions.yaml {"endpoints":{"onMessageCreated":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-southeast2"],"eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.create","eventFilters":{"resource":"projects/tasama-aecc9/databases/(default)/documents/chat_channels/{channelId}/messages/{messageId}"},"retry":false},"labels":{},"entryPoint":"onMessageCreated"}},"specVersion":"v1alpha1","requiredAPIs":[]}
+[debug] [2026-06-27T13:09:24.483Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:24.483Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:24.484Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/-/functions [none]
+[debug] [2026-06-27T13:09:25.995Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/-/functions 200
+[debug] [2026-06-27T13:09:25.995Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/-/functions {"functions":[{"name":"projects/tasama-aecc9/locations/us-central1/functions/onMessageCreated","eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.create","resource":"projects/tasama-aecc9/databases/(default)/documents/chat_channels/{channelId}/messages/{messageId}","service":"firestore.googleapis.com","failurePolicy":{}},"status":"ACTIVE","entryPoint":"onMessageCreated","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"tasama-aecc9@appspot.gserviceaccount.com","updateTime":"2026-06-27T12:50:05.677Z","versionId":"8","labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"6eea1f13c951016c182185bb6f69d1215800086c"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-564569660821.us-central1.cloudfunctions.appspot.com/05481b0e-1163-423b-a137-38612997d659.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"tasama-aecc9\",\"storageBucket\":\"tasama-aecc9.firebasestorage.app\"}","GCLOUD_PROJECT":"tasama-aecc9","EVENTARC_CLOUD_EVENT_SOURCE":"projects/tasama-aecc9/locations/us-central1/functions/onMessageCreated"},"runtime":"nodejs20","maxInstances":3000,"ingressSettings":"ALLOW_ALL","buildId":"2b95cd1d-19c6-4c1a-9ce5-be9a28b626b1","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/761665195026/locations/us-central1/builds/2b95cd1d-19c6-4c1a-9ce5-be9a28b626b1","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/tasama-aecc9/serviceAccounts/761665195026-compute@developer.gserviceaccount.com","satisfiesPzi":true}]}
+[debug] [2026-06-27T13:09:25.995Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:25.995Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:25.996Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/tasama-aecc9/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-06-27T13:09:27.750Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/tasama-aecc9/locations/-/functions 200
+[debug] [2026-06-27T13:09:27.750Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/tasama-aecc9/locations/-/functions {}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged C:\Users\alber\AndroidStudioProjects\Tasama\functions (78.46 KB) for uploading 
+[debug] [2026-06-27T13:09:27.787Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:27.787Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:27.787Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/tasama-aecc9/databases/(default) [none]
+[debug] [2026-06-27T13:09:27.979Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/tasama-aecc9/databases/(default) 200
+[debug] [2026-06-27T13:09:27.980Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/tasama-aecc9/databases/(default) {"name":"projects/tasama-aecc9/databases/(default)","uid":"77b556f8-c897-4138-8fc6-0c8d31cacb2d","createTime":"2026-06-15T13:03:28.102454Z","updateTime":"2026-06-15T13:03:28.102454Z","locationId":"asia-southeast2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-06-27T12:09:26.958255Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"zet","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"INCV0Pq+p5UDMOGLmKPFiZUD"}
+[debug] [2026-06-27T13:09:27.983Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:27.983Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:27.983Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 [none]
+[debug] [2026-06-27T13:09:28.377Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 200
+[debug] [2026-06-27T13:09:28.377Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/tasama-aecc9 {"projectNumber":"761665195026","projectId":"tasama-aecc9","lifecycleState":"ACTIVE","name":"Tasama","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-06-15T12:50:54.512Z","parent":{"type":"organization","id":"134631280414"}}
+[debug] [2026-06-27T13:09:28.378Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:28.378Z] Checked if tokens are valid: true, expires at: 1782568132097
+[debug] [2026-06-27T13:09:28.378Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/asia-southeast2/functions:generateUploadUrl [none]
+[debug] [2026-06-27T13:09:28.378Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/asia-southeast2/functions:generateUploadUrl {}
+[debug] [2026-06-27T13:10:01.129Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/asia-southeast2/functions:generateUploadUrl 200
+[debug] [2026-06-27T13:10:01.129Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/tasama-aecc9/locations/asia-southeast2/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/uploads-666747089845.asia-southeast2.cloudfunctions.appspot.com/1e56a06a-ac7c-4f05-af0f-04e74497b2ac.zip?GoogleAccessId=service-761665195026@gcf-admin-robot.iam.gserviceaccount.com&Expires=1782567600&Signature=JPj82LYdEUcZKQ%2B5UhPfVEOWwge5t0CL1FuyyjPF7HOETVfYFgKZ0CKG9MQYUKk3rYj%2FmCI0mw1Gl1M5sIl0E7Hzje0SQTfgjAidF8Y1jfuEJjOn9JRBd8MnXYCRVEMoyYJRW%2BH1jwau285RiblGMwDedyd6LeXNmYb0o%2B%2B6c7sXC3do9MW4ua%2BoXa3JJJmBI%2FOs0iaOtYGXDDapfyql3rPKoMXE%2BT3NJPTZopPKwAfcsqeb%2B0z%2Fnl4qPOxgKDlVberdMxY54%2B7Ih5MSw6idwLhUOPanrLbCB2Cnbj1s6qPnFZN93wKJ3iv2OzlE%2FTfpBOZTaNGn6eu1zFwj9fScRw%3D%3D"}
+[debug] [2026-06-27T13:10:01.130Z] >>> [apiv2][query] PUT https://storage.googleapis.com/uploads-666747089845.asia-southeast2.cloudfunctions.appspot.com/1e56a06a-ac7c-4f05-af0f-04e74497b2ac.zip GoogleAccessId=service-761665195026%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1782567600&Signature=JPj82LYdEUcZKQ%2B5UhPfVEOWwge5t0CL1FuyyjPF7HOETVfYFgKZ0CKG9MQYUKk3rYj%2FmCI0mw1Gl1M5sIl0E7Hzje0SQTfgjAidF8Y1jfuEJjOn9JRBd8MnXYCRVEMoyYJRW%2BH1jwau285RiblGMwDedyd6LeXNmYb0o%2B%2B6c7sXC3do9MW4ua%2BoXa3JJJmBI%2FOs0iaOtYGXDDapfyql3rPKoMXE%2BT3NJPTZopPKwAfcsqeb%2B0z%2Fnl4qPOxgKDlVberdMxY54%2B7Ih5MSw6idwLhUOPanrLbCB2Cnbj1s6qPnFZN93wKJ3iv2OzlE%2FTfpBOZTaNGn6eu1zFwj9fScRw%3D%3D
+[debug] [2026-06-27T13:10:01.130Z] >>> [apiv2][body] PUT https://storage.googleapis.com/uploads-666747089845.asia-southeast2.cloudfunctions.appspot.com/1e56a06a-ac7c-4f05-af0f-04e74497b2ac.zip [stream]
+[debug] [2026-06-27T13:10:01.986Z] <<< [apiv2][status] PUT https://storage.googleapis.com/uploads-666747089845.asia-southeast2.cloudfunctions.appspot.com/1e56a06a-ac7c-4f05-af0f-04e74497b2ac.zip 200
+[debug] [2026-06-27T13:10:01.986Z] <<< [apiv2][body] PUT https://storage.googleapis.com/uploads-666747089845.asia-southeast2.cloudfunctions.appspot.com/1e56a06a-ac7c-4f05-af0f-04e74497b2ac.zip [omitted]
+[info] +  functions: functions source uploaded successfully 
+[info] 
+The following functions are found in your project but do not exist in your local source code:
+	onMessageCreated(us-central1)
+
+If you are renaming a function or changing its region, it is recommended that you create the new function first before deleting the old one to prevent event loss. For more info, visit https://firebase.google.com/docs/functions/manage-functions#modify
+

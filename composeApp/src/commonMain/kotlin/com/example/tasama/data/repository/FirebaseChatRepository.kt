@@ -1,6 +1,5 @@
 package com.example.tasama.data.repository
 
-import com.example.tasama.data.remote.FcmService
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
@@ -19,8 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlin.time.Clock
 
 class FirebaseChatRepository(
-    private val authRepository: AuthRepository,
-    private val fcmService: FcmService
+    private val authRepository: AuthRepository
 ) : ChatRepository {
     private val firestore = Firebase.firestore
     private val channelsCollection = firestore.collection("chat_channels")
@@ -107,35 +105,6 @@ class FirebaseChatRepository(
             "lastMessage" to (text as Any?)
             "lastMessageTimestamp" to (now as Any?)
             "unreadCounts" to (newUnreadCounts as Any?)
-        }
-
-        // Send Notification
-        try {
-            sendPushNotificationToParticipants(channel, newMessage)
-        } catch (e: Exception) {
-            println("Error triggering notifications: ${e.message}")
-        }
-    }
-
-    private suspend fun sendPushNotificationToParticipants(channel: ChatChannel, message: ChatMessage) {
-        val currentUserId = authRepository.getCurrentUserId() ?: return
-        val otherParticipants = channel.participantIds.filter { it != currentUserId }
-        
-        println("Sending notifications to participants: $otherParticipants")
-        for (participantId in otherParticipants) {
-            val user = authRepository.getUser(participantId)
-            val token = user?.fcmToken
-            println("Participant $participantId token: ${token?.take(10)}...")
-            if (token != null) {
-                val success = fcmService.sendNotification(
-                    token = token,
-                    title = message.senderName,
-                    body = message.text
-                )
-                println("Notification sent to $participantId: $success")
-            } else {
-                println("Skipping notification for $participantId: No token found")
-            }
         }
     }
 

@@ -262,7 +262,7 @@ fun ChannelItem(
             // Online status indicator
             val isOnline = remember(otherUser?.lastActive, now) {
                 val lastActive = otherUser?.lastActive ?: 0L
-                lastActive != 0L && (now - lastActive < 10000)
+                lastActive != 0L && (now - lastActive < 30000)
             }
             
             Box(

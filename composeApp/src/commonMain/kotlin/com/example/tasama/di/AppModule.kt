@@ -43,7 +43,7 @@ val appModule = module {
     }
 
     single<ChatRepository> {
-        FirebaseChatRepository(get(), get())
+        FirebaseChatRepository(get())
     }
 
     single<AIChatRepository> {

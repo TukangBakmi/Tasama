@@ -135,6 +135,7 @@ fun MainScreen(
 
                             val pagerState = rememberPagerState(pageCount = { items.size })
                             val hasPartner by viewModel.hasPartner.collectAsState()
+                            val unreadCount by viewModel.unreadChannelsCount.collectAsState()
                             val lifecycleOwner = LocalLifecycleOwner.current
 
                             LaunchedEffect(lifecycleOwner) {
@@ -200,7 +201,24 @@ fun MainScreen(
                                                                     pagerState.animateScrollToPage(index)
                                                                 }
                                                             },
-                                                            icon = { Text(item.emoji) },
+                                                            icon = {
+                                                                if (item == BottomNavItem.Chat && unreadCount > 0) {
+                                                                    BadgedBox(
+                                                                        badge = {
+                                                                            Badge(
+                                                                                containerColor = MaterialTheme.colorScheme.primary,
+                                                                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                                                            ) {
+                                                                                Text(unreadCount.toString())
+                                                                            }
+                                                                        }
+                                                                    ) {
+                                                                        Text(item.emoji)
+                                                                    }
+                                                                } else {
+                                                                    Text(item.emoji)
+                                                                }
+                                                            },
                                                             label = { Text(item.title) }
                                                         )
                                                     }

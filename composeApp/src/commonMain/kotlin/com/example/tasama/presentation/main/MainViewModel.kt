@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -21,10 +23,23 @@ sealed class AuthState {
 
 class MainViewModel(
     private val authRepository: AuthRepository,
+    private val chatRepository: ChatRepository,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+
+    val unreadChannelsCount: StateFlow<Int> = combine(
+        authRepository.userId,
+        chatRepository.getChannels()
+    ) { userId, channels ->
+        if (userId == null) 0
+        else {
+            channels.count { channel ->
+                (channel.unreadCounts[userId] ?: 0) > 0
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val authState: StateFlow<AuthState> = authRepository.userId

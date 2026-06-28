@@ -16,6 +16,9 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <receiver android:name=".service.NotificationReplyReceiver"    android:exported="false" />
+        <receiver android:name=".service.NotificationMarkReadReceiver" android:exported="false" />
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_api_key" />
@@ -53,7 +56,7 @@
             android:name=".service.TasamaMessagingService"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.messaging.EVENT" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
     </application>

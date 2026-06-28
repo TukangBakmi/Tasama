@@ -3,6 +3,7 @@ package com.example.tasama
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.os.Build
 import com.example.tasama.di.initKoin
 import org.koin.android.ext.koin.androidContext
@@ -11,6 +12,11 @@ import org.koin.android.ext.koin.androidLogger
 class TasamaApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        val intent = Intent("com.google.firebase.MESSAGING_EVENT")
+        intent.setPackage(packageName)
+        val resolved = packageManager.resolveService(intent, 0)
+        android.util.Log.d("TasamaFCM", "FCM Service resolved: $resolved")
         
         createNotificationChannel()
 

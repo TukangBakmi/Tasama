@@ -45,6 +45,7 @@ kotlin {
             implementation(libs.play.services.location)
             implementation(libs.google.maps.compose)
             implementation(libs.google.maps)
+            implementation(libs.firebase.messaging.android)
         }
         commonMain.dependencies {
             implementation(libs.filekit.compose)

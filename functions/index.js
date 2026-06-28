@@ -34,10 +34,6 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
 
                 const payload = {
                     token: token,
-                    notification: {
-                        title: senderName,
-                        body: message.text || "New message",
-                    },
                     data: {
                         channelId: channelId,
                         messageId: messageId,
@@ -46,17 +42,11 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
                         sender_photo: senderPhoto || "",
                         sender_avatar: senderAvatar || "",
                         type: "NEW_MESSAGE",
-                        // This allows the app to know it should show 'Reply'/'Mark as Read'
-                        click_action: "FLUTTER_NOTIFICATION_CLICK",
+                        title: senderName,
+                        body: message.text || "New message",
                     },
                     android: {
                         priority: "high",
-                        notification: {
-                            channelId: "chat_messages", // Important for Android Reply actions
-                            icon: "stock_ticker_update",
-                            color: "#075E54", // WhatsApp-like green
-                            sound: "default",
-                        }
                     },
                     apns: {
                         payload: {

@@ -46,6 +46,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+            android.util.Log.d("TasamaFCM", "Current token: $token")
+        }
+
         askPermissions()
 
         initialChannelId = intent.getStringExtra("channelId")

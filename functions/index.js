@@ -30,7 +30,7 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
             const tasks = recipients.map(async (uid) => {
                 const userDoc = await admin.firestore().collection("users").doc(uid).get();
                 const token = userDoc.data()?.fcmToken;
-                if (!token) return null;
+                if (!token || token.trim() === "") return null;
 
                 const payload = {
                     token: token,
@@ -61,7 +61,15 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
 
                 return admin.messaging().send(payload)
                     .then(() => console.log(`Sent to ${uid}`))
-                    .catch(err => console.error(`Error:`, err));
+                    .catch(async (err) => {
+                        console.error(`Error sending to ${uid}:`, err);
+                        // If token is invalid/expired, remove it
+                        if (err.code === "messaging/registration-token-not-registered" ||
+                            err.code === "messaging/invalid-registration-token") {
+                            console.log(`Cleaning up invalid token for ${uid}`);
+                            await admin.firestore().collection("users").doc(uid).update({ fcmToken: admin.firestore.FieldValue.delete() });
+                        }
+                    });
             });
 
             await Promise.all(tasks);

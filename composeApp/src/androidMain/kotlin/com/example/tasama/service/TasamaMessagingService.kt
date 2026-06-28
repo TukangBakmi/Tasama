@@ -3,86 +3,111 @@ package com.example.tasama.service
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
+
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import androidx.core.content.LocusIdCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+
 import coil3.ImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
+
 import com.example.tasama.MainActivity
 import com.example.tasama.R
 import com.example.tasama.domain.repository.AuthRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
+import kotlin.math.abs
 
 class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
     private val authRepository: AuthRepository by inject()
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private val scope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
+        const val CHANNEL_ID = "chat_messages"
         const val REPLY_KEY = "reply_key"
-        const val NOTIF_CHANNEL_ID = "chat_messages"
     }
-
-    // ─── Token refresh ────────────────────────────────────────────────────────
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        android.util.Log.d("TasamaFCM", "New token: $token")
+
         val uid = authRepository.getCurrentUserId() ?: return
-        serviceScope.launch {
-            runCatching { authRepository.updateFcmToken(uid, token) }
-                .onFailure { android.util.Log.e("TasamaFCM", "Token update failed", it) }
+
+        scope.launch {
+            runCatching {
+                authRepository.updateFcmToken(uid, token)
+            }
         }
     }
-
-    // ─── Incoming message ─────────────────────────────────────────────────────
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        android.util.Log.d("TasamaFCM", "=== onMessageReceived CALLED ===")
 
         val data = message.data
-        val senderName   = data["sender_name"] ?: data["title"] ?: "Someone"
-        val body         = data["body"] ?: message.notification?.body ?: return
-        val chatId       = data["channelId"] ?: run {
-            android.util.Log.e("TasamaFCM", "❌ channelId missing")
-            return
-        }
-        val senderId     = data["senderId"] ?: senderName
-        val senderPhoto  = data["sender_photo"]?.takeIf { it.isNotEmpty() }
-        val senderAvatar = data["sender_avatar"]?.takeIf { it.isNotEmpty() }
 
-        // Show notification directly on IO — no coroutine delay
-        serviceScope.launch(Dispatchers.IO) {
+        val senderName =
+            data["sender_name"]
+                ?: data["title"]
+                ?: "Unknown"
+
+        val senderId =
+            data["senderId"]
+                ?: senderName
+
+        val body =
+            data["body"]
+                ?: message.notification?.body
+                ?: return
+
+        val chatId =
+            data["channelId"]
+                ?: return
+
+        val senderPhoto =
+            data["sender_photo"]
+
+        val senderAvatar =
+            data["sender_avatar"]
+
+        scope.launch {
             showMessagingNotification(
-                chatId       = chatId,
-                senderId     = senderId,
-                senderName   = senderName,
-                body         = body,
-                senderPhoto  = senderPhoto,
-                senderAvatar = senderAvatar,
+                chatId = chatId,
+                senderId = senderId,
+                senderName = senderName,
+                body = body,
+                senderPhoto = senderPhoto,
+                senderAvatar = senderAvatar
             )
         }
     }
-
-    // ─── Core notification builder ────────────────────────────────────────────
 
     private suspend fun showMessagingNotification(
         chatId: String,
@@ -90,164 +115,326 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         senderName: String,
         body: String,
         senderPhoto: String?,
-        senderAvatar: String?,
+        senderAvatar: String?
     ) {
-        val notifManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        ensureChannel(notifManager)
 
-        val notifId = chatId.hashCode()
-        val me = Person.Builder().setName("You").build()
+        val manager =
+            getSystemService(NOTIFICATION_SERVICE)
+                    as NotificationManager
+
+        ensureChannel(manager)
+
+        val me = Person.Builder()
+            .setName("You")
+            .setKey(authRepository.getCurrentUserId())
+            .build()
+
         val sender = Person.Builder()
             .setName(senderName)
             .setKey(senderId)
-            // No icon yet — post immediately first
+            .setIcon(
+                resolvePersonIcon(
+                    senderPhoto,
+                    senderAvatar,
+                    senderName
+                )
+            )
             .build()
 
-        val style = notifManager.activeNotifications
-            .find { it.id == notifId }
-            ?.notification
-            ?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }
-            ?: NotificationCompat.MessagingStyle(me)
+        val style =
+            manager.activeNotifications
+                .firstOrNull {
+                    it.id == chatId.hashCode()
+                }
+                ?.notification
+                ?.let {
+                    NotificationCompat.MessagingStyle
+                        .extractMessagingStyleFromNotification(it)
+                }
+                ?: NotificationCompat.MessagingStyle(me)
+
+        style.setGroupConversation(false)
 
         style.addMessage(
             NotificationCompat.MessagingStyle.Message(
                 body,
                 System.currentTimeMillis(),
-                sender,
+                sender
             )
         )
 
-        // ── Post immediately without avatar ──────────────────────────────────────
-        postNotification(notifManager, notifId, chatId, style, largeIcon = null)
+        createConversationShortcut(
+            chatId,
+            senderName,
+            sender
+        )
 
-        // ── Load avatar in background and update ─────────────────────────────────
-        val bitmap = senderPhoto?.let { loadBitmap(it) }
-        if (bitmap != null) {
-            postNotification(notifManager, notifId, chatId, style, largeIcon = bitmap)
-        }
+        postNotification(
+            manager = manager,
+            notificationId = chatId.hashCode(),
+            chatId = chatId,
+            sender = sender,
+            style = style
+        )
     }
 
     private fun postNotification(
-        notifManager: NotificationManager,
-        notifId: Int,
+        manager: NotificationManager,
+        notificationId: Int,
         chatId: String,
-        style: NotificationCompat.MessagingStyle,
-        largeIcon: Bitmap?,
+        sender: Person,
+        style: NotificationCompat.MessagingStyle
     ) {
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("channelId", chatId)
+        }
+
         val contentIntent = PendingIntent.getActivity(
             this,
-            notifId,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra("channelId", chatId)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            notificationId,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setStyle(style)
-            .setLargeIcon(largeIcon)
-            .setContentIntent(contentIntent)
-            .addAction(buildReplyAction(chatId, notifId))
-            .addAction(buildMarkReadAction(chatId, notifId))
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setGroup(chatId)
-            .setOnlyAlertOnce(true) // ← true so avatar update doesn't re-ring
-            .build()
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setStyle(style)
+            .setContentIntent(contentIntent)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .setShortcutId(chatId)
+            .addPerson(sender)
+            .addAction(buildReplyAction(chatId, notificationId))
+            .addAction(buildMarkReadAction(chatId, notificationId))
 
-        notifManager.notify(notifId, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setLocusId(LocusIdCompat(chatId))
+        }
+
+        manager.notify(notificationId, builder.build())
     }
 
-    // ─── Reply action ─────────────────────────────────────────────────────────
+    private fun createConversationShortcut(
+        chatId: String,
+        senderName: String,
+        sender: Person
+    ) {
 
-    private fun buildReplyAction(chatId: String, notifId: Int): NotificationCompat.Action {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra("channelId", chatId)
+        }
+
+        val shortcut = ShortcutInfoCompat.Builder(this, chatId)
+            .setShortLabel(senderName)
+            .setLongLived(true)
+            .setIntent(intent)
+            .setPerson(sender)
+            .build()
+
+        ShortcutManagerCompat.pushDynamicShortcut(
+            this,
+            shortcut
+        )
+    }
+
+    private fun buildReplyAction(
+        chatId: String,
+        notificationId: Int
+    ): NotificationCompat.Action {
+
         val remoteInput = RemoteInput.Builder(REPLY_KEY)
             .setLabel("Reply")
             .build()
 
         val replyIntent = PendingIntent.getBroadcast(
             this,
-            notifId,
+            notificationId,
             Intent(this, NotificationReplyReceiver::class.java).apply {
                 putExtra("channelId", chatId)
-                putExtra("notifId", notifId)
+                putExtra("notifId", notificationId)
             },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
-        return NotificationCompat.Action.Builder(0, "Reply", replyIntent)
+        return NotificationCompat.Action.Builder(
+            0,
+            "Reply",
+            replyIntent
+        )
             .addRemoteInput(remoteInput)
             .setAllowGeneratedReplies(true)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
             .build()
     }
 
-    // ─── Mark as read action ──────────────────────────────────────────────────
+    private fun buildMarkReadAction(
+        chatId: String,
+        notificationId: Int
+    ): NotificationCompat.Action {
 
-    private fun buildMarkReadAction(chatId: String, notifId: Int): NotificationCompat.Action {
         val intent = PendingIntent.getBroadcast(
             this,
-            notifId + 1,
+            notificationId + 100,
             Intent(this, NotificationMarkReadReceiver::class.java).apply {
                 putExtra("channelId", chatId)
-                putExtra("notifId", notifId)
+                putExtra("notifId", notificationId)
             },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Action.Builder(0, "Mark as read", intent).build()
+        return NotificationCompat.Action.Builder(
+            0,
+            "Mark as read",
+            intent
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .build()
     }
-
-    // ─── Channel setup ────────────────────────────────────────────────────────
 
     private fun ensureChannel(manager: NotificationManager) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        if (manager.getNotificationChannel(NOTIF_CHANNEL_ID) != null) return
 
-        manager.createNotificationChannel(
-            NotificationChannel(
-                NOTIF_CHANNEL_ID,
-                "Chat Messages",
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = "Notifications for new chat messages"
-                enableVibration(true)
-                setShowBadge(true)
+        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Chat Messages",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Tasama Chat Notifications"
+
+            enableLights(true)
+            enableVibration(true)
+            setShowBadge(true)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                setConversationId(CHANNEL_ID, CHANNEL_ID)
             }
-        )
+        }
+
+        manager.createNotificationChannel(channel)
     }
 
-    // ─── Avatar helpers ───────────────────────────────────────────────────────
+    private suspend fun resolvePersonIcon(
+        photoUrl: String?,
+        avatar: String?,
+        senderName: String
+    ): IconCompat {
 
-    private suspend fun resolvePersonIcon(photoUrl: String?, avatar: String?): IconCompat? {
-        photoUrl?.let { url ->
-            loadBitmap(url)?.let { return IconCompat.createWithAdaptiveBitmap(it) }
+        photoUrl?.let {
+            loadBitmap(it)?.let { bitmap ->
+                return IconCompat.createWithBitmap(bitmap)
+            }
         }
-        avatar?.let { name ->
-            val resName = name.lowercase().replace("_", "")
-            val resId = resources.getIdentifier(resName, "drawable", packageName)
-            if (resId != 0) return IconCompat.createWithResource(this, resId)
-        }
-        return null
-    }
 
-    private suspend fun loadBitmap(url: String): Bitmap? = withContext(Dispatchers.IO) {
-        runCatching {
-            val result = ImageLoader(this@TasamaMessagingService).execute(
-                ImageRequest.Builder(this@TasamaMessagingService)
-                    .data(url)
-                    .allowHardware(false)
-                    .build()
+        avatar?.let {
+            val resId = resources.getIdentifier(
+                it.lowercase().replace("_", ""),
+                "drawable",
+                packageName
             )
-            (result as? SuccessResult)
-                ?.image
-                ?.asDrawable(resources)
-                ?.let { it as? BitmapDrawable }
-                ?.bitmap
+
+            if (resId != 0) {
+                return IconCompat.createWithResource(this, resId)
+            }
+        }
+
+        // Fallback ke inisial
+        return IconCompat.createWithBitmap(createInitialAvatar(senderName))
+    }
+
+    private fun createInitialAvatar(name: String): Bitmap {
+
+        val size = 128
+
+        val bitmap = createBitmap(size, size)
+        val canvas = Canvas(bitmap)
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Warna dibuat konsisten berdasarkan nama
+        val colors = listOf(
+            "#F44336".toColorInt(),
+            "#E91E63".toColorInt(),
+            "#9C27B0".toColorInt(),
+            "#3F51B5".toColorInt(),
+            "#2196F3".toColorInt(),
+            "#009688".toColorInt(),
+            "#4CAF50".toColorInt(),
+            "#FF9800".toColorInt()
+        )
+
+        paint.color = colors[abs(name.hashCode()) % colors.size]
+
+        canvas.drawCircle(
+            size / 2f,
+            size / 2f,
+            size / 2f,
+            paint
+        )
+
+        val initial = name
+            .trim()
+            .firstOrNull()
+            ?.uppercase()
+            ?: "?"
+
+        paint.color = Color.WHITE
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = size * 0.45f
+        paint.typeface = Typeface.DEFAULT_BOLD
+
+        val y = size / 2f - (paint.descent() + paint.ascent()) / 2
+
+        canvas.drawText(
+            initial,
+            size / 2f,
+            y,
+            paint
+        )
+
+        return bitmap
+    }
+
+    private suspend fun loadBitmap(
+        url: String
+    ): Bitmap? = withContext(Dispatchers.IO) {
+
+        runCatching {
+
+            val loader = ImageLoader(this@TasamaMessagingService)
+
+            val request = ImageRequest.Builder(this@TasamaMessagingService)
+                .data(url)
+                .allowHardware(false)
+                .build()
+
+            val result = loader.execute(request)
+
+            if (result is SuccessResult) {
+
+                return@withContext result.image
+                    .asDrawable(resources)
+                    .let { drawable ->
+                        (drawable as BitmapDrawable).bitmap
+                    }
+            }
+
+            null
+
         }.getOrElse {
-            android.util.Log.e("TasamaFCM", "Bitmap load failed: $url", it)
+
+            android.util.Log.e(
+                "TasamaFCM",
+                "Failed loading avatar",
+                it
+            )
+
             null
         }
     }

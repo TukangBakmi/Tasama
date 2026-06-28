@@ -71,6 +71,10 @@ class FirebaseAuthRepository : AuthRepository {
     }
 
     override suspend fun signOut() {
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            updateFcmToken(uid, null)
+        }
         auth.signOut()
     }
 

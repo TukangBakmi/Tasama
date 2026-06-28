@@ -18,6 +18,7 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
             const senderData = senderDoc.data();
             const senderName = senderData?.displayName || message.senderName || "Someone";
             const senderPhoto = senderData?.profilePictureUrl || null;
+            const senderAvatar = senderData?.avatar || null;
 
             // 2. Get the channel to find recipients
             const channelDoc = await admin.firestore().collection("chat_channels").doc(channelId).get();
@@ -36,12 +37,14 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
                     notification: {
                         title: senderName,
                         body: message.text || "New message",
-                        image: senderPhoto, // Show profile picture/image if available
                     },
                     data: {
                         channelId: channelId,
                         messageId: messageId,
                         senderId: senderId,
+                        sender_name: senderName,
+                        sender_photo: senderPhoto || "",
+                        sender_avatar: senderAvatar || "",
                         type: "NEW_MESSAGE",
                         // This allows the app to know it should show 'Reply'/'Mark as Read'
                         click_action: "FLUTTER_NOTIFICATION_CLICK",

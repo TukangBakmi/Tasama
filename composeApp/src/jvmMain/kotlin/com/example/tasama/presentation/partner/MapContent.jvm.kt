@@ -13,6 +13,7 @@ import com.example.tasama.domain.model.User
 @Composable
 actual fun MapContent(
     modifier: Modifier,
+    currentUser: User?,
     partner: User?
 ) {
     Box(

@@ -61,6 +61,7 @@ fun PartnerScreen(
                 uiState.isGuest -> GuestPartnerContent(onLogin = viewModel::logout)
                 uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 uiState.isLinked -> PartnerMapContent(
+                    currentUser = uiState.currentUser,
                     partner = uiState.partner,
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
                     onEditAnniversary = { showDatePicker = true }
@@ -213,9 +214,13 @@ fun LinkingContent(
 }
 
 @Composable
-fun PartnerMapContent(partner: User?, anniversaryDate: Long?, onEditAnniversary: () -> Unit) {
+fun PartnerMapContent(currentUser: User?, partner: User?, anniversaryDate: Long?, onEditAnniversary: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
-        MapContent(modifier = Modifier.fillMaxSize(), partner = partner)
+        MapContent(
+            modifier = Modifier.fillMaxSize(),
+            currentUser = currentUser,
+            partner = partner
+        )
 
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth(),

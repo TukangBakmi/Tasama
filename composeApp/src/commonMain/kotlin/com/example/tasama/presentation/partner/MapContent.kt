@@ -7,5 +7,6 @@ import com.example.tasama.domain.model.User
 @Composable
 expect fun MapContent(
     modifier: Modifier = Modifier,
+    currentUser: User?,
     partner: User?
 )

@@ -267,19 +267,11 @@ fun ChannelItem(
             
             Box(
                 modifier = Modifier
-                    .size(12.dp)
+                    .size(14.dp)
                     .align(Alignment.BottomEnd)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(2.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .background(if (isOnline) Color(0xFF4CAF50) else Color.Gray)
-                )
-            }
+                    .background(if (isOnline) Color(0xFF4CAF50) else Color.Gray)
+            )
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

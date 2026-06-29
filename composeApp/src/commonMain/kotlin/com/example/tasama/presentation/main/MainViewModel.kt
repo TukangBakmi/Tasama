@@ -65,6 +65,17 @@ class MainViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val hasPendingPartnerRequest: StateFlow<Boolean> = authRepository.userId
+        .flatMapLatest { uid ->
+            if (uid != null) {
+                authRepository.getUserFlow(uid).map { it?.partnerRequestFrom != null }
+            } else {
+                flow { emit(false) }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun updateActiveStatus() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {

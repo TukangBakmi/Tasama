@@ -11,6 +11,9 @@ data class User(
     val avatarUrl: String? = null,
     val fcmToken: String? = null,
     val partnerId: String? = null,
+    val partnerRequestFrom: String? = null, // UID of user who sent a request
+    val partnerRequestTo: String? = null,   // UID of user to whom request was sent
+    val anniversaryDate: Long? = null,      // Anniversary timestamp
     val latitude: Double? = null,
     val longitude: Double? = null,
     val lastLocationUpdate: Long? = null,

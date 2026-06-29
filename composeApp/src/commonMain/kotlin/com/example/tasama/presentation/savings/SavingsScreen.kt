@@ -2,6 +2,7 @@ package com.example.tasama.presentation.savings
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -327,6 +328,7 @@ fun SavingsGoalItem(
                                     modifier = Modifier
                                         .size(24.dp)
                                         .offset(x = (index * -8).dp)
+                                        .border(1.5.dp, Color.White, CircleShape)
                                         .background(
                                             MaterialTheme.colorScheme.secondary,
                                             CircleShape

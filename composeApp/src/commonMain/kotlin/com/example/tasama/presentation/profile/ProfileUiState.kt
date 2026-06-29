@@ -17,5 +17,6 @@ data class ProfileUiState(
     val isLoading: Boolean = false,
     val isUpdating: Boolean = false,
     val error: String? = null,
-    val isGuest: Boolean = false
+    val isGuest: Boolean = false,
+    val hasPendingRequest: Boolean = false
 )

@@ -60,7 +60,8 @@ class ProfileViewModel(
                             partnerId = partnerId,
                             partnerName = partnerName,
                             isLoading = false,
-                            isGuest = isGuest
+                            isGuest = isGuest,
+                            hasPendingRequest = user?.partnerRequestFrom != null
                         )
                     }
                 } else {
@@ -93,7 +94,7 @@ class ProfileViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val result = authRepository.linkPartner(uid, partnerShortId)
+            val result = authRepository.sendPartnerRequest(uid, partnerShortId)
             if (result.isSuccess) {
                 _uiState.update { it.copy(exportMessage = "Partner linked successfully") }
             } else {

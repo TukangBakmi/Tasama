@@ -223,7 +223,7 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun linkPartner(uid: String, partnerShortId: String): Result<Unit> {
+    override suspend fun sendPartnerRequest(uid: String, partnerShortId: String): Result<Unit> {
         return try {
             val partnerUid = getUserIdFromShortId(partnerShortId)
                 ?: return Result.failure(Exception("Partner not found"))
@@ -232,8 +232,70 @@ class FirebaseAuthRepository : AuthRepository {
                 return Result.failure(Exception("You cannot link with yourself"))
             }
 
-            firestore.collection("users").document(uid).updateFields { "partnerId" to partnerUid }
-            firestore.collection("users").document(partnerUid).updateFields { "partnerId" to uid }
+            // Check if partner is already linked or has a pending request
+            val partner = getUser(partnerUid) ?: return Result.failure(Exception("Partner not found"))
+            if (partner.partnerId != null) return Result.failure(Exception("This user already has a partner"))
+            if (partner.partnerRequestFrom != null) return Result.failure(Exception("This user already has a pending request"))
+
+            // Update sender
+            firestore.collection("users").document(uid).updateFields {
+                "partnerRequestTo" to partnerUid
+            }
+            // Update recipient
+            firestore.collection("users").document(partnerUid).updateFields {
+                "partnerRequestFrom" to uid
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun acceptPartnerRequest(uid: String, anniversaryDate: Long): Result<Unit> {
+        return try {
+            val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            val partnerUid = user.partnerRequestFrom ?: return Result.failure(Exception("No pending request"))
+
+            // Link both users
+            firestore.collection("users").document(uid).updateFields {
+                "partnerId" to partnerUid
+                "anniversaryDate" to anniversaryDate
+                "partnerRequestFrom" to null
+            }
+            firestore.collection("users").document(partnerUid).updateFields {
+                "partnerId" to uid
+                "anniversaryDate" to anniversaryDate
+                "partnerRequestTo" to null
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun declinePartnerRequest(uid: String): Result<Unit> {
+        return try {
+            val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            val partnerUid = user.partnerRequestFrom ?: return Result.failure(Exception("No pending request"))
+
+            firestore.collection("users").document(uid).updateFields { "partnerRequestFrom" to null }
+            firestore.collection("users").document(partnerUid).updateFields { "partnerRequestTo" to null }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun cancelPartnerRequest(uid: String): Result<Unit> {
+        return try {
+            val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            val partnerUid = user.partnerRequestTo ?: return Result.failure(Exception("No pending request"))
+
+            firestore.collection("users").document(uid).updateFields { "partnerRequestTo" to null }
+            firestore.collection("users").document(partnerUid).updateFields { "partnerRequestFrom" to null }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -247,8 +309,14 @@ class FirebaseAuthRepository : AuthRepository {
             val partnerId = user.partnerId
 
             if (partnerId != null) {
-                firestore.collection("users").document(uid).updateFields { "partnerId" to null }
-                firestore.collection("users").document(partnerId).updateFields { "partnerId" to null }
+                firestore.collection("users").document(uid).updateFields { 
+                    "partnerId" to null 
+                    "anniversaryDate" to null
+                }
+                firestore.collection("users").document(partnerId).updateFields { 
+                    "partnerId" to null 
+                    "anniversaryDate" to null
+                }
             }
 
             Result.success(Unit)

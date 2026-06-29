@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
 class FirebaseChatRepository(
@@ -22,6 +23,7 @@ class FirebaseChatRepository(
 ) : ChatRepository {
     private val firestore = Firebase.firestore
     private val channelsCollection = firestore.collection("chat_channels")
+    private val repositoryScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getChannels(): Flow<List<ChatChannel>> {
@@ -47,8 +49,20 @@ class FirebaseChatRepository(
             .limit(20)
             .snapshots
             .map { snapshot ->
-                snapshot.documents.map {
-                    val msg = it.data(ChatMessage.serializer())
+                snapshot.documents.map { doc ->
+                    val msg = doc.data(ChatMessage.serializer())
+                    
+                    // Auto-update SENT messages to DELIVERED when fetched by recipient
+                    if (msg.userId != currentUserId && msg.status == MessageStatus.SENT) {
+                        repositoryScope.launch {
+                            try {
+                                doc.reference.updateFields {
+                                    "status" to MessageStatus.DELIVERED.name
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+
                     msg.copy(isFromMe = msg.userId == currentUserId)
                 }
                 .sortedBy { it.timestamp }
@@ -141,8 +155,6 @@ class FirebaseChatRepository(
         channelRef.updateFields { "unreadCounts" to newUnreadCounts }
         
         // Also mark all messages in this channel as read for this user
-        // Firestore doesn't support multiple inequality filters on different fields.
-        // We filter by userId and then check status in code.
         val messages = channelRef.collection("messages")
             .where { "userId" notEqualTo userId }
             .get()
@@ -152,7 +164,7 @@ class FirebaseChatRepository(
             val msg = doc.data(ChatMessage.serializer())
             if (
                 msg.userId != userId &&
-                msg.status == MessageStatus.DELIVERED
+                (msg.status == MessageStatus.DELIVERED || msg.status == MessageStatus.SENT)
             ) {
                 doc.reference.updateFields {
                     "status" to MessageStatus.READ.name

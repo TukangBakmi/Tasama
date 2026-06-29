@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Refresh
@@ -13,7 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.User
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -27,15 +31,14 @@ fun PartnerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
 
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState()
+
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             viewModel.clearError()
             snackbarHostState.showSnackbar(error)
         }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.refresh()
     }
 
     Scaffold(
@@ -54,14 +57,57 @@ fun PartnerScreen(
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            if (uiState.isGuest) {
-                GuestPartnerContent(onLogin = viewModel::logout)
-            } else if (!uiState.isLinked) {
-                NotLinkedContent()
-            } else if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else {
-                PartnerMapContent(uiState.partner)
+            when {
+                uiState.isGuest -> GuestPartnerContent(onLogin = viewModel::logout)
+                uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                uiState.isLinked -> PartnerMapContent(uiState.partner, uiState.currentUser?.anniversaryDate)
+                else -> LinkingContent(
+                    uiState = uiState,
+                    onShortIdChange = viewModel::onPartnerShortIdChange,
+                    onSendRequest = viewModel::sendPartnerRequest,
+                    onAcceptRequest = { showDatePicker = true },
+                    onDeclineRequest = viewModel::declinePartnerRequest,
+                    onCancelRequest = viewModel::cancelPartnerRequest
+                )
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        viewModel.acceptPartnerRequest(it)
+                    }
+                    showDatePicker = false
+                }) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            key(datePickerState.displayMode) {
+                DatePicker(
+                    state = datePickerState,
+                    title = null,
+                    headline = {
+                        Text(
+                            text = "Select anniversary date",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .padding(start = 24.dp)
+                                .heightIn(min = 48.dp)
+                                .wrapContentHeight(Alignment.CenterVertically)
+                        )
+                    },
+                    showModeToggle = true
+                )
             }
         }
     }
@@ -88,23 +134,25 @@ fun GuestPartnerContent(onLogin: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Partner features are only available for registered users. Sign in to link with your partner and see each other's location.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            "Partner features are only available for registered users.",
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = onLogin,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Button(onClick = onLogin, modifier = Modifier.fillMaxWidth()) {
             Text("Login / Sign Up")
         }
     }
 }
 
 @Composable
-fun NotLinkedContent() {
+fun LinkingContent(
+    uiState: PartnerUiState,
+    onShortIdChange: (String) -> Unit,
+    onSendRequest: () -> Unit,
+    onAcceptRequest: () -> Unit,
+    onDeclineRequest: () -> Unit,
+    onCancelRequest: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -117,75 +165,105 @@ fun NotLinkedContent() {
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            "No Partner Linked",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "Go to Profile to link with your partner using their 12-digit ID.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
+
+        when {
+            uiState.pendingRequestFrom != null -> {
+                Text("Partner Request", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("${uiState.pendingRequestFrom.name} wants to link with you.")
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = onDeclineRequest, modifier = Modifier.weight(1f)) { Text("Decline") }
+                    Button(onClick = onAcceptRequest, modifier = Modifier.weight(1f)) { Text("Accept") }
+                }
+            }
+            uiState.pendingRequestTo != null -> {
+                Text("Request Sent", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Waiting for ${uiState.pendingRequestTo.name} to accept.")
+                Spacer(modifier = Modifier.height(24.dp))
+                OutlinedButton(onClick = onCancelRequest, modifier = Modifier.fillMaxWidth()) { Text("Cancel Request") }
+            }
+            else -> {
+                Text("Link a Partner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Enter your partner's 12-digit ID to send a request.", textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(24.dp))
+                OutlinedTextField(
+                    value = uiState.partnerShortIdInput,
+                    onValueChange = onShortIdChange,
+                    label = { Text("Partner ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = onSendRequest, modifier = Modifier.fillMaxWidth(), enabled = uiState.partnerShortIdInput.length == 12) {
+                    Text("Send Request")
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Your ID: ${uiState.currentUser?.shortId ?: "..."}", color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }
 
 @Composable
-fun PartnerMapContent(partner: User?) {
+fun PartnerMapContent(partner: User?, anniversaryDate: Long?) {
     Box(modifier = Modifier.fillMaxSize()) {
-        MapContent(
-            modifier = Modifier.fillMaxSize(),
-            partner = partner
-        )
+        MapContent(modifier = Modifier.fillMaxSize(), partner = partner)
 
-        // Partner Info Overlay
-        if (partner != null) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (anniversaryDate != null) {
+                AnniversaryBadge(anniversaryDate)
+            }
+            if (partner != null) {
+                PartnerCard(partner)
+            }
+        }
+    }
+}
+
+@Composable
+fun AnniversaryBadge(timestamp: Long) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(8.dp))
+            val date = kotlin.time.Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+            Text(
+                text = "Together since ${date.dayOfMonth} ${date.month.name.take(3)} ${date.year}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+fun PartnerCard(partner: User) {
+    Card(shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(8.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(50.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = partner.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = partner.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        val lastUpdateText = partner.lastLocationUpdate?.let {
-                            val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
-                            "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
-                        } ?: "Location unknown"
-                        
-                        Text(
-                            text = lastUpdateText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                Text(partner.name.take(1).uppercase(), style = MaterialTheme.typography.titleLarge)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(partner.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                val lastUpdateText = partner.lastLocationUpdate?.let {
+                    val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
+                    "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
+                } ?: "Location unknown"
+                Text(lastUpdateText, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

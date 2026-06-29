@@ -4,9 +4,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -136,6 +138,7 @@ fun MainScreen(
                             val pagerState = rememberPagerState(pageCount = { items.size })
                             val hasPartner by viewModel.hasPartner.collectAsState()
                             val unreadCount by viewModel.unreadChannelsCount.collectAsState()
+                            val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()
                             val lifecycleOwner = LocalLifecycleOwner.current
 
                             LaunchedEffect(lifecycleOwner) {
@@ -202,21 +205,40 @@ fun MainScreen(
                                                                 }
                                                             },
                                                             icon = {
-                                                                if (item == BottomNavItem.Chat && unreadCount > 0) {
-                                                                    BadgedBox(
-                                                                        badge = {
-                                                                            Badge(
-                                                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                                                contentColor = MaterialTheme.colorScheme.onPrimary
-                                                                            ) {
-                                                                                Text(unreadCount.toString())
+                                                                when (item) {
+                                                                    BottomNavItem.Chat if unreadCount > 0 -> {
+                                                                        BadgedBox(
+                                                                            badge = {
+                                                                                Badge(
+                                                                                    modifier = Modifier
+                                                                                        .offset(x = 4.dp, y = (-4).dp),
+                                                                                    containerColor = MaterialTheme.colorScheme.primary,
+                                                                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                                                                ) {
+                                                                                    Text(unreadCount.toString())
+                                                                                }
                                                                             }
+                                                                        ) {
+                                                                            Text(item.emoji)
                                                                         }
-                                                                    ) {
+                                                                    }
+                                                                    BottomNavItem.Partner if hasPendingRequest -> {
+                                                                        BadgedBox(
+                                                                            badge = {
+                                                                                Badge(
+                                                                                    modifier = Modifier
+                                                                                        .size(12.dp)
+                                                                                        .offset(x = 4.dp, y = (-4).dp),
+                                                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                                                )
+                                                                            }
+                                                                        ) {
+                                                                            Text(item.emoji)
+                                                                        }
+                                                                    }
+                                                                    else -> {
                                                                         Text(item.emoji)
                                                                     }
-                                                                } else {
-                                                                    Text(item.emoji)
                                                                 }
                                                             },
                                                             label = { Text(item.title) }

@@ -30,6 +30,7 @@ class NotificationReplyReceiver : BroadcastReceiver(), KoinComponent {
         scope.launch {
             try {
                 chatRepository.sendMessage(chatId, reply)
+                chatRepository.markChannelAsRead(chatId)
             } finally {
                 pendingResult.finish()
             }

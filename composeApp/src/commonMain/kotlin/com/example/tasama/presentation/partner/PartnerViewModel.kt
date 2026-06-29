@@ -148,6 +148,16 @@ class PartnerViewModel(
         }
     }
 
+    fun updateAnniversaryDate(date: Long) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            authRepository.updateAnniversaryDate(uid, date).onFailure { e ->
+                _uiState.update { it.copy(error = e.message, isLoading = false) }
+            }
+        }
+    }
+
     fun updateLocation(lat: Double, lon: Double) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {

@@ -29,4 +29,5 @@ interface AuthRepository {
     suspend fun declinePartnerRequest(uid: String): Result<Unit>
     suspend fun cancelPartnerRequest(uid: String): Result<Unit>
     suspend fun unlinkPartner(uid: String): Result<Unit>
+    suspend fun updateAnniversaryDate(uid: String, date: Long): Result<Unit>
 }

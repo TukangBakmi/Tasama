@@ -324,4 +324,24 @@ class FirebaseAuthRepository : AuthRepository {
             Result.failure(e)
         }
     }
+
+    override suspend fun updateAnniversaryDate(uid: String, date: Long): Result<Unit> {
+        return try {
+            val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            val partnerId = user.partnerId
+
+            firestore.collection("users").document(uid).updateFields {
+                "anniversaryDate" to date
+            }
+            if (partnerId != null) {
+                firestore.collection("users").document(partnerId).updateFields {
+                    "anniversaryDate" to date
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

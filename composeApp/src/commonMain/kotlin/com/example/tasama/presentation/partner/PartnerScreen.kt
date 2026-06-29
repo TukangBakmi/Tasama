@@ -17,9 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.User
 import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -60,7 +60,11 @@ fun PartnerScreen(
             when {
                 uiState.isGuest -> GuestPartnerContent(onLogin = viewModel::logout)
                 uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                uiState.isLinked -> PartnerMapContent(uiState.partner, uiState.currentUser?.anniversaryDate)
+                uiState.isLinked -> PartnerMapContent(
+                    partner = uiState.partner,
+                    anniversaryDate = uiState.currentUser?.anniversaryDate,
+                    onEditAnniversary = { showDatePicker = true }
+                )
                 else -> LinkingContent(
                     uiState = uiState,
                     onShortIdChange = viewModel::onPartnerShortIdChange,
@@ -79,7 +83,11 @@ fun PartnerScreen(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        viewModel.acceptPartnerRequest(it)
+                        if (uiState.isLinked) {
+                            viewModel.updateAnniversaryDate(it)
+                        } else {
+                            viewModel.acceptPartnerRequest(it)
+                        }
                     }
                     showDatePicker = false
                 }) {
@@ -205,7 +213,7 @@ fun LinkingContent(
 }
 
 @Composable
-fun PartnerMapContent(partner: User?, anniversaryDate: Long?) {
+fun PartnerMapContent(partner: User?, anniversaryDate: Long?, onEditAnniversary: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(modifier = Modifier.fillMaxSize(), partner = partner)
 
@@ -215,7 +223,7 @@ fun PartnerMapContent(partner: User?, anniversaryDate: Long?) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (anniversaryDate != null) {
-                AnniversaryBadge(anniversaryDate)
+                AnniversaryBadge(anniversaryDate, onClick = onEditAnniversary)
             }
             if (partner != null) {
                 PartnerCard(partner)
@@ -225,8 +233,9 @@ fun PartnerMapContent(partner: User?, anniversaryDate: Long?) {
 }
 
 @Composable
-fun AnniversaryBadge(timestamp: Long) {
+fun AnniversaryBadge(timestamp: Long, onClick: () -> Unit) {
     Surface(
+        onClick = onClick,
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -236,9 +245,9 @@ fun AnniversaryBadge(timestamp: Long) {
         ) {
             Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(8.dp))
-            val date = kotlin.time.Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val days = (Clock.System.now().toEpochMilliseconds() - timestamp) / (1000 * 60 * 60 * 24)
             Text(
-                text = "Together since ${date.dayOfMonth} ${date.month.name.take(3)} ${date.year}",
+                text = "Together for $days days",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )

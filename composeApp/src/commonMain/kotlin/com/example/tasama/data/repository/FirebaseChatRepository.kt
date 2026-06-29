@@ -150,8 +150,13 @@ class FirebaseChatRepository(
         
         messages.forEach { doc ->
             val msg = doc.data(ChatMessage.serializer())
-            if (msg.status != MessageStatus.READ) {
-                doc.reference.updateFields { "status" to MessageStatus.READ.name }
+            if (
+                msg.userId != userId &&
+                msg.status == MessageStatus.DELIVERED
+            ) {
+                doc.reference.updateFields {
+                    "status" to MessageStatus.READ.name
+                }
             }
         }
     }
@@ -172,6 +177,19 @@ class FirebaseChatRepository(
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {
         channelsCollection.document(channelId).collection("messages").document(messageId)
             .updateFields { "status" to MessageStatus.READ.name }
+    }
+
+    override suspend fun markMessageAsDelivered(
+        channelId: String,
+        messageId: String
+    ) {
+        channelsCollection
+            .document(channelId)
+            .collection("messages")
+            .document(messageId)
+            .updateFields {
+                "status" to MessageStatus.DELIVERED.name
+            }
     }
 
     override suspend fun getUserName(userId: String): String? {

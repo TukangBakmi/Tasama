@@ -42,11 +42,13 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
+import com.example.tasama.domain.repository.ChatRepository
 import kotlin.math.abs
 
 class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
     private val authRepository: AuthRepository by inject()
+    private val chatRepository: ChatRepository by inject()
 
     private val scope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -91,6 +93,10 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             data["channelId"]
                 ?: return
 
+        val messageId =
+            data["messageId"]
+                ?: return
+
         val senderPhoto =
             data["sender_photo"]
 
@@ -100,6 +106,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         scope.launch {
             showMessagingNotification(
                 chatId = chatId,
+                messageId = messageId,
                 senderId = senderId,
                 senderName = senderName,
                 body = body,
@@ -111,6 +118,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
     private suspend fun showMessagingNotification(
         chatId: String,
+        messageId: String,
         senderId: String,
         senderName: String,
         body: String,
@@ -175,6 +183,11 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             chatId = chatId,
             sender = sender,
             style = style
+        )
+
+        chatRepository.markMessageAsDelivered(
+            chatId,
+            messageId
         )
     }
 

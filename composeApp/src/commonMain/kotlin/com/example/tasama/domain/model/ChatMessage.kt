@@ -11,6 +11,7 @@ enum class MessageStatus {
 data class ChatMessage(
     val id: String = "",
     val userId: String = "",
+    val receiverId: String = "",
     val senderName: String = "",
     val text: String = "",
     val sender: MessageSender = MessageSender.USER,

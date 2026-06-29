@@ -165,6 +165,13 @@ class PartnerViewModel(
         }
     }
 
+    fun updateBatteryLevel(level: Float, isCharging: Boolean) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            authRepository.updateBatteryLevel(uid, level, isCharging)
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             authRepository.signOut()

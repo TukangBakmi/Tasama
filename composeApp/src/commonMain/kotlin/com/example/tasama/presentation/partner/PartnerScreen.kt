@@ -267,7 +267,20 @@ fun PartnerCard(partner: User) {
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(partner.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(partner.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    partner.batteryLevel?.let { level ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${(level * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (level < 0.2f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (partner.isCharging == true) {
+                            Text(" ⚡", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
                 val lastUpdateText = partner.lastLocationUpdate?.let {
                     val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
                     "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"

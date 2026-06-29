@@ -1,7 +1,10 @@
 package com.example.tasama
 
 import android.Manifest
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -51,6 +54,7 @@ class MainActivity : ComponentActivity() {
         }
 
         askPermissions()
+        startBatteryMonitoring()
 
         initialChannelId = intent.getStringExtra("channelId")
 
@@ -161,6 +165,33 @@ class MainActivity : ComponentActivity() {
         ) {
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, android.os.Looper.getMainLooper())
         }
+    }
+
+    private fun startBatteryMonitoring() {
+        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { ifilter ->
+            this.registerReceiver(null, ifilter)
+        }
+
+        batteryStatus?.let { updateBatteryInfo(it) }
+
+        val batteryReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+                updateBatteryInfo(intent)
+            }
+        }
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    }
+
+    private fun updateBatteryInfo(intent: Intent) {
+        val level: Int = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale: Int = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        val batteryPct = level / scale.toFloat()
+
+        val status: Int = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+
+        partnerViewModel.updateBatteryLevel(batteryPct, isCharging)
     }
 }
 

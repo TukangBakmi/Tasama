@@ -21,11 +21,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
+import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 import kotlin.math.*
+import coil3.compose.LocalPlatformContext
+import com.example.tasama.R
 
 private const val OFFSCREEN_VISIBLE_RATIO = 0.4f
 
@@ -80,13 +83,25 @@ actual fun MapContent(
 
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
+    val context = LocalPlatformContext.current
+    val isDarkTheme = LocalIsDarkTheme.current
+
+    val mapProperties = remember(isDarkTheme) {
+        MapProperties(
+            isMyLocationEnabled = false,
+            mapType = MapType.NORMAL,
+            mapStyleOptions = if (isDarkTheme) {
+                MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark)
+            } else null
+        )
+    }
 
     // Derived states for real-time intersection and visibility
     val markerData by remember(myLocation, partnerLocation, mapSize, cameraPositionState, density) {
         derivedStateOf {
             // Read state to trigger recomposition during camera movement
-            val cameraPos = cameraPositionState.position
-            val isMoving = cameraPositionState.isMoving
+            cameraPositionState.position
+            cameraPositionState.isMoving
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
             if (myLocation == null || partnerLocation == null || mapSize == IntSize.Zero) {
@@ -136,7 +151,7 @@ actual fun MapContent(
                         val adjustedPoint = if (len > 0) {
                             Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
                         } else center
-                        polyStart = projection.fromScreenLocation(android.graphics.Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt()))
+                        polyStart = projection.fromScreenLocation(Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt()))
                     }
                     if (!isPartnerVisible) {
                         partnerEdge = clippedPartner
@@ -151,7 +166,7 @@ actual fun MapContent(
                             Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
                         } else center
                         polyEnd = projection.fromScreenLocation(
-                            Point(center.x.toInt(), center.y.toInt())
+                            Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt())
                         )
                     }
                 } else {
@@ -181,13 +196,10 @@ actual fun MapContent(
             cameraPositionState = cameraPositionState,
             uiSettings = uiSettings,
             contentPadding = WindowInsets(0).asPaddingValues(),
-            properties = MapProperties(
-                isMyLocationEnabled = false,
-                mapType = MapType.NORMAL
-            )
+            properties = mapProperties
         ) {
             myLocation?.let {
-                val markerState = rememberMarkerState(position = it)
+                val markerState = rememberUpdatedMarkerState(position = it)
                 MarkerComposable(
                     keys = arrayOf<Any>(currentUser?.avatarUrl ?: "", currentUser?.name ?: "", it.latitude, it.longitude),
                     state = markerState,
@@ -199,7 +211,7 @@ actual fun MapContent(
             }
 
             partnerLocation?.let {
-                val markerState = rememberMarkerState(position = it)
+                val markerState = rememberUpdatedMarkerState(position = it)
                 MarkerComposable(
                     keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", it.latitude, it.longitude),
                     state = markerState,
@@ -287,7 +299,7 @@ fun OffScreenMarker(
     isMe: Boolean,
     onTap: () -> Unit
 ) {
-    val indicatorSize = with(LocalDensity.current) { 56.dp }
+    val indicatorSize = 56.dp
     val indicatorSizePx = with(LocalDensity.current) { indicatorSize.toPx() }
     val padding = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
 

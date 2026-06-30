@@ -114,6 +114,7 @@ fun ProfileScreen(
             },
             onEditName = { showEditNameDialog = true },
             onEditAvatar = { showAvatarSelectionDialog = true },
+            onDeleteAvatar = viewModel::deleteProfilePicture,
             onThemeClick = { showThemeDialog = true },
             onCurrencyClick = { showCurrencyDialog = true },
             onPartnerClick = {
@@ -147,7 +148,12 @@ fun ProfileScreen(
                     viewModel.updateProfilePicture(avatarRes)
                     showAvatarSelectionDialog = false
                 },
-                pickerLauncher = pickerLauncher
+                onDeleteAvatar = {
+                    viewModel.deleteProfilePicture()
+                    showAvatarSelectionDialog = false
+                },
+                pickerLauncher = pickerLauncher,
+                showDeleteOption = uiState.profilePictureUrl != null
             )
         }
 
@@ -254,7 +260,9 @@ fun EditNameDialog(
 fun AvatarSelectionDialog(
     onDismiss: () -> Unit,
     onAvatarSelected: (String) -> Unit,
-    pickerLauncher: PickerResultLauncher
+    onDeleteAvatar: () -> Unit,
+    pickerLauncher: PickerResultLauncher,
+    showDeleteOption: Boolean
 ) {
     val avatars = listOf(
         Res.drawable.Avatar1, Res.drawable.Avatar2, Res.drawable.Avatar3,
@@ -298,16 +306,36 @@ fun AvatarSelectionDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedButton(
-                    onClick = {
-                        onDismiss()
-                        pickerLauncher.launch()
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Pick from Gallery")
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            pickerLauncher.launch()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Gallery")
+                    }
+
+                    if (showDeleteOption) {
+                        OutlinedButton(
+                            onClick = {
+                                onDeleteAvatar()
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Delete")
+                        }
+                    }
                 }
             }
         },
@@ -411,6 +439,7 @@ fun ProfileContent(
     onCopyId: (String) -> Unit,
     onEditName: () -> Unit,
     onEditAvatar: () -> Unit,
+    onDeleteAvatar: () -> Unit,
     onThemeClick: () -> Unit,
     onCurrencyClick: () -> Unit,
     onPartnerClick: () -> Unit,
@@ -746,6 +775,7 @@ fun ProfilePreview() {
             onCopyId = {},
             onEditName = {},
             onEditAvatar = {},
+            onDeleteAvatar = {},
             onThemeClick = {},
             onCurrencyClick = {},
             onPartnerClick = {}

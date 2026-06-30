@@ -177,7 +177,7 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun updateProfilePicture(uid: String, url: String) {
+    override suspend fun updateProfilePicture(uid: String, url: String?) {
         try {
             firestore.collection("users")
                 .document(uid)

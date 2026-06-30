@@ -123,7 +123,11 @@ fun ChatListScreen(
                     } else {
                         items(uiState.channels, key = { it.id }) { channel ->
                             var showMenu by remember { mutableStateOf(false) }
-                            val otherUserId = channel.participantIds.find { it != viewModel.currentUserId }
+                            val currentUid = viewModel.currentUserId
+                            val otherUserId = if (currentUid != null) {
+                                channel.participantIds.find { it != currentUid }
+                            } else null
+
                             val otherUser = otherUserId?.let { uiState.channelUsers[it] }
 
                             Box {
@@ -253,7 +257,7 @@ fun ChannelItem(
             UserAvatar(
                 user = otherUser,
                 modifier = Modifier.fillMaxSize(),
-                fallbackName = otherUser?.name
+                fallbackName = otherUser?.name ?: channel.participantNames.filterKeys { it != currentUserId }.values.firstOrNull()
             )
             
             // Online status indicator

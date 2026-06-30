@@ -20,7 +20,7 @@ interface AuthRepository {
     suspend fun getUser(uid: String): User?
     fun getUserFlow(uid: String): Flow<User?>
     suspend fun uploadProfilePicture(uid: String, bytes: ByteArray): String
-    suspend fun updateProfilePicture(uid: String, url: String)
+    suspend fun updateProfilePicture(uid: String, url: String?)
     suspend fun updateDisplayName(uid: String, name: String)
     suspend fun updateLocation(uid: String, lat: Double, lon: Double)
     suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean)

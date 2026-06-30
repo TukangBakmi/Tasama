@@ -126,13 +126,17 @@ class ProfileViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    fun updateProfilePicture(url: String) {
+    fun updateProfilePicture(url: String?) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateProfilePicture(uid, url)
             _uiState.update { it.copy(isUpdating = false) }
         }
+    }
+
+    fun deleteProfilePicture() {
+        updateProfilePicture(null)
     }
 
     fun uploadProfilePicture(file: PlatformFile) {

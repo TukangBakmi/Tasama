@@ -1,7 +1,7 @@
 package com.example.tasama.presentation.partner
 
+import android.graphics.Point
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -10,11 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -27,9 +25,9 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
-import tasama.composeapp.generated.resources.*
 import kotlin.math.*
+
+private const val OFFSCREEN_VISIBLE_RATIO = 0.4f
 
 @Composable
 actual fun MapContent(
@@ -37,6 +35,11 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?
 ) {
+    val density = LocalDensity.current
+    val indicatorSizePx = with(density) { 56.dp.toPx() }
+    val paddingPx = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
+    val radiusPx = indicatorSizePx / 2
+
     val myLocation = remember(currentUser?.latitude, currentUser?.longitude) {
         if (currentUser?.latitude != null && currentUser.longitude != null) {
             LatLng(currentUser.latitude, currentUser.longitude)
@@ -79,7 +82,7 @@ actual fun MapContent(
     val scope = rememberCoroutineScope()
 
     // Derived states for real-time intersection and visibility
-    val markerData by remember(myLocation, partnerLocation, mapSize, cameraPositionState) {
+    val markerData by remember(myLocation, partnerLocation, mapSize, cameraPositionState, density) {
         derivedStateOf {
             // Read state to trigger recomposition during camera movement
             val cameraPos = cameraPositionState.position
@@ -98,15 +101,15 @@ actual fun MapContent(
 
             // Buffer to determine visibility and avoid edge flickering
             val buffer = 5f
-            
+
             // Check visibility using screen coordinates AND visible region (crucial for tilted maps)
-            val isMeVisible = pMe.x in buffer..width - buffer && 
-                              pMe.y in buffer..height - buffer &&
-                              projection.visibleRegion.latLngBounds.contains(myLocation)
-            
-            val isPartnerVisible = pPartner.x in buffer..width - buffer && 
-                                   pPartner.y in buffer..height - buffer &&
-                                   projection.visibleRegion.latLngBounds.contains(partnerLocation)
+            val isMeVisible = pMe.x in buffer..width - buffer &&
+                    pMe.y in buffer..height - buffer &&
+                    projection.visibleRegion.latLngBounds.contains(myLocation)
+
+            val isPartnerVisible = pPartner.x in buffer..width - buffer &&
+                    pPartner.y in buffer..height - buffer &&
+                    projection.visibleRegion.latLngBounds.contains(partnerLocation)
 
             // Calculate intersection points for the polyline and off-screen markers
             var myEdge: Offset? = null
@@ -117,17 +120,39 @@ actual fun MapContent(
 
             if (!isMeVisible || !isPartnerVisible) {
                 val intersections = clipSegmentToRect(pMe, pPartner, width, height)
-                
+
                 if (intersections != null) {
                     val (clippedMe, clippedPartner) = intersections
-                    
+
                     if (!isMeVisible) {
                         myEdge = clippedMe
-                        polyStart = projection.fromScreenLocation(android.graphics.Point(clippedMe.x.toInt(), clippedMe.y.toInt()))
+                        // Calculate marker center (clamped) and adjust polyline start to circle edge
+                        val finalX = clippedMe.x.coerceIn(paddingPx, width - paddingPx)
+                        val finalY = clippedMe.y.coerceIn(paddingPx, height - paddingPx)
+                        val center = Offset(finalX, finalY)
+                        val dx = pPartner.x - center.x
+                        val dy = pPartner.y - center.y
+                        val len = sqrt(dx * dx + dy * dy)
+                        val adjustedPoint = if (len > 0) {
+                            Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
+                        } else center
+                        polyStart = projection.fromScreenLocation(android.graphics.Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt()))
                     }
                     if (!isPartnerVisible) {
                         partnerEdge = clippedPartner
-                        polyEnd = projection.fromScreenLocation(android.graphics.Point(clippedPartner.x.toInt(), clippedPartner.y.toInt()))
+                        // Calculate marker center (clamped) and adjust polyline end to circle edge
+                        val finalX = clippedPartner.x.coerceIn(paddingPx, width - paddingPx)
+                        val finalY = clippedPartner.y.coerceIn(paddingPx, height - paddingPx)
+                        val center = Offset(finalX, finalY)
+                        val dx = pMe.x - center.x
+                        val dy = pMe.y - center.y
+                        val len = sqrt(dx * dx + dy * dy)
+                        val adjustedPoint = if (len > 0) {
+                            Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
+                        } else center
+                        polyEnd = projection.fromScreenLocation(
+                            Point(center.x.toInt(), center.y.toInt())
+                        )
                     }
                 } else {
                     // Segment doesn't cross the screen. Place indicators using rays from center.
@@ -264,8 +289,7 @@ fun OffScreenMarker(
 ) {
     val indicatorSize = with(LocalDensity.current) { 56.dp }
     val indicatorSizePx = with(LocalDensity.current) { indicatorSize.toPx() }
-    val margin = with(LocalDensity.current) { 16.dp.toPx() }
-    val padding = indicatorSizePx / 2 + margin
+    val padding = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
 
     val width = mapSize.width.toFloat()
     val height = mapSize.height.toFloat()
@@ -281,11 +305,11 @@ fun OffScreenMarker(
 
     Surface(
         modifier = Modifier
-            .offset { 
+            .offset {
                 IntOffset(
-                    (finalX - indicatorSizePx / 2).toInt(), 
+                    (finalX - indicatorSizePx / 2).toInt(),
                     (finalY - indicatorSizePx / 2).toInt()
-                ) 
+                )
             }
             .size(indicatorSize),
         shape = CircleShape,
@@ -307,7 +331,7 @@ fun OffScreenMarker(
                 modifier = Modifier.fillMaxSize(),
                 showInitials = user?.avatarUrl == null
             )
-            
+
             // Direction arrow pointing to the actual location
             Icon(
                 imageVector = Icons.Default.Navigation,
@@ -372,10 +396,10 @@ fun clipSegmentToRect(p1: Offset, p2: Offset, width: Float, height: Float): Pair
 fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float): Offset {
     val dx = end.x - start.x
     val dy = end.y - start.y
-    
+
     val tX = if (dx > 0) (width - start.x) / dx else if (dx < 0) -start.x / dx else Float.MAX_VALUE
     val tY = if (dy > 0) (height - start.y) / dy else if (dy < 0) -start.y / dy else Float.MAX_VALUE
-    
+
     val t = min(tX, tY)
     return Offset(start.x + t * dx, start.y + t * dy)
 }

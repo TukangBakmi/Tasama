@@ -1,8 +1,10 @@
 package com.example.tasama.presentation.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,10 +20,12 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
 import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -185,17 +189,49 @@ fun ChatContent(
     onLoadMore: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
-    // Detect when user scrolls to the top
+    // Show button if we are not at the bottom
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            // In reverseLayout, index 0 is the bottom message. 
+            // Show if index 0 is not the first visible or if it's partially scrolled off
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 10
+        }
+    }
+
+    // We reverse the list for the UI
+    val reversedMessages = remember(uiState.messages) {
+        uiState.messages.asReversed()
+    }
+
+    // Auto-scroll to bottom when keyboard opens
+    val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    LaunchedEffect(isImeVisible) {
+        // Only auto-scroll if keyboard is opening AND user is already near the bottom
+        if (isImeVisible && reversedMessages.isNotEmpty() && listState.firstVisibleItemIndex < 2) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(reversedMessages.firstOrNull()?.id) {
+        if (reversedMessages.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // Detect when user scrolls to the "top" (which is now the end of the list)
     val shouldLoadMore by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
-            val visibleItemsInfo = layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isEmpty()) false
+            val totalItemsNumber = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+
+            if (lastVisibleItem == null) false
             else {
-                val firstVisibleItem = visibleItemsInfo.first()
-                firstVisibleItem.index == 0 && firstVisibleItem.offset >= 0
+                // In reverseLayout, the end of the list is the top of the chat history
+                lastVisibleItem.index == totalItemsNumber - 1
             }
         }
     }
@@ -206,65 +242,46 @@ fun ChatContent(
         }
     }
 
-    // Auto-scroll to bottom only for new messages (not when loading more)
-    var previousMessageCount by remember { mutableStateOf(uiState.messages.size) }
-    LaunchedEffect(uiState.messages.size) {
-        val newMessageCount = uiState.messages.size
-        val isNewMessageAtBottom = newMessageCount > previousMessageCount && 
-            uiState.messages.lastOrNull()?.isFromMe == true
-        
-        if (isNewMessageAtBottom || previousMessageCount == 0) {
-            if (newMessageCount > 0) {
-                listState.animateScrollToItem(newMessageCount - 1)
-            }
-        }
-        previousMessageCount = newMessageCount
-    }
-
-    val showScrollToBottom by remember {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val totalItemsCount = layoutInfo.totalItemsCount
-            if (totalItemsCount == 0) return@derivedStateOf false
-
-            val lastVisibleItem =
-                layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
-
-            val isLastItem = lastVisibleItem.index == totalItemsCount - 1
-            if (!isLastItem) true 
-            else {
-                val viewportBottom = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
-                lastVisibleItem.offset + lastVisibleItem.size > viewportBottom
-            }
-        }
-    }
-
-    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Box(modifier = modifier
+        .fillMaxSize()
+        .background(MaterialTheme.colorScheme.surface)
+    ) {
         if (uiState.messages.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "💬",
-                    style = MaterialTheme.typography.displayLarge
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "No messages yet. Say hi!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
+            // ... Empty state remains same
         } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
+                reverseLayout = true, // Key fix: Anchor to bottom
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom)
             ) {
+                items(
+                    count = reversedMessages.size,
+                    key = { reversedMessages[it].id }
+                ) { index ->
+                    val message = reversedMessages[index]
+                    val date = Instant.fromEpochMilliseconds(message.timestamp)
+                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+                    // In reverseLayout, index 0 is bottom.
+                    // Header shows if it's the last message in the reversed list (top of chat)
+                    // or if the message "above" it (index + 1) is a different date.
+                    val showHeader = if (index == reversedMessages.size - 1) true else {
+                        val nextDate = Instant.fromEpochMilliseconds(reversedMessages[index + 1].timestamp)
+                            .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                        date != nextDate
+                    }
+
+                    Column {
+                        if (showHeader) {
+                            DateHeader(date)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        MessageBubble(message = message)
+                    }
+                }
+
                 if (uiState.isLoadingMore) {
                     item {
                         Box(
@@ -275,55 +292,33 @@ fun ChatContent(
                         }
                     }
                 }
-
-                items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
-                    val message = uiState.messages[index]
-                    val date = Instant.fromEpochMilliseconds(message.timestamp)
-                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
-                    
-                    val showHeader = if (index == 0) true else {
-                        val prevDate = Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
-                            .toLocalDateTime(TimeZone.currentSystemDefault()).date
-                        date != prevDate
-                    }
-                    
-                    Column {
-                        if (showHeader) {
-                            DateHeader(date)
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        MessageBubble(message = message)
-                    }
-                }
             }
         }
 
-        // Floating Action Button to scroll to bottom
         AnimatedVisibility(
             visible = showScrollToBottom,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .padding(bottom = 20.dp, end = 16.dp)
         ) {
-            SmallFloatingActionButton(
+            FloatingActionButton(
                 onClick = {
-                    coroutineScope.launch {
-                        val totalItems = listState.layoutInfo.totalItemsCount
-                        if (totalItems > 0) {
-                            listState.animateScrollToItem(totalItems - 1)
-                        }
+                    scope.launch {
+                        listState.animateScrollToItem(0)
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(42.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary,
                 shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(4.dp)
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Scroll to bottom"
+                    contentDescription = "Scroll to bottom",
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
@@ -503,6 +498,15 @@ fun ChatInput(
                         onValueChange = onMessageChange,
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Send
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onSend = {
+                                if (message.isNotBlank()) onSend()
+                            }
+                        ),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,

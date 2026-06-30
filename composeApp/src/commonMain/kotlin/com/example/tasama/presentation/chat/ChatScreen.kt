@@ -30,6 +30,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.MessageStatus
+import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
@@ -70,19 +71,11 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 4.dp)
                         ) {
-                            Surface(
-                                modifier = Modifier.size(36.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = uiState.channelName.take(1).uppercase(),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
+                        UserAvatar(
+                            user = uiState.otherUser,
+                            modifier = Modifier.size(36.dp),
+                            fallbackName = uiState.channelName
+                        )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
@@ -137,8 +130,15 @@ fun ChatScreen(
                                     Text(
                                         statusText,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (statusText == "online") MaterialTheme.colorScheme.primary 
-                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (statusText == "online") {
+                                            if (androidx.compose.foundation.isSystemInDarkTheme()) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            }
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
                                     )
                                 }
                             }

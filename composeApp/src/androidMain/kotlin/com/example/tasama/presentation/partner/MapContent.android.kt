@@ -1,25 +1,34 @@
 package com.example.tasama.presentation.partner
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
 import com.example.tasama.domain.model.User
+import com.example.tasama.presentation.components.UserAvatar
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
+import tasama.composeapp.generated.resources.*
 import kotlin.math.*
 
 @Composable
@@ -66,7 +75,82 @@ actual fun MapContent(
         }
     }
 
-    Box(modifier = modifier) {
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
+    val scope = rememberCoroutineScope()
+
+    // Derived states for real-time intersection and visibility
+    val markerData by remember(myLocation, partnerLocation, mapSize, cameraPositionState) {
+        derivedStateOf {
+            // Read state to trigger recomposition during camera movement
+            val cameraPos = cameraPositionState.position
+            val isMoving = cameraPositionState.isMoving
+            val projection = cameraPositionState.projection ?: return@derivedStateOf null
+
+            if (myLocation == null || partnerLocation == null || mapSize == IntSize.Zero) {
+                return@derivedStateOf null
+            }
+
+            val width = mapSize.width.toFloat()
+            val height = mapSize.height.toFloat()
+
+            val pMe = projection.toScreenLocation(myLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) }
+            val pPartner = projection.toScreenLocation(partnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) }
+
+            // Buffer to determine visibility and avoid edge flickering
+            val buffer = 5f
+            
+            // Check visibility using screen coordinates AND visible region (crucial for tilted maps)
+            val isMeVisible = pMe.x in buffer..width - buffer && 
+                              pMe.y in buffer..height - buffer &&
+                              projection.visibleRegion.latLngBounds.contains(myLocation)
+            
+            val isPartnerVisible = pPartner.x in buffer..width - buffer && 
+                                   pPartner.y in buffer..height - buffer &&
+                                   projection.visibleRegion.latLngBounds.contains(partnerLocation)
+
+            // Calculate intersection points for the polyline and off-screen markers
+            var myEdge: Offset? = null
+            var partnerEdge: Offset? = null
+            var polyStart = myLocation
+            var polyEnd = partnerLocation
+            var showPolyline = true
+
+            if (!isMeVisible || !isPartnerVisible) {
+                val intersections = clipSegmentToRect(pMe, pPartner, width, height)
+                
+                if (intersections != null) {
+                    val (clippedMe, clippedPartner) = intersections
+                    
+                    if (!isMeVisible) {
+                        myEdge = clippedMe
+                        polyStart = projection.fromScreenLocation(android.graphics.Point(clippedMe.x.toInt(), clippedMe.y.toInt()))
+                    }
+                    if (!isPartnerVisible) {
+                        partnerEdge = clippedPartner
+                        polyEnd = projection.fromScreenLocation(android.graphics.Point(clippedPartner.x.toInt(), clippedPartner.y.toInt()))
+                    }
+                } else {
+                    // Segment doesn't cross the screen. Place indicators using rays from center.
+                    val center = Offset(width / 2, height / 2)
+                    if (!isMeVisible) myEdge = findRayIntersection(center, pMe, width, height)
+                    if (!isPartnerVisible) partnerEdge = findRayIntersection(center, pPartner, width, height)
+                    showPolyline = false
+                }
+            }
+
+            MarkerVisibilityData(
+                isMeVisible = isMeVisible,
+                isPartnerVisible = isPartnerVisible,
+                myEffectiveLocation = polyStart,
+                partnerEffectiveLocation = polyEnd,
+                myEdgePoint = myEdge,
+                partnerEdgePoint = partnerEdge,
+                showPolyline = showPolyline
+            )
+        }
+    }
+
+    Box(modifier = modifier.onSizeChanged { mapSize = it }) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -80,9 +164,10 @@ actual fun MapContent(
             myLocation?.let {
                 val markerState = rememberMarkerState(position = it)
                 MarkerComposable(
-                    keys = arrayOf(currentUser?.avatarUrl ?: "", currentUser?.name ?: "", it),
+                    keys = arrayOf<Any>(currentUser?.avatarUrl ?: "", currentUser?.name ?: "", it.latitude, it.longitude),
                     state = markerState,
-                    anchor = Offset(0.5f, 0.5f)
+                    anchor = Offset(0.5f, 0.5f),
+                    visible = markerData?.isMeVisible ?: true
                 ) {
                     UserMarker(user = currentUser, isMe = true)
                 }
@@ -91,20 +176,57 @@ actual fun MapContent(
             partnerLocation?.let {
                 val markerState = rememberMarkerState(position = it)
                 MarkerComposable(
-                    keys = arrayOf(partner?.avatarUrl ?: "", partner?.name ?: "", it),
+                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", it.latitude, it.longitude),
                     state = markerState,
-                    anchor = Offset(0.5f, 0.5f)
+                    anchor = Offset(0.5f, 0.5f),
+                    visible = markerData?.isPartnerVisible ?: true
                 ) {
                     UserMarker(user = partner, isMe = false)
                 }
             }
 
-            if (myLocation != null && partnerLocation != null) {
-                Polyline(
-                    points = listOf(myLocation, partnerLocation),
-                    color = MaterialTheme.colorScheme.primary,
-                    width = 10f,
-                    pattern = listOf(Dash(30f), Gap(20f))
+            markerData?.let { data ->
+                if (data.showPolyline) {
+                    Polyline(
+                        points = listOf(data.myEffectiveLocation, data.partnerEffectiveLocation),
+                        color = MaterialTheme.colorScheme.primary,
+                        width = 10f,
+                        pattern = listOf(Dash(30f), Gap(20f))
+                    )
+                }
+            }
+        }
+
+        // Off-screen markers
+        markerData?.let { data ->
+            if (!data.isPartnerVisible && data.partnerEdgePoint != null && partnerLocation != null) {
+                OffScreenMarker(
+                    targetLocation = partnerLocation,
+                    edgePoint = data.partnerEdgePoint,
+                    user = partner,
+                    cameraPositionState = cameraPositionState,
+                    mapSize = mapSize,
+                    isMe = false,
+                    onTap = {
+                        scope.launch {
+                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(partnerLocation))
+                        }
+                    }
+                )
+            }
+            if (!data.isMeVisible && data.myEdgePoint != null && myLocation != null) {
+                OffScreenMarker(
+                    targetLocation = myLocation,
+                    edgePoint = data.myEdgePoint,
+                    user = currentUser,
+                    cameraPositionState = cameraPositionState,
+                    mapSize = mapSize,
+                    isMe = true,
+                    onTap = {
+                        scope.launch {
+                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
+                        }
+                    }
                 )
             }
         }
@@ -131,6 +253,146 @@ actual fun MapContent(
 }
 
 @Composable
+fun OffScreenMarker(
+    targetLocation: LatLng,
+    edgePoint: Offset,
+    user: User?,
+    cameraPositionState: CameraPositionState,
+    mapSize: IntSize,
+    isMe: Boolean,
+    onTap: () -> Unit
+) {
+    val indicatorSize = with(LocalDensity.current) { 56.dp }
+    val indicatorSizePx = with(LocalDensity.current) { indicatorSize.toPx() }
+    val margin = with(LocalDensity.current) { 16.dp.toPx() }
+    val padding = indicatorSizePx / 2 + margin
+
+    val width = mapSize.width.toFloat()
+    val height = mapSize.height.toFloat()
+
+    // Clamp to ensure it stays in visible bounds with padding
+    val finalX = edgePoint.x.coerceIn(padding, width - padding)
+    val finalY = edgePoint.y.coerceIn(padding, height - padding)
+
+    // Calculate angle for the arrow pointing to the actual location
+    val cameraTarget = cameraPositionState.position.target
+    val bearing = calculateBearing(cameraTarget, targetLocation)
+    val relativeBearing = (bearing - cameraPositionState.position.bearing + 360) % 360
+
+    Surface(
+        modifier = Modifier
+            .offset { 
+                IntOffset(
+                    (finalX - indicatorSizePx / 2).toInt(), 
+                    (finalY - indicatorSizePx / 2).toInt()
+                ) 
+            }
+            .size(indicatorSize),
+        shape = CircleShape,
+        color = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+        tonalElevation = 8.dp,
+        shadowElevation = 4.dp,
+        onClick = onTap
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp)
+                .background(Color.White, CircleShape)
+                .padding(2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            UserAvatar(
+                user = user,
+                modifier = Modifier.fillMaxSize(),
+                showInitials = user?.avatarUrl == null
+            )
+            
+            // Direction arrow pointing to the actual location
+            Icon(
+                imageVector = Icons.Default.Navigation,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(14.dp)
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-6).dp)
+                    .rotate(relativeBearing),
+                tint = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+data class MarkerVisibilityData(
+    val isMeVisible: Boolean,
+    val isPartnerVisible: Boolean,
+    val myEffectiveLocation: LatLng,
+    val partnerEffectiveLocation: LatLng,
+    val myEdgePoint: Offset?,
+    val partnerEdgePoint: Offset?,
+    val showPolyline: Boolean
+)
+
+/**
+ * Clips a line segment to the screen rectangle using Liang-Barsky algorithm.
+ * Returns the clipped segment endpoints as a pair of Offsets.
+ */
+fun clipSegmentToRect(p1: Offset, p2: Offset, width: Float, height: Float): Pair<Offset, Offset>? {
+    var t0 = 0f
+    var t1 = 1f
+    val dx = p2.x - p1.x
+    val dy = p2.y - p1.y
+
+    fun clip(p: Float, q: Float): Boolean {
+        if (p == 0f) return q >= 0
+        val t = q / p
+        if (p < 0) {
+            if (t > t1) return false
+            if (t > t0) t0 = t
+        } else if (p > 0) {
+            if (t < t0) return false
+            if (t < t1) t1 = t
+        }
+        return true
+    }
+
+    if (clip(-dx, p1.x) && clip(dx, width - p1.x) &&
+        clip(-dy, p1.y) && clip(dy, height - p1.y)) {
+        return Pair(
+            Offset(p1.x + t0 * dx, p1.y + t0 * dy),
+            Offset(p1.x + t1 * dx, p1.y + t1 * dy)
+        )
+    }
+    return null
+}
+
+/**
+ * Finds the intersection of a ray starting from 'start' toward 'end' with screen edges.
+ */
+fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float): Offset {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    
+    val tX = if (dx > 0) (width - start.x) / dx else if (dx < 0) -start.x / dx else Float.MAX_VALUE
+    val tY = if (dy > 0) (height - start.y) / dy else if (dy < 0) -start.y / dy else Float.MAX_VALUE
+    
+    val t = min(tX, tY)
+    return Offset(start.x + t * dx, start.y + t * dy)
+}
+
+fun calculateBearing(start: LatLng, end: LatLng): Float {
+    val startLat = Math.toRadians(start.latitude)
+    val startLng = Math.toRadians(start.longitude)
+    val endLat = Math.toRadians(end.latitude)
+    val endLng = Math.toRadians(end.longitude)
+
+    val dLng = endLng - startLng
+    val y = sin(dLng) * cos(endLat)
+    val x = cos(startLat) * sin(endLat) - sin(startLat) * cos(endLat) * cos(dLng)
+    return ((Math.toDegrees(atan2(y, x)) + 360) % 360).toFloat()
+}
+
+@Composable
 fun UserMarker(user: User?, isMe: Boolean) {
     Box(
         modifier = Modifier
@@ -141,52 +403,13 @@ fun UserMarker(user: User?, isMe: Boolean) {
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            if (user?.avatarUrl != null) {
-                SubcomposeAsyncImage(
-                    model = user.avatarUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = user.name.take(1).uppercase(),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    error = {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = user.name.take(1).uppercase(),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                )
-            } else {
-                Text(
-                    text = user?.name?.take(1)?.uppercase() ?: "?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        UserAvatar(
+            user = user,
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            showInitials = user?.avatarUrl == null
+        )
     }
 }
 

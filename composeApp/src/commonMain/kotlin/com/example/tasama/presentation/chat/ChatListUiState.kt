@@ -14,5 +14,6 @@ data class ChatListUiState(
 
 data class SearchedUser(
     val id: String,
-    val name: String
+    val name: String,
+    val avatarUrl: String? = null
 )

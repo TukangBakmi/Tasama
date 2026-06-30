@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.User
+import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.*
 import kotlinx.datetime.number
 import org.jetbrains.compose.resources.painterResource
@@ -249,15 +250,11 @@ fun ChannelItem(
         Box(
             modifier = Modifier.size(48.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+            UserAvatar(
+                user = otherUser,
+                modifier = Modifier.fillMaxSize(),
+                fallbackName = otherUser?.name
+            )
             
             // Online status indicator
             val isOnline = remember(otherUser?.lastActive, now) {
@@ -417,7 +414,10 @@ fun AddContactDialog(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Person, contentDescription = null)
+                            UserAvatar(
+                                user = User(id = user.id, name = user.name, avatarUrl = user.avatarUrl),
+                                modifier = Modifier.size(40.dp)
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(user.name, fontWeight = FontWeight.Bold)
                         }

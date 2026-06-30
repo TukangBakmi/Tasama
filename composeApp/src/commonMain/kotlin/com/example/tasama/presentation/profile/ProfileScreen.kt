@@ -35,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.tasama.domain.model.AppTheme
+import com.example.tasama.domain.model.User
+import com.example.tasama.presentation.components.UserAvatar
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
@@ -544,66 +546,18 @@ fun ProfileHeader(
         Box(
             modifier = Modifier.size(80.dp)
         ) {
-            Box(
+            UserAvatar(
+                user = User(name = name, avatarUrl = profilePictureUrl),
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
                     .then(
                         if (!isGuest) {
                             Modifier.clickable { onEditAvatar() }
                         } else Modifier
                     ),
-                contentAlignment = Alignment.Center
-            ) {
-                println("Profile URL = $profilePictureUrl")
-                if (profilePictureUrl != null) {
-                    val avatarRes = when (profilePictureUrl) {
-                        "avatar_1" -> Res.drawable.Avatar1
-                        "avatar_2" -> Res.drawable.Avatar2
-                        "avatar_3" -> Res.drawable.Avatar3
-                        "avatar_4" -> Res.drawable.Avatar4
-                        "avatar_5" -> Res.drawable.Avatar5
-                        "avatar_6" -> Res.drawable.Avatar6
-                        "avatar_7" -> Res.drawable.Avatar7
-                        "avatar_8" -> Res.drawable.Avatar8
-                        "avatar_9" -> Res.drawable.Avatar9
-                        else -> null
-                    }
-
-                    if (avatarRes != null) {
-                        Image(
-                            painter = painterResource(avatarRes),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else if (profilePictureUrl.startsWith("http")) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalPlatformContext.current)
-                                .data(profilePictureUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        // Fallback to initial
-                        Text(
-                            text = name.take(1).uppercase(),
-                            style = MaterialTheme.typography.headlineLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                } else {
-                    Text(
-                        text = name.take(1).uppercase(),
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
 
             if (!isGuest) {
                 // Add a small edit icon

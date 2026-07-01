@@ -13,16 +13,12 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -30,25 +26,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.tasama.domain.model.AppTheme
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.ImageRequest
-import coil3.request.crossfade
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onSizeChanged
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.compose.PickerResultLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PlatformFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import com.example.tasama.util.cropImage
+import com.example.tasama.util.decodeImageBitmap
 import tasama.composeapp.generated.resources.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,13 +63,18 @@ fun ProfileScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+
+    var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
+    var showCropper by remember { mutableStateOf(false) }
 
     val pickerLauncher = rememberFilePickerLauncher(
         type = PickerType.Image,
         title = "Select Profile Picture",
         onResult = { file: PlatformFile? ->
             if (file != null) {
-                viewModel.uploadProfilePicture(file)
+                pickedFile = file
+                showCropper = true
             }
         }
     )
@@ -216,6 +225,179 @@ fun ProfileScreen(
                     showCurrencyDialog = false
                 }
             )
+        }
+
+        if (showCropper && pickedFile != null) {
+            ImageCropperDialog(
+                file = pickedFile!!,
+                onDismiss = {
+                    showCropper = false
+                    pickedFile = null
+                },
+                onConfirm = { croppedBytes ->
+                    viewModel.uploadProfilePicture(croppedBytes)
+                    showCropper = false
+                    pickedFile = null
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ImageCropperDialog(
+    file: PlatformFile,
+    onDismiss: () -> Unit,
+    onConfirm: (ByteArray) -> Unit
+) {
+    var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    var imageSize by remember { mutableStateOf(IntSize.Zero) }
+    val scope = rememberCoroutineScope()
+    var isProcessing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(file) {
+        val bytes = file.readBytes()
+        val bitmap = decodeImageBitmap(bytes)
+        imageBitmap = bitmap
+        if (bitmap != null) {
+            imageSize = IntSize(bitmap.width, bitmap.height)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Crop Photo") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    },
+                    actions = {
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp).padding(end = 16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        isProcessing = true
+                                        try {
+                                            val bytes = file.readBytes()
+                                            val croppedBytes = withContext(Dispatchers.Default) {
+                                                cropImage(
+                                                    bytes,
+                                                    scale,
+                                                    offset,
+                                                    containerSize,
+                                                    imageSize
+                                                )
+                                            }
+                                            if (croppedBytes != null) {
+                                                onConfirm(croppedBytes)
+                                            }
+                                        } finally {
+                                            isProcessing = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Save", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color.Black)
+                    .onSizeChanged { containerSize = it },
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageBitmap != null) {
+                    val boxSize = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        minOf(containerSize.width, containerSize.height).toDp()
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(boxSize)
+                            .clip(RectangleShape)
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    scale = (scale * zoom).coerceIn(0.5f, 5f)
+                                    offset += pan
+                                }
+                            }
+                    ) {
+                        Image(
+                            bitmap = imageBitmap!!,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = scale,
+                                    scaleY = scale,
+                                    translationX = offset.x,
+                                    translationY = offset.y
+                                ),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+
+                    // Overlay for the 1:1 crop area
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        val minDim = minOf(size.width, size.height)
+                        val left = (size.width - minDim) / 2
+                        val top = (size.height - minDim) / 2
+
+                        // Draw dimmed background outside crop area
+                        drawRect(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            size = Size(size.width, top)
+                        )
+                        drawRect(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            topLeft = Offset(0f, top + minDim),
+                            size = Size(size.width, size.height - (top + minDim))
+                        )
+                        drawRect(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            topLeft = Offset(0f, top),
+                            size = Size(left, minDim)
+                        )
+                        drawRect(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            topLeft = Offset(left + minDim, top),
+                            size = Size(size.width - (left + minDim), minDim)
+                        )
+
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset(left, top),
+                            size = Size(minDim, minDim),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                }
+            }
         }
     }
 }

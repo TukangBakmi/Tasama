@@ -154,6 +154,20 @@ class ProfileViewModel(
         }
     }
 
+    fun uploadProfilePicture(bytes: ByteArray) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            try {
+                _uiState.update { it.copy(isUpdating = true) }
+                val url = authRepository.uploadProfilePicture(uid, bytes)
+                authRepository.updateProfilePicture(uid, url)
+                _uiState.update { it.copy(isUpdating = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isUpdating = false, error = "Failed to upload: ${e.message}") }
+            }
+        }
+    }
+
     fun updateDisplayName(name: String) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {

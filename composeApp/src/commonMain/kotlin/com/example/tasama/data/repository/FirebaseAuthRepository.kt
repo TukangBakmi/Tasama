@@ -225,6 +225,16 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun updateConnectionType(uid: String, type: String) {
+        try {
+            firestore.collection("users").document(uid).updateFields {
+                "connectionType" to type
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override suspend fun updateLastActive(uid: String, timestamp: Long?) {
         try {
             firestore.collection("users").document(uid).updateFields {

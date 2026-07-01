@@ -32,9 +32,11 @@ googleServices = "4.5.0"
 google-maps = "20.0.0"
 filekit = "0.8.8"
 coil3 = "3.5.0"
+glide = "4.16.0"
 firebase-messaging-android = "24.1.1"
 
 [libraries]
+glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
 androidx-auth-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidx-auth-credentials" }
 androidx-auth-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidx-auth-play-services" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }

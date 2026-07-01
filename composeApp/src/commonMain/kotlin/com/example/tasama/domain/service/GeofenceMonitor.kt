@@ -14,35 +14,31 @@ class GeofenceMonitor(
     private val scope: CoroutineScope
 ) {
     private val userStates = mutableMapOf<String, MutableMap<String, Boolean>>() // userId -> {placeId -> isInside}
+    private var monitoringJob: Job? = null
 
     fun startMonitoring() {
-        scope.launch {
+        if (monitoringJob != null) return
+        monitoringJob = scope.launch {
             authRepository.userId.filterNotNull().collectLatest { currentUserId ->
-                monitorUserAndPartner(currentUserId)
+                monitorLocalUserOnly(currentUserId)
             }
         }
     }
 
-    private suspend fun monitorUserAndPartner(currentUserId: String) {
-        authRepository.getUserFlow(currentUserId).collectLatest { user ->
-            if (user == null) return@collectLatest
-            
-            val partnerId = user.partnerId
-            
-            // Collect places for both (assuming they share or we check both)
-            val myPlacesFlow = placeRepository.getPlaces(currentUserId)
+    private suspend fun monitorLocalUserOnly(currentUserId: String) {
+        // Collect places for both users so we can detect entry into any saved place
+        val myPlacesFlow = placeRepository.getPlaces(currentUserId)
+        
+        authRepository.getUserFlow(currentUserId).collectLatest { me ->
+            if (me == null) return@collectLatest
+            val partnerId = me.partnerId
             val partnerPlacesFlow = partnerId?.let { placeRepository.getPlaces(it) } ?: flowOf(emptyList())
-            
-            combine(
-                authRepository.getUserFlow(currentUserId),
-                if (partnerId != null) authRepository.getUserFlow(partnerId) else flowOf(null),
-                myPlacesFlow,
-                partnerPlacesFlow
-            ) { me, partner, myPlaces, pPlaces ->
-                val allPlaces = (myPlaces + pPlaces).distinctBy { it.id }
-                if (me != null) checkUser(me, allPlaces)
-                if (partner != null) checkUser(partner, allPlaces)
-            }.collect()
+
+            combine(myPlacesFlow, partnerPlacesFlow) { myPlaces, pPlaces ->
+                (myPlaces + pPlaces).distinctBy { it.id }
+            }.collect { allPlaces ->
+                checkUser(me, allPlaces)
+            }
         }
     }
 
@@ -90,7 +86,7 @@ class GeofenceMonitor(
         scope.launch {
             authRepository.sendNotification(
                 targetUid = targetUserId,
-                title = "Tasama Geofence",
+                title = "Location Update",
                 body = message
             )
         }

@@ -46,6 +46,7 @@ kotlin {
             implementation(libs.google.maps.compose)
             implementation(libs.google.maps)
             implementation(libs.firebase.messaging.android)
+            implementation(libs.glide)
         }
         commonMain.dependencies {
             implementation(libs.filekit.compose)

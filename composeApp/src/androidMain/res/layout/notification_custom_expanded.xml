@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
+    android:padding="6dp">
+
+    <!-- Profile and Title Column -->
+    <LinearLayout
+        android:layout_width="50dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/notification_avatar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_background"
+            android:contentDescription="@string/partner_avatar"
+            android:scaleType="centerCrop"
+            android:src="@drawable/avatar1" />
+
+        <TextView
+            android:id="@+id/notification_partner_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/default_partner_name"
+            android:textColor="@color/partner_name"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/notification_activity_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/activity_label"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Status and Address Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Battery and Signal Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="@string/battery_status"
+                android:src="@drawable/ic_battery_status"
+                android:tint="@color/battery_orange" />
+
+            <TextView
+                android:id="@+id/notification_battery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="85%"
+                android:textColor="@color/status_text"
+                android:textSize="12sp" />
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@string/signal_status"
+                android:src="@drawable/ic_signal_status"
+                android:tint="@color/purple_icon" />
+
+            <TextView
+                android:id="@+id/notification_network"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="LTE"
+                android:textColor="@color/status_text"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Divider -->
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
+            android:scaleType="fitXY"
+            android:src="@drawable/dashed_divider"
+            android:contentDescription="@string/divider" />
+
+        <!-- Address Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginTop="1dp"
+                android:contentDescription="@string/location_pin"
+                android:src="@drawable/ic_location_pin"
+                android:tint="@color/purple_icon" />
+
+            <TextView
+                android:id="@+id/notification_address"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/fetching_address"
+                android:textColor="@color/status_text"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="notification_bg">#FFFFFF</color>
+    <color name="partner_name">#1D1B20</color>
+    <color name="status_text">#49454F</color>
+    <color name="battery_orange">#FF9800</color>
+    <color name="purple_icon">#6750A4</color>
+    <color name="divider_color">#201E20</color>
+</resources>

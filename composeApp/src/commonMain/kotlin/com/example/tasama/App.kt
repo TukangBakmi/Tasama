@@ -23,12 +23,6 @@ fun App(
     onChannelNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
-    val geofenceMonitor: GeofenceMonitor = koinInject()
-    
-    LaunchedEffect(Unit) {
-        geofenceMonitor.startMonitoring()
-    }
-
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components {

@@ -20,6 +20,10 @@ import com.example.tasama.presentation.partner.PartnerViewModel
 import com.example.tasama.presentation.profile.ProfileViewModel
 import com.example.tasama.presentation.savings.SavingsViewModel
 import com.example.tasama.presentation.transaction.TransactionViewModel
+import com.example.tasama.data.repository.FirebasePlaceRepository
+import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.service.GeofenceMonitor
+import kotlinx.coroutines.MainScope
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -42,6 +46,10 @@ val appModule = module {
         FirebaseAuthRepository()
     }
 
+    single<PlaceRepository> {
+        FirebasePlaceRepository()
+    }
+
     single<ChatRepository> {
         FirebaseChatRepository(get())
     }
@@ -50,6 +58,8 @@ val appModule = module {
         FirebaseAIChatRepository(get())
     }
 
+    single { GeofenceMonitor(get(), get(), MainScope()) }
+
     viewModel { DashboardViewModel(get(), get()) }
     viewModel { TransactionViewModel(get(), get()) }
     viewModel { AIViewModel(get(), get(), get(), get()) }
@@ -57,7 +67,7 @@ val appModule = module {
     viewModel { ChatViewModel(get(), get()) }
     viewModel { ChatListViewModel(get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
-    viewModel { PartnerViewModel(get()) }
+    viewModel { PartnerViewModel(get<AuthRepository>(), get<PlaceRepository>()) }
     viewModel { MainViewModel(get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

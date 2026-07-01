@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.TimeZone
@@ -69,8 +70,11 @@ fun PartnerScreen(
                 uiState.isLinked -> PartnerMapContent(
                     currentUser = uiState.currentUser,
                     partner = uiState.partner,
+                    places = uiState.places,
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
-                    onEditAnniversary = { showDatePicker = true }
+                    onEditAnniversary = { showDatePicker = true },
+                    onAddPlace = viewModel::addPlace,
+                    onDeletePlace = viewModel::deletePlace
                 )
                 else -> LinkingContent(
                     uiState = uiState,
@@ -220,12 +224,23 @@ fun LinkingContent(
 }
 
 @Composable
-fun PartnerMapContent(currentUser: User?, partner: User?, anniversaryDate: Long?, onEditAnniversary: () -> Unit) {
+fun PartnerMapContent(
+    currentUser: User?,
+    partner: User?,
+    places: List<Place>,
+    anniversaryDate: Long?,
+    onEditAnniversary: () -> Unit,
+    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onDeletePlace: (String) -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(
             modifier = Modifier.fillMaxSize(),
             currentUser = currentUser,
-            partner = partner
+            partner = partner,
+            places = places,
+            onAddPlace = onAddPlace,
+            onDeletePlace = onDeletePlace
         )
 
         Column(
@@ -233,6 +248,18 @@ fun PartnerMapContent(currentUser: User?, partner: User?, anniversaryDate: Long?
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                shape = CircleShape,
+                tonalElevation = 2.dp
+            ) {
+                Text(
+                    text = if (places.isEmpty()) "Long press on the map to add a place" else "Long press map to add more places",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (anniversaryDate != null) {
                 AnniversaryBadge(anniversaryDate, onClick = onEditAnniversary)
             }

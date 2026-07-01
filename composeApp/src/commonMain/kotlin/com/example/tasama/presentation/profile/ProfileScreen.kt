@@ -99,145 +99,157 @@ fun ProfileScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Profile") })
-        },
-        contentWindowInsets = WindowInsets(0)
-    ) { padding ->
-        var showThemeDialog by remember { mutableStateOf(false) }
-        var showCurrencyDialog by remember { mutableStateOf(false) }
-        var showLinkPartnerDialog by remember { mutableStateOf(false) }
-        var showUnlinkConfirmDialog by remember { mutableStateOf(false) }
-        var showEditNameDialog by remember { mutableStateOf(false) }
-        var showAvatarSelectionDialog by remember { mutableStateOf(false) }
-
-        ProfileContent(
-            uiState = uiState,
-            onExportExcel = viewModel::exportToExcel,
-            onExportPdf = viewModel::exportToPdf,
-            onLogout = viewModel::logout,
-            onCopyId = { id ->
-                clipboardManager.setText(AnnotatedString(id))
-                viewModel.onIdCopied()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(title = { Text("Profile") })
             },
-            onEditName = { showEditNameDialog = true },
-            onEditAvatar = { showAvatarSelectionDialog = true },
-            onDeleteAvatar = viewModel::deleteProfilePicture,
-            onThemeClick = { showThemeDialog = true },
-            onCurrencyClick = { showCurrencyDialog = true },
-            onPartnerClick = {
-                if (uiState.partnerId == null) {
-                    showLinkPartnerDialog = true
-                } else {
-                    showUnlinkConfirmDialog = true
-                }
-            },
-            modifier = Modifier.padding(padding)
-        )
+            contentWindowInsets = WindowInsets(0)
+        ) { padding ->
+            var showThemeDialog by remember { mutableStateOf(false) }
+            var showCurrencyDialog by remember { mutableStateOf(false) }
+            var showLinkPartnerDialog by remember { mutableStateOf(false) }
+            var showUnlinkConfirmDialog by remember { mutableStateOf(false) }
+            var showEditNameDialog by remember { mutableStateOf(false) }
+            var showAvatarSelectionDialog by remember { mutableStateOf(false) }
 
-        if (showEditNameDialog) {
-            EditNameDialog(
-                currentName = uiState.userName,
-                onDismiss = { showEditNameDialog = false },
-                onConfirm = { newName ->
-                    viewModel.updateDisplayName(newName)
-                    showEditNameDialog = false
-                }
-            )
-        }
-
-        if (showAvatarSelectionDialog) {
-            AvatarSelectionDialog(
-                onDismiss = { showAvatarSelectionDialog = false },
-                onAvatarSelected = { avatarRes ->
-                    // Since updateProfilePicture expects a URL (string),
-                    // we'll store the resource name or a specific convention.
-                    // For now, let's pass the resource name as the "URL".
-                    viewModel.updateProfilePicture(avatarRes)
-                    showAvatarSelectionDialog = false
+            ProfileContent(
+                uiState = uiState,
+                onExportExcel = viewModel::exportToExcel,
+                onExportPdf = viewModel::exportToPdf,
+                onLogout = viewModel::logout,
+                onCopyId = { id ->
+                    clipboardManager.setText(AnnotatedString(id))
+                    viewModel.onIdCopied()
                 },
-                onDeleteAvatar = {
-                    viewModel.deleteProfilePicture()
-                    showAvatarSelectionDialog = false
-                },
-                pickerLauncher = pickerLauncher,
-                showDeleteOption = uiState.profilePictureUrl != null
-            )
-        }
-
-        if (showLinkPartnerDialog) {
-            LinkPartnerDialog(
-                onDismiss = { showLinkPartnerDialog = false },
-                onConfirm = { shortId ->
-                    viewModel.linkPartner(shortId)
-                    showLinkPartnerDialog = false
-                }
-            )
-        }
-
-        if (showUnlinkConfirmDialog) {
-            AlertDialog(
-                onDismissRequest = { showUnlinkConfirmDialog = false },
-                title = { Text("Unlink Partner") },
-                text = { Text("Are you sure you want to unlink from your partner? This will remove the connection for both of you.") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.unlinkPartner()
-                            showUnlinkConfirmDialog = false
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Unlink")
+                onEditName = { showEditNameDialog = true },
+                onEditAvatar = { showAvatarSelectionDialog = true },
+                onDeleteAvatar = viewModel::deleteProfilePicture,
+                onThemeClick = { showThemeDialog = true },
+                onCurrencyClick = { showCurrencyDialog = true },
+                onPartnerClick = {
+                    if (uiState.partnerId == null) {
+                        showLinkPartnerDialog = true
+                    } else {
+                        showUnlinkConfirmDialog = true
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showUnlinkConfirmDialog = false }) {
-                        Text("Cancel")
+                modifier = Modifier.padding(padding)
+            )
+
+            if (showEditNameDialog) {
+                EditNameDialog(
+                    currentName = uiState.userName,
+                    onDismiss = { showEditNameDialog = false },
+                    onConfirm = { newName ->
+                        viewModel.updateDisplayName(newName)
+                        showEditNameDialog = false
                     }
-                }
-            )
+                )
+            }
+
+            if (showAvatarSelectionDialog) {
+                AvatarSelectionDialog(
+                    onDismiss = { showAvatarSelectionDialog = false },
+                    onAvatarSelected = { avatarRes ->
+                        // Since updateProfilePicture expects a URL (string),
+                        // we'll store the resource name or a specific convention.
+                        // For now, let's pass the resource name as the "URL".
+                        viewModel.updateProfilePicture(avatarRes)
+                        showAvatarSelectionDialog = false
+                    },
+                    onDeleteAvatar = {
+                        viewModel.deleteProfilePicture()
+                        showAvatarSelectionDialog = false
+                    },
+                    pickerLauncher = pickerLauncher,
+                    showDeleteOption = uiState.profilePictureUrl != null
+                )
+            }
+
+            if (showLinkPartnerDialog) {
+                LinkPartnerDialog(
+                    onDismiss = { showLinkPartnerDialog = false },
+                    onConfirm = { shortId ->
+                        viewModel.linkPartner(shortId)
+                        showLinkPartnerDialog = false
+                    }
+                )
+            }
+
+            if (showUnlinkConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showUnlinkConfirmDialog = false },
+                    title = { Text("Unlink Partner") },
+                    text = { Text("Are you sure you want to unlink from your partner? This will remove the connection for both of you.") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.unlinkPartner()
+                                showUnlinkConfirmDialog = false
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Unlink")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showUnlinkConfirmDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            if (showThemeDialog) {
+                SettingsSelectionDialog(
+                    title = "Select Theme",
+                    options = AppTheme.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
+                    selectedIndex = AppTheme.entries.indexOf(uiState.theme),
+                    onDismiss = { showThemeDialog = false },
+                    onSelect = { index ->
+                        viewModel.updateTheme(AppTheme.entries[index])
+                        showThemeDialog = false
+                    }
+                )
+            }
+
+            if (showCurrencyDialog) {
+                val currencies = listOf("IDR", "USD", "EUR", "GBP", "JPY")
+                SettingsSelectionDialog(
+                    title = "Select Currency",
+                    options = currencies,
+                    selectedIndex = currencies.indexOf(uiState.currency).coerceAtLeast(0),
+                    onDismiss = { showCurrencyDialog = false },
+                    onSelect = { index ->
+                        viewModel.updateCurrency(currencies[index])
+                        showCurrencyDialog = false
+                    }
+                )
+            }
+
+            if (showCropper && pickedFile != null) {
+                ImageCropperDialog(
+                    file = pickedFile!!,
+                    onDismiss = {
+                        showCropper = false
+                        pickedFile = null
+                    },
+                    onConfirm = { croppedBytes ->
+                        viewModel.uploadProfilePicture(croppedBytes)
+                        showCropper = false
+                        pickedFile = null
+                    }
+                )
+            }
         }
 
-        if (showThemeDialog) {
-            SettingsSelectionDialog(
-                title = "Select Theme",
-                options = AppTheme.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
-                selectedIndex = AppTheme.entries.indexOf(uiState.theme),
-                onDismiss = { showThemeDialog = false },
-                onSelect = { index ->
-                    viewModel.updateTheme(AppTheme.entries[index])
-                    showThemeDialog = false
-                }
-            )
-        }
-
-        if (showCurrencyDialog) {
-            val currencies = listOf("IDR", "USD", "EUR", "GBP", "JPY")
-            SettingsSelectionDialog(
-                title = "Select Currency",
-                options = currencies,
-                selectedIndex = currencies.indexOf(uiState.currency).coerceAtLeast(0),
-                onDismiss = { showCurrencyDialog = false },
-                onSelect = { index ->
-                    viewModel.updateCurrency(currencies[index])
-                    showCurrencyDialog = false
-                }
-            )
-        }
-
-        if (showCropper && pickedFile != null) {
-            ImageCropperDialog(
-                file = pickedFile!!,
-                onDismiss = {
-                    showCropper = false
-                    pickedFile = null
-                },
-                onConfirm = { croppedBytes ->
-                    viewModel.uploadProfilePicture(croppedBytes)
-                    showCropper = false
-                    pickedFile = null
+        if (uiState.isExporting || uiState.isLoading || uiState.isUpdating) {
+            LoadingOverlay(
+                message = when {
+                    uiState.isExporting -> "Exporting data..."
+                    uiState.isUpdating -> "Updating profile..."
+                    else -> "Loading..."
                 }
             )
         }
@@ -286,38 +298,31 @@ fun ImageCropperDialog(
                         }
                     },
                     actions = {
-                        if (isProcessing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp).padding(end = 16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        isProcessing = true
-                                        try {
-                                            val bytes = file.readBytes()
-                                            val croppedBytes = withContext(Dispatchers.Default) {
-                                                cropImage(
-                                                    bytes,
-                                                    scale,
-                                                    offset,
-                                                    containerSize,
-                                                    imageSize
-                                                )
-                                            }
-                                            if (croppedBytes != null) {
-                                                onConfirm(croppedBytes)
-                                            }
-                                        } finally {
-                                            isProcessing = false
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    isProcessing = true
+                                    try {
+                                        val bytes = file.readBytes()
+                                        val croppedBytes = withContext(Dispatchers.Default) {
+                                            cropImage(
+                                                bytes,
+                                                scale,
+                                                offset,
+                                                containerSize,
+                                                imageSize
+                                            )
                                         }
+                                        if (croppedBytes != null) {
+                                            onConfirm(croppedBytes)
+                                        }
+                                    } finally {
+                                        isProcessing = false
                                     }
                                 }
-                            ) {
-                                Text("Save", fontWeight = FontWeight.Bold)
                             }
+                        ) {
+                            Text("Save", fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -396,6 +401,10 @@ fun ImageCropperDialog(
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
                         )
                     }
+                }
+
+                if (isProcessing) {
+                    LoadingOverlay(message = "Processing image...")
                 }
             }
         }
@@ -627,111 +636,110 @@ fun ProfileContent(
     onPartnerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            ProfileHeader(
+                name = uiState.userName,
+                email = uiState.userEmail,
+                shortId = uiState.userShortId,
+                profilePictureUrl = uiState.profilePictureUrl,
+                isGuest = uiState.isGuest,
+                onCopyId = onCopyId,
+                onEditName = onEditName,
+                onEditAvatar = onEditAvatar
+            )
+        }
+
+        if (uiState.isGuest) {
             item {
-                ProfileHeader(
-                    name = uiState.userName,
-                    email = uiState.userEmail,
-                    shortId = uiState.userShortId,
-                    profilePictureUrl = uiState.profilePictureUrl,
-                    isGuest = uiState.isGuest,
-                    onCopyId = onCopyId,
-                    onEditName = onEditName,
-                    onEditAvatar = onEditAvatar
-                )
+                GuestWarningCard(onLogin = onLogout)
             }
-
-            if (uiState.isGuest) {
-                item {
-                    GuestWarningCard(onLogin = onLogout)
-                }
-            } else {
-                item {
-                    SectionTitle("Relationship")
-                }
-                item {
-                    ProfileMenuItem(
-                        icon = Icons.Default.Favorite,
-                        title = "Partner",
-                        subtitle = uiState.partnerName ?: "Not linked (Tap to link)",
-                        onClick = onPartnerClick
-                    )
-                }
-
-                item {
-                    SectionTitle("Data Export")
-                }
-                item {
-                    ProfileMenuItem(
-                        icon = Icons.Default.Share,
-                        title = "Export to Excel",
-                        onClick = onExportExcel
-                    )
-                }
-                item {
-                    ProfileMenuItem(
-                        icon = Icons.Default.PictureAsPdf,
-                        title = "Export to PDF",
-                        onClick = onExportPdf
-                    )
-                }
-            }
-
+        } else {
             item {
-                SectionTitle("Settings")
+                SectionTitle("Relationship")
             }
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.Palette,
-                    title = "Theme",
-                    subtitle = uiState.theme.name.lowercase().replaceFirstChar { it.uppercase() },
-                    onClick = onThemeClick
+                    icon = Icons.Default.Favorite,
+                    title = "Partner",
+                    subtitle = uiState.partnerName ?: "Not linked (Tap to link)",
+                    onClick = onPartnerClick
+                )
+            }
+
+            item {
+                SectionTitle("Data Export")
+            }
+            item {
+                ProfileMenuItem(
+                    icon = Icons.Default.Share,
+                    title = "Export to Excel",
+                    onClick = onExportExcel
                 )
             }
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.AttachMoney,
-                    title = "Currency",
-                    subtitle = uiState.currency,
-                    onClick = onCurrencyClick
-                )
-            }
-            item {
-                ProfileMenuItem(
-                    icon = Icons.AutoMirrored.Filled.ExitToApp,
-                    title = "Logout",
-                    titleColor = MaterialTheme.colorScheme.error,
-                    onClick = onLogout
+                    icon = Icons.Default.PictureAsPdf,
+                    title = "Export to PDF",
+                    onClick = onExportPdf
                 )
             }
         }
 
-        if (uiState.isExporting || uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f))
-                    .clickable(enabled = false) {},
-                contentAlignment = Alignment.Center
+        item {
+            SectionTitle("Settings")
+        }
+        item {
+            ProfileMenuItem(
+                icon = Icons.Default.Palette,
+                title = "Theme",
+                subtitle = uiState.theme.name.lowercase().replaceFirstChar { it.uppercase() },
+                onClick = onThemeClick
+            )
+        }
+        item {
+            ProfileMenuItem(
+                icon = Icons.Default.AttachMoney,
+                title = "Currency",
+                subtitle = uiState.currency,
+                onClick = onCurrencyClick
+            )
+        }
+        item {
+            ProfileMenuItem(
+                icon = Icons.AutoMirrored.Filled.ExitToApp,
+                title = "Logout",
+                titleColor = MaterialTheme.colorScheme.error,
+                onClick = onLogout
+            )
+        }
+    }
+}
+
+@Composable
+fun LoadingOverlay(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(if (uiState.isExporting) "Exporting data..." else "Loading...")
-                    }
-                }
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(message)
             }
         }
     }

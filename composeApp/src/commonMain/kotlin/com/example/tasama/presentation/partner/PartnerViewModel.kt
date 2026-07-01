@@ -2,8 +2,10 @@ package com.example.tasama.presentation.partner
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.PlaceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -12,6 +14,7 @@ import kotlinx.coroutines.launch
 data class PartnerUiState(
     val currentUser: User? = null,
     val partner: User? = null,
+    val places: List<Place> = emptyList(),
     val pendingRequestFrom: User? = null,
     val pendingRequestTo: User? = null,
     val isLoading: Boolean = false,
@@ -22,13 +25,14 @@ data class PartnerUiState(
 )
 
 class PartnerViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val placeRepository: PlaceRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
 
     private var partnerObservationJob: Job? = null
-
+    private var placesObservationJob: Job? = null
     private var currentUserJob: Job? = null
 
     init {
@@ -47,6 +51,7 @@ class PartnerViewModel(
                         _uiState.update { it.copy(currentUser = user, isLoading = false) }
                         if (user != null) {
                             handlePartnerAndRequests(user)
+                            observePlaces(user.id, user.partnerId)
                         }
                     }
                 } else {
@@ -88,6 +93,35 @@ class PartnerViewModel(
             authRepository.getUserFlow(partnerId).collect { partner ->
                 _uiState.update { it.copy(partner = partner) }
             }
+        }
+    }
+
+    private fun observePlaces(userId: String, partnerId: String?) {
+        placesObservationJob?.cancel()
+        placesObservationJob = viewModelScope.launch {
+            val myPlacesFlow = placeRepository.getPlaces(userId)
+            val partnerPlacesFlow = partnerId?.let { placeRepository.getPlaces(it) } ?: flowOf(emptyList())
+            
+            combine(myPlacesFlow, partnerPlacesFlow) { myPlaces, pPlaces ->
+                (myPlaces + pPlaces).distinctBy { it.id }
+            }.collect { allPlaces ->
+                _uiState.update { it.copy(places = allPlaces) }
+            }
+        }
+    }
+
+    fun addPlace(name: String, lat: Double, lon: Double, radius: Double) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            val place = Place(name = name, latitude = lat, longitude = lon, radius = radius)
+            placeRepository.addPlace(uid, place)
+        }
+    }
+
+    fun deletePlace(placeId: String) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            placeRepository.deletePlace(uid, placeId)
         }
     }
 

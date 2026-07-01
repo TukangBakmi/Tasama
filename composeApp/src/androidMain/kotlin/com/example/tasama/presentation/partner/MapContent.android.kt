@@ -2,9 +2,11 @@ package com.example.tasama.presentation.partner
 
 import android.graphics.Point
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,12 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
@@ -32,16 +36,25 @@ import com.example.tasama.R
 
 private const val OFFSCREEN_VISIBLE_RATIO = 0.4f
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
-    partner: User?
+    partner: User?,
+    places: List<Place>,
+    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onDeletePlace: (String) -> Unit
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
     val paddingPx = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
     val radiusPx = indicatorSizePx / 2
+
+    var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
+    var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
+    var placeName by remember { mutableStateOf("") }
+    val defaultRadius = 150.0 // 150m is a good default for geofencing
 
     val myLocation = remember(currentUser?.latitude, currentUser?.longitude) {
         if (currentUser?.latitude != null && currentUser.longitude != null) {
@@ -196,7 +209,8 @@ actual fun MapContent(
             cameraPositionState = cameraPositionState,
             uiSettings = uiSettings,
             contentPadding = WindowInsets(0).asPaddingValues(),
-            properties = mapProperties
+            properties = mapProperties,
+            onMapLongClick = { showAddPlaceDialog = it }
         ) {
             myLocation?.let {
                 val markerState = rememberUpdatedMarkerState(position = it)
@@ -222,6 +236,49 @@ actual fun MapContent(
                 }
             }
 
+            places.forEach { place ->
+                val placeLatLng = LatLng(place.latitude, place.longitude)
+                Circle(
+                    center = placeLatLng,
+                    radius = place.radius,
+                    fillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    strokeColor = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 2f
+                )
+                val markerState = rememberMarkerState(position = placeLatLng)
+                MarkerComposable(
+                    state = markerState,
+                    title = place.name,
+                    snippet = "Long press marker to delete",
+                    onInfoWindowLongClick = { 
+                        showDeletePlaceDialog = place
+                    }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .pointerInput(place.id) {
+                                detectTapGestures(
+                                    onTap = {
+                                        markerState.showInfoWindow()
+                                    },
+                                    onLongPress = {
+                                        showDeletePlaceDialog = place
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            tint = Color(0xFF007BFF), // Azure color
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+
             markerData?.let { data ->
                 if (data.showPolyline) {
                     Polyline(
@@ -232,6 +289,49 @@ actual fun MapContent(
                     )
                 }
             }
+        }
+
+        if (showAddPlaceDialog != null) {
+            AlertDialog(
+                onDismissRequest = { showAddPlaceDialog = null },
+                title = { Text("Add Place") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Save this location to receive notifications when you or your partner arrive or leave.")
+                        OutlinedTextField(
+                            value = placeName,
+                            onValueChange = { placeName = it },
+                            label = { Text("Place Name (e.g. Home, Office)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Text(
+                            text = "Radius set to ${defaultRadius.toInt()}m",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        enabled = placeName.isNotBlank(),
+                        onClick = {
+                            showAddPlaceDialog?.let {
+                                onAddPlace(placeName, it.latitude, it.longitude, defaultRadius)
+                            }
+                            showAddPlaceDialog = null
+                            placeName = ""
+                        }
+                    ) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddPlaceDialog = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Off-screen markers
@@ -285,6 +385,30 @@ actual fun MapContent(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        if (showDeletePlaceDialog != null) {
+            AlertDialog(
+                onDismissRequest = { showDeletePlaceDialog = null },
+                title = { Text("Delete Place") },
+                text = { Text("Are you sure you want to delete \"${showDeletePlaceDialog?.name}\"? You will no longer receive notifications for this location.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeletePlaceDialog?.let { onDeletePlace(it.id) }
+                            showDeletePlaceDialog = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeletePlaceDialog = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }
@@ -342,18 +466,6 @@ fun OffScreenMarker(
                 user = user,
                 modifier = Modifier.fillMaxSize(),
                 showInitials = user?.avatarUrl == null
-            )
-
-            // Direction arrow pointing to the actual location
-            Icon(
-                imageVector = Icons.Default.Navigation,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(14.dp)
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-6).dp)
-                    .rotate(relativeBearing),
-                tint = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
             )
         }
     }

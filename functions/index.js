@@ -78,3 +78,48 @@ exports.onMessageCreated = functions.region("asia-southeast2").firestore
         }
         return null;
     });
+
+exports.onNotificationCreated = functions.region("asia-southeast2").firestore
+    .document("notifications/{notificationId}")
+    .onCreate(async (snapshot, context) => {
+        const notification = snapshot.data();
+        if (!notification) return null;
+
+        const targetUid = notification.targetUid;
+        const title = notification.title || "Tasama";
+        const body = notification.body || "";
+
+        try {
+            const userDoc = await admin.firestore().collection("users").doc(targetUid).get();
+            const token = userDoc.data()?.fcmToken;
+
+            if (!token || token.trim() === "") {
+                console.log(`No FCM token for user ${targetUid}`);
+                return null;
+            }
+
+            const payload = {
+                token: token,
+                notification: {
+                    title: title,
+                    body: body,
+                },
+                data: {
+                    type: notification.type || "GEOFENCE",
+                },
+                android: {
+                    priority: "high",
+                    notification: {
+                        sound: "default",
+                        clickAction: "FLUTTER_NOTIFICATION_CLICK"
+                    }
+                }
+            };
+
+            await admin.messaging().send(payload);
+            console.log(`Notification sent to ${targetUid}`);
+        } catch (error) {
+            console.error("Error sending geofence notification:", error);
+        }
+        return null;
+    });

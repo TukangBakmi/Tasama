@@ -10,6 +10,8 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.service.GeofenceMonitor
 import com.google.android.gms.location.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,9 +22,11 @@ import org.koin.android.ext.android.inject
 class LocationService : Service() {
 
     private val authRepository: AuthRepository by inject()
+    private val placeRepository: PlaceRepository by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
+    private var geofenceMonitor: GeofenceMonitor? = null
 
     companion object {
         const val CHANNEL_ID = "location_updates"
@@ -35,6 +39,9 @@ class LocationService : Service() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
+        geofenceMonitor = GeofenceMonitor(authRepository, placeRepository, serviceScope)
+        geofenceMonitor?.startMonitoring()
+
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 val uid = authRepository.getCurrentUserId() ?: return

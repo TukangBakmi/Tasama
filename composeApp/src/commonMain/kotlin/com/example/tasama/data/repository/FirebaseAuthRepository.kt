@@ -356,4 +356,21 @@ class FirebaseAuthRepository : AuthRepository {
             Result.failure(e)
         }
     }
+
+    override suspend fun sendNotification(targetUid: String, title: String, body: String): Result<Unit> {
+        return try {
+            val notificationData = mapOf(
+                "targetUid" to targetUid,
+                "title" to title,
+                "body" to body,
+                "timestamp" to Clock.System.now().toEpochMilliseconds(),
+                "read" to false,
+                "type" to "GEOFENCE"
+            )
+            firestore.collection("notifications").add(notificationData)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

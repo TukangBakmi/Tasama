@@ -87,9 +87,13 @@ class GeofenceMonitor(
     }
 
     private fun sendPushNotification(targetUserId: String, message: String) {
-        // In a real app, this would call a backend API or update a 'notifications' collection in Firestore
-        // which triggers a Cloud Function to send an FCM.
-        println("Sending notification to $targetUserId: $message")
+        scope.launch {
+            authRepository.sendNotification(
+                targetUid = targetUserId,
+                title = "Tasama Geofence",
+                body = message
+            )
+        }
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

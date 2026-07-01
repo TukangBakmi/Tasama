@@ -125,6 +125,13 @@ class MainActivity : ComponentActivity() {
             permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
             permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                }
+            }
             startLocationUpdates()
         }
 

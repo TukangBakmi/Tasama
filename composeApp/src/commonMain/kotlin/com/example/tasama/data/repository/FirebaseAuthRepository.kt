@@ -201,11 +201,12 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun updateLocation(uid: String, lat: Double, lon: Double) {
+    override suspend fun updateLocation(uid: String, lat: Double, lon: Double, speed: Float?) {
         try {
             firestore.collection("users").document(uid).updateFields {
                 "latitude" to lat
                 "longitude" to lon
+                "speed" to speed
                 "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
             }
         } catch (e: Exception) {

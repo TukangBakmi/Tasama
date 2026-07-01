@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.partner
 
 import android.graphics.Point
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -542,22 +544,56 @@ fun calculateBearing(start: LatLng, end: LatLng): Float {
 
 @Composable
 fun UserMarker(user: User?, isMe: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
-            .padding(2.dp)
-            .background(Color.White, CircleShape)
-            .padding(2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        UserAvatar(
-            user = user,
-            modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            showInitials = user?.avatarUrl == null
-        )
+    val isMoving = (user?.speed ?: 0f) > 0.5f
+    
+    Box(contentAlignment = Alignment.Center) {
+        if (isMoving) {
+            val infiniteTransition = rememberInfiniteTransition()
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 2f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1500, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                )
+            )
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.6f,
+                targetValue = 0f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1500, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                )
+            )
+            
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
+                    .background(
+                        if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        CircleShape
+                    )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
+                .padding(2.dp)
+                .background(Color.White, CircleShape)
+                .padding(2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            UserAvatar(
+                user = user,
+                modifier = Modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                showInitials = user?.avatarUrl == null
+            )
+        }
     }
 }
 

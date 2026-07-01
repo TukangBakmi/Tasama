@@ -192,10 +192,10 @@ class PartnerViewModel(
         }
     }
 
-    fun updateLocation(lat: Double, lon: Double) {
+    fun updateLocation(lat: Double, lon: Double, speed: Float? = null) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            authRepository.updateLocation(uid, lat, lon)
+            authRepository.updateLocation(uid, lat, lon, speed)
         }
     }
 

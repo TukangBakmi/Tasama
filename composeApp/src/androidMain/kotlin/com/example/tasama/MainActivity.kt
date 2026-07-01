@@ -147,23 +147,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startLocationUpdates() {
-        val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this)
-        val locationRequest = com.google.android.gms.location.LocationRequest.Builder(
-            com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 30000
-        ).build()
-
-        val locationCallback = object : com.google.android.gms.location.LocationCallback() {
-            override fun onLocationResult(locationResult: com.google.android.gms.location.LocationResult) {
-                for (location in locationResult.locations) {
-                    partnerViewModel.updateLocation(location.latitude, location.longitude)
-                }
-            }
+        val intent = Intent(this, com.example.tasama.service.LocationService::class.java).apply {
+            action = com.example.tasama.service.LocationService.ACTION_START
         }
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, android.os.Looper.getMainLooper())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
     }
 

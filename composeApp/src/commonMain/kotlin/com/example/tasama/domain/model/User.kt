@@ -19,5 +19,6 @@ data class User(
     val lastLocationUpdate: Long? = null,
     val lastActive: Long? = null,
     val batteryLevel: Float? = null,
-    val isCharging: Boolean? = null
+    val isCharging: Boolean? = null,
+    val speed: Float? = null // speed in m/s
 )

@@ -1,5 +1,7 @@
 package com.example.tasama.presentation.partner
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -13,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -22,13 +25,12 @@ import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.TimeZone
-import kotlin.time.Clock
 import kotlinx.datetime.toLocalDateTime
-import org.koin.compose.viewmodel.koinViewModel
-import tasama.composeapp.generated.resources.*
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.compose.resources.painterResource
+import org.koin.compose.viewmodel.koinViewModel
+import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -299,6 +301,31 @@ fun AnniversaryBadge(timestamp: Long, onClick: () -> Unit) {
 }
 
 @Composable
+fun MovingIndicator() {
+    val infiniteTransition = rememberInfiniteTransition()
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+    )
+}
+
+private fun Double.formatDecimal(digits: Int): String {
+    val precision = 10.0.pow(digits)
+    return ((this * precision).roundToInt() / precision).toString()
+}
+
+@Composable
 fun PartnerCard(partner: User) {
     Card(shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(8.dp)) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -324,11 +351,26 @@ fun PartnerCard(partner: User) {
                         }
                     }
                 }
-                val lastUpdateText = partner.lastLocationUpdate?.let {
-                    val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
-                    "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
-                } ?: "Location unknown"
-                Text(lastUpdateText, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val lastUpdateText = partner.lastLocationUpdate?.let {
+                        val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
+                        "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
+                    } ?: "Location unknown"
+                    Text(lastUpdateText, style = MaterialTheme.typography.bodySmall)
+
+                    partner.speed?.takeIf { it > 0.1f }?.let { speed ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val speedKms = speed / 1000.0
+                        Text(
+                            text = "• ${speedKms.formatDecimal(3)} km/s",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        MovingIndicator()
+                    }
+                }
             }
         }
     }

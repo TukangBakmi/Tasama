@@ -50,9 +50,9 @@ val LocalSnackbarHostState = compositionLocalOf<SnackbarHostState> {
 fun MainScreen(
     viewModel: MainViewModel = koinViewModel(),
     initialChannelId: String? = null,
-    navigateToPartner: Boolean = false,
+    navigateToTab: String? = null,
     onChannelNavigated: () -> Unit = {},
-    onPartnerNavigated: () -> Unit = {},
+    onTabNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
     val navController = rememberNavController()
@@ -75,10 +75,25 @@ fun MainScreen(
     )
     val pagerState = rememberPagerState(pageCount = { items.size })
 
-    LaunchedEffect(navigateToPartner, authState) {
-        if (navigateToPartner && authState is AuthState.Authenticated) {
-            pagerState.scrollToPage(3)
-            onPartnerNavigated()
+    LaunchedEffect(navigateToTab, authState) {
+        if (navigateToTab != null && authState is AuthState.Authenticated) {
+            val pageIndex = when (navigateToTab) {
+                "dashboard" -> 0
+                "savings" -> 1
+                "chat" -> 2
+                "partner" -> 3
+                "profile" -> 4
+                else -> -1
+            }
+            
+            if (pageIndex != -1) {
+                // If we are in a sub-screen (like chat room), go back to tabs first
+                if (navController.currentDestination?.route != "tabs") {
+                    navController.popBackStack("tabs", inclusive = false)
+                }
+                pagerState.scrollToPage(pageIndex)
+            }
+            onTabNavigated()
         }
     }
 

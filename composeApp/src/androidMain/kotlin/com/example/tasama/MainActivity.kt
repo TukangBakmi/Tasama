@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
     private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by inject()
 
     private var initialChannelId by mutableStateOf<String?>(null)
-    private var navigateToPartner by mutableStateOf(false)
+    private var navigateToTab by mutableStateOf<String?>(null)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
         startBatteryMonitoring()
 
         initialChannelId = intent.getStringExtra("channelId")
-        navigateToPartner = intent.getStringExtra("navigate_to") == "partner"
+        navigateToTab = intent.getStringExtra("navigate_to")
 
         val googleSignInHelper = GoogleSignInHelper(this)
 
@@ -100,9 +100,9 @@ class MainActivity : ComponentActivity() {
 
             App(
                 initialChannelId = initialChannelId,
-                navigateToPartner = navigateToPartner,
+                navigateToTab = navigateToTab,
                 onChannelNavigated = { initialChannelId = null },
-                onPartnerNavigated = { navigateToPartner = false },
+                onTabNavigated = { navigateToTab = null },
                 onGoogleSignInClick = {
                     scope.launch {
                         android.util.Log.d("GoogleSignIn", "Sign-in button clicked")
@@ -130,8 +130,8 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra("channelId")?.let {
             initialChannelId = it
         }
-        if (intent.getStringExtra("navigate_to") == "partner") {
-            navigateToPartner = true
+        intent.getStringExtra("navigate_to")?.let {
+            navigateToTab = it
         }
     }
 

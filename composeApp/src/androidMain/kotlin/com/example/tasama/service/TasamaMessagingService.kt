@@ -189,8 +189,16 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         ensureChannel(manager, category)
 
         val intent = Intent(this, MainActivity::class.java).apply {
+            action = "com.example.tasama.ACTION_NAVIGATE_${category.id}_${type}"
+            `package` = packageName
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            if (category == Categories.PARTNER) putExtra("navigate_to", "partner")
+            
+            val destination = when (category) {
+                Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
+                Categories.MESSAGING -> "chat"
+                else -> "dashboard"
+            }
+            putExtra("navigate_to", destination)
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -335,6 +343,8 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
     ) {
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
+            action = "com.example.tasama.ACTION_CHAT_$chatId"
+            `package` = packageName
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("channelId", chatId)
         }
@@ -470,6 +480,25 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
     }
 
     private fun postSummaryNotification(manager: NotificationManager, category: NotificationCategory) {
+        val destination = when (category) {
+            Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
+            Categories.MESSAGING -> "chat"
+            else -> "dashboard"
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = "com.example.tasama.ACTION_NAVIGATE_SUMMARY_${category.id}"
+            `package` = packageName
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("navigate_to", destination)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            category.groupKey.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val summaryNotification = NotificationCompat.Builder(this, category.id)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(category.name)
@@ -477,6 +506,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .setSubText("Tasama")
             .setGroup(category.groupKey)
             .setGroupSummary(true)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
 

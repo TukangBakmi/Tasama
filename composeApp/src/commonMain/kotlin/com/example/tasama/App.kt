@@ -20,9 +20,9 @@ import org.koin.compose.viewmodel.koinViewModel
 @Preview
 fun App(
     initialChannelId: String? = null,
-    navigateToPartner: Boolean = false,
+    navigateToTab: String? = null,
     onChannelNavigated: () -> Unit = {},
-    onPartnerNavigated: () -> Unit = {},
+    onTabNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
     setSingletonImageLoaderFactory { context ->
@@ -45,9 +45,9 @@ fun App(
     TasamaTheme(darkTheme = isDarkTheme) {
         MainScreen(
             initialChannelId = initialChannelId,
-            navigateToPartner = navigateToPartner,
+            navigateToTab = navigateToTab,
             onChannelNavigated = onChannelNavigated,
-            onPartnerNavigated = onPartnerNavigated,
+            onTabNavigated = onTabNavigated,
             onGoogleSignInClick = onGoogleSignInClick
         )
     }

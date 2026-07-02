@@ -247,6 +247,11 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun sendPartnerRequest(uid: String, partnerShortId: String): Result<Unit> {
         return try {
+            val sender = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            if (sender.partnerId != null) return Result.failure(Exception("You already have a partner"))
+            if (sender.partnerRequestTo != null) return Result.failure(Exception("You already have a pending outgoing request"))
+            if (sender.partnerRequestFrom != null) return Result.failure(Exception("You have a pending incoming request. Please accept or decline it first."))
+
             val partnerUid = getUserIdFromShortId(partnerShortId)
                 ?: return Result.failure(Exception("Partner not found"))
 
@@ -257,7 +262,9 @@ class FirebaseAuthRepository : AuthRepository {
             // Check if partner is already linked or has a pending request
             val partner = getUser(partnerUid) ?: return Result.failure(Exception("Partner not found"))
             if (partner.partnerId != null) return Result.failure(Exception("This user already has a partner"))
-            if (partner.partnerRequestFrom != null) return Result.failure(Exception("This user already has a pending request"))
+            if (partner.partnerRequestFrom != null || partner.partnerRequestTo != null) {
+                return Result.failure(Exception("This user already has a pending request"))
+            }
 
             // Update sender
             firestore.collection("users").document(uid).updateFields {
@@ -277,7 +284,16 @@ class FirebaseAuthRepository : AuthRepository {
     override suspend fun acceptPartnerRequest(uid: String, anniversaryDate: Long): Result<Unit> {
         return try {
             val user = getUser(uid) ?: return Result.failure(Exception("User not found"))
+            if (user.partnerId != null) return Result.failure(Exception("You already have a partner"))
+            
             val partnerUid = user.partnerRequestFrom ?: return Result.failure(Exception("No pending request"))
+            val partner = getUser(partnerUid) ?: return Result.failure(Exception("Partner not found"))
+
+            if (partner.partnerId != null) {
+                // Partner linked with someone else in the meantime
+                firestore.collection("users").document(uid).updateFields { "partnerRequestFrom" to null }
+                return Result.failure(Exception("This user is no longer available"))
+            }
 
             // Link both users
             firestore.collection("users").document(uid).updateFields {

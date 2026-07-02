@@ -93,14 +93,17 @@ class ProfileViewModel(
     fun linkPartner(partnerShortId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, isLinkSuccess = false, errorText = null) }
             val result = authRepository.sendPartnerRequest(uid, partnerShortId)
+            _uiState.update { it.copy(isLoading = false) }
             if (result.isSuccess) {
-                _uiState.update { it.copy(exportMessage = "Partner linked successfully") }
+                _uiState.update { it.copy(
+                    exportMessage = "Partner request sent",
+                    isLinkSuccess = true
+                ) }
             } else {
                 _uiState.update { it.copy(
-                    isLoading = false, 
-                    error = result.exceptionOrNull()?.message ?: "Failed to link partner"
+                    errorText = result.exceptionOrNull()?.message ?: "Failed to link partner"
                 ) }
             }
         }
@@ -120,6 +123,14 @@ class ProfileViewModel(
                 ) }
             }
         }
+    }
+
+    fun clearLinkError() {
+        _uiState.update { it.copy(errorText = null) }
+    }
+
+    fun clearLinkSuccess() {
+        _uiState.update { it.copy(isLinkSuccess = false) }
     }
 
     fun clearError() {

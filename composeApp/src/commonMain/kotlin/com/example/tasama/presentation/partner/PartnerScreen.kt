@@ -1,13 +1,14 @@
 package com.example.tasama.presentation.partner
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -15,15 +16,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
@@ -39,14 +42,35 @@ fun PartnerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+    val clipboardManager = LocalClipboardManager.current
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
 
-    LaunchedEffect(uiState.error) {
-        uiState.error?.let { error ->
-            viewModel.clearError()
-            snackbarHostState.showSnackbar(error)
+    // Side effect handlers using snapshotFlow to prevent cancellation when state is cleared
+    LaunchedEffect(Unit) {
+        launch {
+            snapshotFlow { uiState.successMessage }
+                .filterNotNull()
+                .collect { message ->
+                    viewModel.clearError()
+                    snackbarHostState.showSnackbar(message)
+                }
+        }
+        launch {
+            snapshotFlow { uiState.error }
+                .filterNotNull()
+                .collect { error ->
+                    viewModel.clearError()
+                    snackbarHostState.showSnackbar(error)
+                }
+        }
+    }
+
+    // Dismiss snackbar when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            snackbarHostState.currentSnackbarData?.dismiss()
         }
     }
 
@@ -76,7 +100,8 @@ fun PartnerScreen(
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
                     onEditAnniversary = { showDatePicker = true },
                     onAddPlace = viewModel::addPlace,
-                    onDeletePlace = viewModel::deletePlace
+                    onDeletePlace = viewModel::deletePlace,
+                    onUnlink = viewModel::unlinkPartner
                 )
                 else -> LinkingContent(
                     uiState = uiState,
@@ -84,7 +109,11 @@ fun PartnerScreen(
                     onSendRequest = viewModel::sendPartnerRequest,
                     onAcceptRequest = { showDatePicker = true },
                     onDeclineRequest = viewModel::declinePartnerRequest,
-                    onCancelRequest = viewModel::cancelPartnerRequest
+                    onCancelRequest = viewModel::cancelPartnerRequest,
+                    onCopyId = { id ->
+                        clipboardManager.setText(AnnotatedString(id))
+                        viewModel.onIdCopied()
+                    }
                 )
             }
         }
@@ -172,7 +201,8 @@ fun LinkingContent(
     onSendRequest: () -> Unit,
     onAcceptRequest: () -> Unit,
     onDeclineRequest: () -> Unit,
-    onCancelRequest: () -> Unit
+    onCancelRequest: () -> Unit,
+    onCopyId: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -209,17 +239,41 @@ fun LinkingContent(
                 Spacer(modifier = Modifier.height(24.dp))
                 OutlinedTextField(
                     value = uiState.partnerShortIdInput,
-                    onValueChange = onShortIdChange,
+                    onValueChange = {
+                        if (it.all { char -> char.isDigit() } && it.length <= 12) {
+                            onShortIdChange(it)
+                        }
+                    },
                     label = { Text("Partner ID") },
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = onSendRequest, modifier = Modifier.fillMaxWidth(), enabled = uiState.partnerShortIdInput.length == 12) {
                     Text("Send Request")
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("Your ID: ${uiState.currentUser?.shortId ?: "..."}", color = MaterialTheme.colorScheme.primary)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { uiState.currentUser?.shortId?.let { onCopyId(it) } }
+                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Your ID: ${uiState.currentUser?.shortId ?: "..."}",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy ID",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -233,8 +287,11 @@ fun PartnerMapContent(
     anniversaryDate: Long?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
-    onDeletePlace: (String) -> Unit
+    onDeletePlace: (String) -> Unit,
+    onUnlink: () -> Unit
 ) {
+    var showUnlinkDialog by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(
             modifier = Modifier.fillMaxSize(),
@@ -266,9 +323,33 @@ fun PartnerMapContent(
                 AnniversaryBadge(anniversaryDate, onClick = onEditAnniversary)
             }
             if (partner != null) {
-                PartnerCard(partner)
+                PartnerCard(partner, onUnlinkClick = { showUnlinkDialog = true })
             }
         }
+    }
+
+    if (showUnlinkDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnlinkDialog = false },
+            title = { Text("Unlink Partner") },
+            text = { Text("Are you sure you want to unlink from ${partner?.name}? You will no longer see each other's location.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onUnlink()
+                        showUnlinkDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Unlink")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnlinkDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -326,8 +407,12 @@ private fun Double.formatDecimal(digits: Int): String {
 }
 
 @Composable
-fun PartnerCard(partner: User) {
-    Card(shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(8.dp)) {
+fun PartnerCard(partner: User, onUnlinkClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(8.dp),
+        onClick = onUnlinkClick // Tapping the card now allows unlinking
+    ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             UserAvatar(
                 user = partner,

@@ -22,7 +22,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.example.tasama.auth.GoogleSignInHelper
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.model.User
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.android.inject
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         ) {
-            startLocationUpdates()
+            // Permission granted, our LaunchedEffect will handle starting the service if a partner exists
         }
     }
 
@@ -64,16 +66,32 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
-                authRepository.userId.collect { uid ->
+                authRepository.userId.collectLatest { uid: String? ->
                     if (uid != null) {
                         try {
                             val token = FirebaseMessaging.getInstance().token.await()
                             android.util.Log.d("FCM", "Token retrieved: $token")
                             authRepository.updateFcmToken(uid, token)
-                            android.util.Log.d("FCM", "Token updated in AuthRepository")
                         } catch (e: Exception) {
                             android.util.Log.e("FCM", "Failed to get/update token", e)
                         }
+
+                        // Monitor partner status to start/stop LocationService
+                        authRepository.getUserFlow(uid).collectLatest { user: User? ->
+                            if (user?.partnerId != null) {
+                                if (ContextCompat.checkSelfPermission(
+                                        this@MainActivity,
+                                        Manifest.permission.ACCESS_FINE_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    startLocationUpdates()
+                                }
+                            } else {
+                                stopLocationService()
+                            }
+                        }
+                    } else {
+                        stopLocationService()
                     }
                 }
             }
@@ -132,7 +150,6 @@ class MainActivity : ComponentActivity() {
                     permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 }
             }
-            startLocationUpdates()
         }
 
         if (permissions.isNotEmpty()) {
@@ -162,6 +179,13 @@ class MainActivity : ComponentActivity() {
         } else {
             startService(intent)
         }
+    }
+
+    private fun stopLocationService() {
+        val intent = Intent(this, com.example.tasama.service.LocationService::class.java).apply {
+            action = com.example.tasama.service.LocationService.ACTION_STOP
+        }
+        startService(intent)
     }
 
     private fun startBatteryMonitoring() {

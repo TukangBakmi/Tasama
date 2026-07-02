@@ -49,6 +49,13 @@ fun DashboardScreen(
             }
     }
 
+    // Dismiss snackbar when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            snackbarHostState.currentSnackbarData?.dismiss()
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(

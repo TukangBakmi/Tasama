@@ -19,9 +19,11 @@ data class PartnerUiState(
     val pendingRequestTo: User? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
+    val successMessage: String? = null,
     val isLinked: Boolean = false,
     val isGuest: Boolean = false,
-    val partnerShortIdInput: String = ""
+    val partnerShortIdInput: String = "",
+    val isOperationSuccess: Boolean = false
 )
 
 class PartnerViewModel(
@@ -46,7 +48,7 @@ class PartnerViewModel(
                 if (uid != null) {
                     val isGuest = authRepository.isGuest()
                     _uiState.update { it.copy(isGuest = isGuest, isLoading = true) }
-                    
+
                     authRepository.getUserFlow(uid).collectLatest { user ->
                         _uiState.update { it.copy(currentUser = user, isLoading = false) }
                         if (user != null) {
@@ -68,7 +70,7 @@ class PartnerViewModel(
             _uiState.update { it.copy(isLinked = true, pendingRequestFrom = null, pendingRequestTo = null) }
         } else {
             _uiState.update { it.copy(partner = null, isLinked = false) }
-            
+
             // Handle Incoming Request
             if (user.partnerRequestFrom != null) {
                 val requester = authRepository.getUser(user.partnerRequestFrom)
@@ -101,7 +103,7 @@ class PartnerViewModel(
         placesObservationJob = viewModelScope.launch {
             val myPlacesFlow = placeRepository.getPlaces(userId)
             val partnerPlacesFlow = partnerId?.let { placeRepository.getPlaces(it) } ?: flowOf(emptyList())
-            
+
             combine(myPlacesFlow, partnerPlacesFlow) { myPlaces, pPlaces ->
                 (myPlaces + pPlaces).distinctBy { it.id }
             }.collect { allPlaces ->
@@ -139,8 +141,11 @@ class PartnerViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            authRepository.sendPartnerRequest(uid, shortId).onFailure { e ->
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
+            val result = authRepository.sendPartnerRequest(uid, shortId)
+            if (result.isSuccess) {
+                _uiState.update { it.copy(isLoading = false, successMessage = "Request sent successfully!", partnerShortIdInput = "") }
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Failed to send request") }
             }
         }
     }
@@ -148,9 +153,12 @@ class PartnerViewModel(
     fun acceptPartnerRequest(anniversaryDate: Long) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            authRepository.acceptPartnerRequest(uid, anniversaryDate).onFailure { e ->
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
+            _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
+            val result = authRepository.acceptPartnerRequest(uid, anniversaryDate)
+            if (result.isSuccess) {
+                _uiState.update { it.copy(isLoading = false, successMessage = "Partner linked!", isOperationSuccess = true) }
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Failed to link partner") }
             }
         }
     }
@@ -158,8 +166,11 @@ class PartnerViewModel(
     fun declinePartnerRequest() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            authRepository.declinePartnerRequest(uid).onFailure { e ->
-                _uiState.update { it.copy(error = e.message) }
+            val result = authRepository.declinePartnerRequest(uid)
+            if (result.isSuccess) {
+                _uiState.update { it.copy(successMessage = "Request declined") }
+            } else {
+                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to decline request") }
             }
         }
     }
@@ -167,8 +178,11 @@ class PartnerViewModel(
     fun cancelPartnerRequest() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            authRepository.cancelPartnerRequest(uid).onFailure { e ->
-                _uiState.update { it.copy(error = e.message) }
+            val result = authRepository.cancelPartnerRequest(uid)
+            if (result.isSuccess) {
+                _uiState.update { it.copy(successMessage = "Request cancelled") }
+            } else {
+                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to cancel request") }
             }
         }
     }
@@ -176,8 +190,11 @@ class PartnerViewModel(
     fun unlinkPartner() {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            authRepository.unlinkPartner(uid).onFailure { e ->
-                _uiState.update { it.copy(error = e.message) }
+            val result = authRepository.unlinkPartner(uid)
+            if (result.isSuccess) {
+                _uiState.update { it.copy(successMessage = "Partner unlinked") }
+            } else {
+                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to unlink partner") }
             }
         }
     }
@@ -185,10 +202,15 @@ class PartnerViewModel(
     fun updateAnniversaryDate(date: Long) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            authRepository.updateAnniversaryDate(uid, date).onFailure { e ->
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
-            }
+            _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
+            authRepository.updateAnniversaryDate(uid, date).fold(
+                onSuccess = {
+                    _uiState.update { it.copy(isLoading = false, isOperationSuccess = true, successMessage = "Anniversary updated") }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                }
+            )
         }
     }
 
@@ -212,7 +234,15 @@ class PartnerViewModel(
         }
     }
 
+    fun onIdCopied() {
+        _uiState.update { it.copy(successMessage = "ID copied to clipboard") }
+    }
+
+    fun clearOperationSuccess() {
+        _uiState.update { it.copy(isOperationSuccess = false) }
+    }
+
     fun clearError() {
-        _uiState.update { it.copy(error = null) }
+        _uiState.update { it.copy(error = null, successMessage = null) }
     }
 }

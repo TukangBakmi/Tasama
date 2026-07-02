@@ -11,6 +11,8 @@ import android.graphics.drawable.Drawable
 import android.location.Geocoder
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.widget.RemoteViews
@@ -78,7 +80,7 @@ class LocationService : Service() {
     }
 
     private fun startLocationService() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = getSystemService(NotificationManager::class.java)
         
         val channel = NotificationChannel(
             CHANNEL_ID,
@@ -99,7 +101,10 @@ class LocationService : Service() {
     private fun observePartner() {
         partnerObservationJob?.cancel()
         partnerObservationJob = serviceScope.launch {
-            val uid = authRepository.getCurrentUserId() ?: return@launch
+            val uid = authRepository.getCurrentUserId() ?: run {
+                stopLocationService()
+                return@launch
+            }
             authRepository.getUserFlow(uid).collectLatest { user ->
                 val partnerId = user?.partnerId
                 if (partnerId != null) {
@@ -109,6 +114,8 @@ class LocationService : Service() {
                             updateNotification(partner)
                         }
                     }
+                } else {
+                    stopLocationService()
                 }
             }
         }
@@ -129,9 +136,20 @@ class LocationService : Service() {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = cm.activeNetwork ?: return "Offline"
         val capabilities = cm.getNetworkCapabilities(network) ?: return "Offline"
+
         return when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
+                val wifiManager = getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                val info = wifiManager.connectionInfo
+                val ssid = info.ssid?.trim('"')
+                if (ssid != null && ssid != "<unknown ssid>" && ssid.isNotEmpty()) {
+                    ssid
+                } else {
+                    "Wi-Fi"
+                }
+            }
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cell"
             else -> "Offline"
         }
     }
@@ -141,7 +159,7 @@ class LocationService : Service() {
             partnerAvatarBitmap = null
         }
         
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = getSystemService(NotificationManager::class.java)
         
         if (partnerAvatarBitmap == null && partner.avatarUrl != null) {
             Glide.with(this)
@@ -165,24 +183,53 @@ class LocationService : Service() {
         val expandedView = RemoteViews(packageName, R.layout.notification_custom_expanded)
 
         if (partner != null) {
-            val activityStatus = when {
-                (partner.speed ?: 0f) > 10f -> " is Driving"
-                (partner.speed ?: 0f) > 1.5f -> " is Moving"
-                else -> "'s activity"
+            val speed = partner.speed ?: 0f
+            val (activityStatusSuffix, activityLabel) = when {
+                speed > 10f -> getString(R.string.status_driving) to getString(R.string.label_driving)
+                speed > 1.5f -> getString(R.string.status_moving) to getString(R.string.label_moving)
+                else -> "'s activity" to "activity"
             }
             
-            val titleText = "${partner.name}$activityStatus"
+            val titleText = "${partner.name}$activityStatusSuffix"
             collapsedView.setTextViewText(R.id.notification_title, titleText)
             
             expandedView.setTextViewText(R.id.notification_partner_name, "${partner.name}'s")
+            expandedView.setTextViewText(R.id.notification_activity_status, activityLabel)
 
             val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%" } ?: "--%"
             collapsedView.setTextViewText(R.id.notification_battery, batteryPercent)
             expandedView.setTextViewText(R.id.notification_battery, batteryPercent)
 
-            val network = partner.connectionType ?: "Unknown"
-            collapsedView.setTextViewText(R.id.notification_network, network)
-            expandedView.setTextViewText(R.id.notification_network, network)
+            // Set dynamic battery icon
+            val batteryRes = when {
+                partner.batteryLevel == null -> R.drawable.ic_battery_status
+                partner.batteryLevel!! <= 0.20f -> R.drawable.ic_battery_20
+                partner.batteryLevel!! <= 0.50f -> R.drawable.ic_battery_50
+                partner.batteryLevel!! <= 0.80f -> R.drawable.ic_battery_80
+                else -> R.drawable.ic_battery_100
+            }
+            collapsedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
+            expandedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
+
+            val networkDisplay = when (partner.connectionType) {
+                "Cellular" -> "Cell"
+                null -> "Unknown"
+                else -> partner.connectionType
+            }
+            collapsedView.setTextViewText(R.id.notification_network, networkDisplay)
+            expandedView.setTextViewText(R.id.notification_network, networkDisplay)
+
+            // Set dynamic signal icon
+            val signalRes = when (partner.signalLevel) {
+                0 -> R.drawable.ic_signal_0
+                1 -> R.drawable.ic_signal_1
+                2 -> R.drawable.ic_signal_2
+                3 -> R.drawable.ic_signal_3
+                4 -> R.drawable.ic_signal_4
+                else -> R.drawable.ic_signal_0
+            }
+            collapsedView.setImageViewResource(R.id.notification_signal_icon, signalRes)
+            expandedView.setImageViewResource(R.id.notification_signal_icon, signalRes)
 
             val address = getAddress(partner.latitude, partner.longitude)
             expandedView.setTextViewText(R.id.notification_address, address)
@@ -206,9 +253,9 @@ class LocationService : Service() {
             .setCustomContentView(collapsedView)
             .setCustomBigContentView(expandedView)
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setOngoing(true)
             .build()
     }
 

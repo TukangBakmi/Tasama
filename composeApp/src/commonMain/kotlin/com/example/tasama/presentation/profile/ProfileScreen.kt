@@ -168,12 +168,20 @@ fun ProfileScreen(
             }
 
             if (showLinkPartnerDialog) {
+                LaunchedEffect(uiState.isLinkSuccess) {
+                    if (uiState.isLinkSuccess) {
+                        showLinkPartnerDialog = false
+                        viewModel.clearLinkSuccess()
+                    }
+                }
                 LinkPartnerDialog(
                     onDismiss = { showLinkPartnerDialog = false },
                     onConfirm = { shortId ->
                         viewModel.linkPartner(shortId)
-                        showLinkPartnerDialog = false
-                    }
+                    },
+                    isLoading = uiState.isLoading,
+                    error = uiState.errorText,
+                    onClearError = viewModel::clearLinkError
                 )
             }
 
@@ -579,7 +587,10 @@ fun SettingsSelectionDialog(
 @Composable
 fun LinkPartnerDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
+    isLoading: Boolean = false,
+    error: String? = null,
+    onClearError: () -> Unit = {}
 ) {
     var shortId by remember { mutableStateOf("") }
 
@@ -596,25 +607,39 @@ fun LinkPartnerDialog(
                         // Only allow numbers and max 12 digits
                         if (it.all { char -> char.isDigit() } && it.length <= 12) {
                             shortId = it
+                            if (error != null) onClearError()
                         }
                     },
                     label = { Text("Partner ID") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading,
+                    isError = error != null,
+                    supportingText = if (error != null) {
+                        { Text(text = error, color = MaterialTheme.colorScheme.error) }
+                    } else null
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = { onConfirm(shortId) },
-                enabled = shortId.length == 12
+                enabled = shortId.length == 12 && !isLoading
             ) {
-                Text("Link")
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Link")
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isLoading) {
                 Text("Cancel")
             }
         }

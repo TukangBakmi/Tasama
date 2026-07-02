@@ -49,6 +49,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
     private val authRepository: AuthRepository by inject()
     private val chatRepository: ChatRepository by inject()
+    private val placeRepository: com.example.tasama.domain.repository.PlaceRepository by inject()
 
     private val scope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -161,6 +162,12 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
     private suspend fun handleFeatureNotification(message: RemoteMessage, category: NotificationCategory) {
         val data = message.data
         val type = (data["type"] ?: "UPDATE").uppercase().trim()
+
+        if (type == "PARTNER_ACCEPT") {
+            authRepository.getCurrentUserId()?.let { uid ->
+                placeRepository.deleteAllPlaces(uid)
+            }
+        }
 
         val senderName = data["sender_name"] ?: "Tasama"
         val senderPhoto = data["sender_photo"]

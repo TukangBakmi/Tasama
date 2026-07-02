@@ -152,10 +152,16 @@ class PartnerViewModel(
 
     fun acceptPartnerRequest(anniversaryDate: Long) {
         val uid = authRepository.getCurrentUserId() ?: return
+        val partnerUid = _uiState.value.pendingRequestFrom?.id
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
             val result = authRepository.acceptPartnerRequest(uid, anniversaryDate)
             if (result.isSuccess) {
+                // Remove all places from both users to start fresh with the new partner
+                placeRepository.deleteAllPlaces(uid)
+                if (partnerUid != null) {
+                    placeRepository.deleteAllPlaces(partnerUid)
+                }
                 _uiState.update { it.copy(isLoading = false, successMessage = "Partner linked!", isOperationSuccess = true) }
             } else {
                 _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Failed to link partner") }

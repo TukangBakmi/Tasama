@@ -27,4 +27,12 @@ class FirebasePlaceRepository : PlaceRepository {
     override suspend fun deletePlace(userId: String, placeId: String) {
         firestore.collection("users").document(userId).collection("places").document(placeId).delete()
     }
+
+    override suspend fun deleteAllPlaces(userId: String) {
+        val collection = firestore.collection("users").document(userId).collection("places")
+        val snapshot = collection.get()
+        snapshot.documents.forEach { doc ->
+            doc.reference.delete()
+        }
+    }
 }

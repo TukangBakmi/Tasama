@@ -7,4 +7,5 @@ interface PlaceRepository {
     fun getPlaces(userId: String): Flow<List<Place>>
     suspend fun addPlace(userId: String, place: Place)
     suspend fun deletePlace(userId: String, placeId: String)
+    suspend fun deleteAllPlaces(userId: String)
 }

@@ -6,9 +6,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -229,7 +233,7 @@ actual fun MapContent(
             partnerLocation?.let {
                 val markerState = rememberUpdatedMarkerState(position = it)
                 MarkerComposable(
-                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", it.latitude, it.longitude),
+                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", it.latitude, it.longitude, partner?.batteryLevel ?: 0f, partner?.isCharging ?: false, partner?.connectionType ?: ""),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
                     visible = markerData?.isPartnerVisible ?: true
@@ -546,53 +550,118 @@ fun calculateBearing(start: LatLng, end: LatLng): Float {
 fun UserMarker(user: User?, isMe: Boolean) {
     val isMoving = (user?.speed ?: 0f) > 0.5f
     
-    Box(contentAlignment = Alignment.Center) {
-        if (isMoving) {
-            val infiniteTransition = rememberInfiniteTransition()
-            val scale by infiniteTransition.animateFloat(
-                initialValue = 1f,
-                targetValue = 2f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1500, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (!isMe && user != null) {
+            PartnerStatusInfo(user)
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+        
+        Box(contentAlignment = Alignment.Center) {
+            if (isMoving) {
+                val infiniteTransition = rememberInfiniteTransition()
+                val scale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 2f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1500, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    )
                 )
-            )
-            val alpha by infiniteTransition.animateFloat(
-                initialValue = 0.6f,
-                targetValue = 0f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1500, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
+                val alpha by infiniteTransition.animateFloat(
+                    initialValue = 0.6f,
+                    targetValue = 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1500, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    )
                 )
-            )
-            
+                
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
+                        .background(
+                            if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                            CircleShape
+                        )
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
-                    .background(
-                        if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
-                        CircleShape
-                    )
-            )
+                    .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
+                    .padding(2.dp)
+                    .background(Color.White, CircleShape)
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                UserAvatar(
+                    user = user,
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    showInitials = user?.avatarUrl == null
+                )
+            }
         }
+    }
+}
 
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
-                .padding(2.dp)
-                .background(Color.White, CircleShape)
-                .padding(2.dp),
-            contentAlignment = Alignment.Center
+@Composable
+fun PartnerStatusInfo(user: User) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        shape = RoundedCornerShape(8.dp),
+        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            UserAvatar(
-                user = user,
-                modifier = Modifier.fillMaxSize(),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                showInitials = user?.avatarUrl == null
+            // Battery
+            user.batteryLevel?.let { level ->
+                val batteryColor = when {
+                    level < 0.2f -> Color.Red
+                    level < 0.5f -> Color(0xFFFFA500) // Orange
+                    else -> Color(0xFF4CAF50) // Green
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${(level * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = batteryColor
+                    )
+                    if (user.isCharging == true) {
+                        Text("⚡", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            // Connection/Signal
+            val connectionIcon = when (user.connectionType) {
+                "Wi-Fi" -> Icons.Default.Wifi
+                "Cellular" -> Icons.Default.SignalCellularAlt
+                else -> Icons.Default.NetworkCheck
+            }
+            
+            Icon(
+                imageVector = connectionIcon,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            user.signalLevel?.let {
+                Text(
+                    text = "$it/4",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

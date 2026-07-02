@@ -275,6 +275,16 @@ class FirebaseAuthRepository : AuthRepository {
                 "partnerRequestFrom" to uid
             }
 
+            // Send notification
+            sendNotification(
+                targetUid = partnerUid,
+                title = "Partner Request",
+                body = "${sender.name} wants to link with you!",
+                type = "PARTNER_REQUEST",
+                senderName = sender.name,
+                senderPhoto = sender.avatarUrl
+            )
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -307,6 +317,16 @@ class FirebaseAuthRepository : AuthRepository {
                 "partnerRequestTo" to null
             }
 
+            // Send notification
+            sendNotification(
+                targetUid = partnerUid,
+                title = "Partner Request Accepted",
+                body = "${user.name} accepted your partner request!",
+                type = "PARTNER_ACCEPT",
+                senderName = user.name,
+                senderPhoto = user.avatarUrl
+            )
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -321,6 +341,16 @@ class FirebaseAuthRepository : AuthRepository {
             firestore.collection("users").document(uid).updateFields { "partnerRequestFrom" to null }
             firestore.collection("users").document(partnerUid).updateFields { "partnerRequestTo" to null }
 
+            // Send notification
+            sendNotification(
+                targetUid = partnerUid,
+                title = "Partner Request Declined",
+                body = "${user.name} declined your partner request.",
+                type = "PARTNER_DECLINE",
+                senderName = user.name,
+                senderPhoto = user.avatarUrl
+            )
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -334,6 +364,16 @@ class FirebaseAuthRepository : AuthRepository {
 
             firestore.collection("users").document(uid).updateFields { "partnerRequestTo" to null }
             firestore.collection("users").document(partnerUid).updateFields { "partnerRequestFrom" to null }
+
+            // Send notification
+            sendNotification(
+                targetUid = partnerUid,
+                title = "Partner Request Cancelled",
+                body = "${user.name} cancelled the partner request.",
+                type = "PARTNER_CANCEL",
+                senderName = user.name,
+                senderPhoto = user.avatarUrl
+            )
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -355,6 +395,16 @@ class FirebaseAuthRepository : AuthRepository {
                     "partnerId" to null 
                     "anniversaryDate" to null
                 }
+
+                // Send notification
+                sendNotification(
+                    targetUid = partnerId,
+                    title = "Partner Unlinked",
+                    body = "${user.name} has unlinked from you.",
+                    type = "PARTNER_UNLINK",
+                    senderName = user.name,
+                    senderPhoto = user.avatarUrl
+                )
             }
 
             Result.success(Unit)
@@ -383,16 +433,28 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun sendNotification(targetUid: String, title: String, body: String): Result<Unit> {
+    override suspend fun sendNotification(
+        targetUid: String,
+        title: String,
+        body: String,
+        type: String,
+        senderName: String?,
+        senderPhoto: String?,
+        senderAvatar: String?
+    ): Result<Unit> {
         return try {
-            val notificationData = mapOf(
+            val notificationData = mutableMapOf<String, Any?>(
                 "targetUid" to targetUid,
                 "title" to title,
                 "body" to body,
                 "timestamp" to Clock.System.now().toEpochMilliseconds(),
                 "read" to false,
-                "type" to "GEOFENCE"
+                "type" to type
             )
+            senderName?.let { notificationData["sender_name"] = it }
+            senderPhoto?.let { notificationData["sender_photo"] = it }
+            senderAvatar?.let { notificationData["sender_avatar"] = it }
+
             firestore.collection("notifications").add(notificationData)
             Result.success(Unit)
         } catch (e: Exception) {

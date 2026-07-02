@@ -50,7 +50,9 @@ val LocalSnackbarHostState = compositionLocalOf<SnackbarHostState> {
 fun MainScreen(
     viewModel: MainViewModel = koinViewModel(),
     initialChannelId: String? = null,
+    navigateToPartner: Boolean = false,
     onChannelNavigated: () -> Unit = {},
+    onPartnerNavigated: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
     val navController = rememberNavController()
@@ -61,6 +63,22 @@ fun MainScreen(
         if (initialChannelId != null && authState is AuthState.Authenticated) {
             navController.navigate("chat_room/$initialChannelId")
             onChannelNavigated()
+        }
+    }
+
+    val items = listOf(
+        BottomNavItem.Dashboard,
+        BottomNavItem.Savings,
+        BottomNavItem.Chat,
+        BottomNavItem.Partner,
+        BottomNavItem.Profile
+    )
+    val pagerState = rememberPagerState(pageCount = { items.size })
+
+    LaunchedEffect(navigateToPartner, authState) {
+        if (navigateToPartner && authState is AuthState.Authenticated) {
+            pagerState.scrollToPage(3)
+            onPartnerNavigated()
         }
     }
 
@@ -127,15 +145,6 @@ fun MainScreen(
                         }
 
                         is AuthState.Authenticated -> {
-                            val items = listOf(
-                                BottomNavItem.Dashboard,
-                                BottomNavItem.Savings,
-                                BottomNavItem.Chat,
-                                BottomNavItem.Partner,
-                                BottomNavItem.Profile
-                            )
-
-                            val pagerState = rememberPagerState(pageCount = { items.size })
                             val hasPartner by viewModel.hasPartner.collectAsState()
                             val unreadCount by viewModel.unreadChannelsCount.collectAsState()
                             val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()

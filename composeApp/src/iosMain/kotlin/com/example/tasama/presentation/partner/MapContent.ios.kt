@@ -8,13 +8,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 
 @Composable
 actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
-    partner: User?
+    partner: User?,
+    places: List<Place>,
+    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onDeletePlace: (String) -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

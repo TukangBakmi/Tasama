@@ -26,13 +26,12 @@ class GeofenceMonitor(
     }
 
     private suspend fun monitorLocalUserOnly(currentUserId: String) {
-        // Collect places for both users so we can detect entry into any saved place
-        val myPlacesFlow = placeRepository.getPlaces(currentUserId)
-        
         authRepository.getUserFlow(currentUserId).collectLatest { me ->
-            if (me == null) return@collectLatest
-            val partnerId = me.partnerId
-            val partnerPlacesFlow = partnerId?.let { placeRepository.getPlaces(it) } ?: flowOf(emptyList())
+            val partnerId = me?.partnerId ?: return@collectLatest
+            
+            // Only monitor if we have a partner
+            val myPlacesFlow = placeRepository.getPlaces(currentUserId)
+            val partnerPlacesFlow = placeRepository.getPlaces(partnerId)
 
             combine(myPlacesFlow, partnerPlacesFlow) { myPlaces, pPlaces ->
                 (myPlaces + pPlaces).distinctBy { it.id }

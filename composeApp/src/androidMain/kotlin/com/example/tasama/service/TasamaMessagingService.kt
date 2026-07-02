@@ -54,9 +54,49 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
-        const val CHANNEL_ID = "chat_messages"
         const val REPLY_KEY = "reply_key"
+
+        // Notification Categories Configuration
+        object Categories {
+            val MESSAGING = NotificationCategory(
+                id = "chat_messages",
+                name = "Chat Messages",
+                groupKey = "com.example.tasama.MESSAGING_GROUP",
+                importance = NotificationManager.IMPORTANCE_HIGH
+            )
+            val PARTNER = NotificationCategory(
+                id = "partner_updates",
+                name = "Partner Updates",
+                groupKey = "com.example.tasama.PARTNER_GROUP",
+                importance = NotificationManager.IMPORTANCE_DEFAULT
+            )
+            val LOCATION = NotificationCategory(
+                id = "location_alerts",
+                name = "Location Alerts",
+                groupKey = "com.example.tasama.LOCATION_GROUP",
+                importance = NotificationManager.IMPORTANCE_LOW
+            )
+            val RELATIONSHIP = NotificationCategory(
+                id = "relationship_events",
+                name = "Relationship Events",
+                groupKey = "com.example.tasama.RELATIONSHIP_GROUP",
+                importance = NotificationManager.IMPORTANCE_DEFAULT
+            )
+            val GENERAL = NotificationCategory(
+                id = "general_updates",
+                name = "General Updates",
+                groupKey = "com.example.tasama.GENERAL_GROUP",
+                importance = NotificationManager.IMPORTANCE_LOW
+            )
+        }
     }
+
+    data class NotificationCategory(
+        val id: String,
+        val name: String,
+        val groupKey: String,
+        val importance: Int
+    )
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -74,34 +114,36 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         super.onMessageReceived(message)
 
         val data = message.data
+        val type = data["type"]
 
-        val senderName =
-            data["sender_name"]
-                ?: data["title"]
-                ?: "Unknown"
+        // Route to specialized Messaging handler or generic feature handler
+        when {
+            type == null || type.startsWith("CHAT_") || data.containsKey("channelId") -> {
+                handleMessagingMessage(message)
+            }
+            else -> {
+                val category = when {
+                    type.startsWith("PARTNER_") -> Categories.PARTNER
+                    type.startsWith("LOCATION_") -> Categories.LOCATION
+                    type.startsWith("RELATIONSHIP_") -> Categories.RELATIONSHIP
+                    else -> Categories.GENERAL
+                }
+                scope.launch {
+                    handleFeatureNotification(message, category)
+                }
+            }
+        }
+    }
 
-        val senderId =
-            data["senderId"]
-                ?: senderName
-
-        val body =
-            data["body"]
-                ?: message.notification?.body
-                ?: return
-
-        val chatId =
-            data["channelId"]
-                ?: return
-
-        val messageId =
-            data["messageId"]
-                ?: return
-
-        val senderPhoto =
-            data["sender_photo"]
-
-        val senderAvatar =
-            data["sender_avatar"]
+    private fun handleMessagingMessage(message: RemoteMessage) {
+        val data = message.data
+        val senderName = data["sender_name"] ?: data["title"] ?: "Unknown"
+        val senderId = data["senderId"] ?: senderName
+        val body = data["body"] ?: message.notification?.body ?: return
+        val chatId = data["channelId"] ?: return
+        val messageId = data["messageId"] ?: return
+        val senderPhoto = data["sender_photo"]
+        val senderAvatar = data["sender_avatar"]
 
         scope.launch {
             showMessagingNotification(
@@ -114,6 +156,97 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                 senderAvatar = senderAvatar
             )
         }
+    }
+
+    private suspend fun handleFeatureNotification(message: RemoteMessage, category: NotificationCategory) {
+        val data = message.data
+        val type = (data["type"] ?: "UPDATE").uppercase().trim()
+
+        val senderName = data["sender_name"] ?: "Tasama"
+        val senderPhoto = data["sender_photo"]
+        val senderAvatar = data["sender_avatar"]
+
+        val largeIcon = resolveLargeIcon(senderPhoto, senderAvatar, senderName)
+
+        // Title mapping based on type and category
+        val mappedTitle = when (category) {
+            Categories.PARTNER -> when {
+                type.contains("REQUEST") -> "New Partner Request "
+                type.contains("ACCEPT") -> "Partner Request Accepted "
+                type.contains("DECLINE") -> "Partner Request Declined "
+                type.contains("UNLINK") -> "Partner Unlinked "
+                else -> "Partner Update"
+            }
+            Categories.LOCATION -> "Location Alert"
+            Categories.RELATIONSHIP -> "Relationship Milestone"
+            else -> category.name
+        }
+
+        val title = data["title"] ?: mappedTitle
+        val body = data["body"] ?: message.notification?.body ?: "You have a new update."
+
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        ensureChannel(manager, category)
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            if (category == Categories.PARTNER) putExtra("navigate_to", "partner")
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            type.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(this, category.id)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIcon)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setGroup(category.groupKey)
+
+        manager.notify(type.hashCode(), builder.build())
+        postSummaryNotification(manager, category)
+    }
+
+    private suspend fun resolveLargeIcon(
+        photoUrl: String?,
+        avatar: String?,
+        senderName: String
+    ): Bitmap {
+        photoUrl?.let {
+            loadBitmap(it)?.let { return it }
+        }
+
+        avatar?.let {
+            val resId = resources.getIdentifier(
+                it.lowercase().replace("_", ""),
+                "drawable",
+                packageName
+            )
+
+            if (resId != 0) {
+                val drawable = androidx.core.content.ContextCompat.getDrawable(this, resId)
+                if (drawable is BitmapDrawable) {
+                    return drawable.bitmap
+                }
+                // If it's a VectorDrawable or something else, we might need to render it to a bitmap
+                // But for simplicity and consistency with createInitialAvatar:
+                val size = 128
+                val bitmap = createBitmap(size, size)
+                val canvas = Canvas(bitmap)
+                drawable?.setBounds(0, 0, canvas.width, canvas.height)
+                drawable?.draw(canvas)
+                return bitmap
+            }
+        }
+
+        return createInitialAvatar(senderName)
     }
 
     private suspend fun showMessagingNotification(
@@ -130,7 +263,8 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             getSystemService(NOTIFICATION_SERVICE)
                     as NotificationManager
 
-        ensureChannel(manager)
+        val category = Categories.MESSAGING
+        ensureChannel(manager, category)
 
         val me = Person.Builder()
             .setName("You")
@@ -211,7 +345,8 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val category = Categories.MESSAGING
+        val builder = NotificationCompat.Builder(this, category.id)
             .setSmallIcon(R.drawable.ic_notification)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -222,6 +357,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .setOnlyAlertOnce(false)
             .setShortcutId(chatId)
             .addPerson(sender)
+            .setGroup(category.groupKey)
             .addAction(buildReplyAction(chatId, notificationId))
             .addAction(buildMarkReadAction(chatId, notificationId))
 
@@ -230,6 +366,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         }
 
         manager.notify(notificationId, builder.build())
+        postSummaryNotification(manager, category)
     }
 
     private fun createConversationShortcut(
@@ -310,27 +447,38 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .build()
     }
 
-    private fun ensureChannel(manager: NotificationManager) {
-
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+    private fun ensureChannel(manager: NotificationManager, category: NotificationCategory) {
+        if (manager.getNotificationChannel(category.id) != null) return
 
         val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Chat Messages",
-            NotificationManager.IMPORTANCE_HIGH
+            category.id,
+            category.name,
+            category.importance
         ).apply {
-            description = "Tasama Chat Notifications"
-
+            description = "Tasama ${category.name}"
             enableLights(true)
             enableVibration(true)
             setShowBadge(true)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                setConversationId(CHANNEL_ID, CHANNEL_ID)
+            if (category == Categories.MESSAGING && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                setConversationId(category.id, category.id)
             }
         }
 
         manager.createNotificationChannel(channel)
+    }
+
+    private fun postSummaryNotification(manager: NotificationManager, category: NotificationCategory) {
+        val summaryNotification = NotificationCompat.Builder(this, category.id)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(category.name)
+            .setContentText("You have new ${category.name.lowercase()} updates")
+            .setGroup(category.groupKey)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify(category.groupKey.hashCode(), summaryNotification)
     }
 
     private suspend fun resolvePersonIcon(

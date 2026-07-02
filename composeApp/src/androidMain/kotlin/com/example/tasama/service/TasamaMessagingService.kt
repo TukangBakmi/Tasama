@@ -171,10 +171,10 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         // Title mapping based on type and category
         val mappedTitle = when (category) {
             Categories.PARTNER -> when {
-                type.contains("REQUEST") -> "New Partner Request "
-                type.contains("ACCEPT") -> "Partner Request Accepted "
-                type.contains("DECLINE") -> "Partner Request Declined "
-                type.contains("UNLINK") -> "Partner Unlinked "
+                type.contains("REQUEST") -> "New Partner Request"
+                type.contains("ACCEPT") -> "Partner Request Accepted"
+                type.contains("DECLINE") -> "Partner Request Declined"
+                type.contains("UNLINK") -> "Partner Unlinked"
                 else -> "Partner Update"
             }
             Categories.LOCATION -> "Location Alert"
@@ -205,6 +205,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .setLargeIcon(largeIcon)
             .setContentTitle(title)
             .setContentText(body)
+            .setSubText("Tasama")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
@@ -473,6 +474,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(category.name)
             .setContentText("You have new ${category.name.lowercase()} updates")
+            .setSubText("Tasama")
             .setGroup(category.groupKey)
             .setGroupSummary(true)
             .setAutoCancel(true)

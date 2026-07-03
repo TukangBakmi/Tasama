@@ -161,8 +161,21 @@ actual fun MapContent(
                     if (!isMeVisible) {
                         myEdge = clippedMe
                         // Calculate marker center (clamped) and adjust polyline start to circle edge
-                        val finalX = clippedMe.x.coerceIn(paddingPx, width - paddingPx)
-                        val finalY = clippedMe.y.coerceIn(paddingPx, height - paddingPx)
+                        val half = indicatorSizePx / 2f
+                        val visible = half * OFFSCREEN_VISIBLE_RATIO
+
+                        val finalX = when {
+                            clippedMe.x <= 0f -> visible
+                            clippedMe.x >= width -> width - visible
+                            else -> clippedMe.x
+                        }
+
+                        val finalY = when {
+                            clippedMe.y <= 0f -> visible
+                            clippedMe.y >= height -> height - visible
+                            else -> clippedMe.y
+                        }
+
                         val center = Offset(finalX, finalY)
                         val dx = pPartner.x - center.x
                         val dy = pPartner.y - center.y
@@ -175,8 +188,21 @@ actual fun MapContent(
                     if (!isPartnerVisible) {
                         partnerEdge = clippedPartner
                         // Calculate marker center (clamped) and adjust polyline end to circle edge
-                        val finalX = clippedPartner.x.coerceIn(paddingPx, width - paddingPx)
-                        val finalY = clippedPartner.y.coerceIn(paddingPx, height - paddingPx)
+                        val half = indicatorSizePx / 2f
+                        val visible = half * OFFSCREEN_VISIBLE_RATIO
+
+                        val finalX = when {
+                            clippedMe.x <= 0f -> visible
+                            clippedMe.x >= width -> width - visible
+                            else -> clippedMe.x
+                        }
+
+                        val finalY = when {
+                            clippedMe.y <= 0f -> visible
+                            clippedMe.y >= height -> height - visible
+                            else -> clippedMe.y
+                        }
+
                         val center = Offset(finalX, finalY)
                         val dx = pMe.x - center.x
                         val dy = pMe.y - center.y
@@ -437,13 +463,23 @@ fun OffScreenMarker(
     val height = mapSize.height.toFloat()
 
     // Clamp to ensure it stays in visible bounds with padding
-    val finalX = edgePoint.x.coerceIn(padding, width - padding)
-    val finalY = edgePoint.y.coerceIn(padding, height - padding)
+    val half = indicatorSizePx / 2f
+    val visible = half * OFFSCREEN_VISIBLE_RATIO
+
+    val finalX = when {
+        edgePoint.x <= 0f -> visible
+        edgePoint.x >= width -> width - visible
+        else -> edgePoint.x
+    }
+
+    val finalY = when {
+        edgePoint.y <= 0f -> visible
+        edgePoint.y >= height -> height - visible
+        else -> edgePoint.y
+    }
 
     // Calculate angle for the arrow pointing to the actual location
     val cameraTarget = cameraPositionState.position.target
-    val bearing = calculateBearing(cameraTarget, targetLocation)
-    val relativeBearing = (bearing - cameraPositionState.position.bearing + 360) % 360
 
     Surface(
         modifier = Modifier
@@ -457,7 +493,7 @@ fun OffScreenMarker(
         shape = CircleShape,
         color = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
         tonalElevation = 8.dp,
-        shadowElevation = 4.dp,
+        shadowElevation = 12.dp,
         onClick = onTap
     ) {
         Box(

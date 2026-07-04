@@ -3,6 +3,7 @@ package com.example.tasama.presentation.partner
 import android.graphics.Point
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -383,21 +386,6 @@ actual fun MapContent(
                     }
                 )
             }
-            if (!data.isMeVisible && data.myEdgePoint != null && myLocation != null) {
-                OffScreenMarker(
-                    targetLocation = myLocation,
-                    edgePoint = data.myEdgePoint,
-                    user = currentUser,
-                    cameraPositionState = cameraPositionState,
-                    mapSize = mapSize,
-                    isMe = true,
-                    onTap = {
-                        scope.launch {
-                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
-                        }
-                    }
-                )
-            }
         }
 
         if (distance != null) {
@@ -456,59 +444,94 @@ fun OffScreenMarker(
     onTap: () -> Unit
 ) {
     val indicatorSize = 56.dp
-    val indicatorSizePx = with(LocalDensity.current) { indicatorSize.toPx() }
-    val padding = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
+    val density = LocalDensity.current
+    val indicatorSizePx = with(density) { indicatorSize.toPx() }
 
     val width = mapSize.width.toFloat()
     val height = mapSize.height.toFloat()
 
-    // Clamp to ensure it stays in visible bounds with padding
+    // Position clamped to edges to stay fully visible
     val half = indicatorSizePx / 2f
-    val visible = half * OFFSCREEN_VISIBLE_RATIO
+    val paddingPx = with(density) { 8.dp.toPx() }
 
-    val finalX = when {
-        edgePoint.x <= 0f -> visible
-        edgePoint.x >= width -> width - visible
-        else -> edgePoint.x
+    val finalX = edgePoint.x.coerceIn(half + paddingPx, width - half - paddingPx)
+    val finalY = edgePoint.y.coerceIn(half + paddingPx, height - half - paddingPx)
+
+    val projection = cameraPositionState.projection
+    val angle = remember(projection, targetLocation, finalX, finalY) {
+        val targetScreenPos = projection?.toScreenLocation(targetLocation)
+        if (targetScreenPos != null) {
+            val dx = targetScreenPos.x - finalX
+            val dy = targetScreenPos.y - finalY
+            (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
+        } else 0f
     }
 
-    val finalY = when {
-        edgePoint.y <= 0f -> visible
-        edgePoint.y >= height -> height - visible
-        else -> edgePoint.y
-    }
-
-    // Calculate angle for the arrow pointing to the actual location
-    val cameraTarget = cameraPositionState.position.target
-
-    Surface(
+    Box(
         modifier = Modifier
             .offset {
                 IntOffset(
-                    (finalX - indicatorSizePx / 2).toInt(),
-                    (finalY - indicatorSizePx / 2).toInt()
+                    (finalX - half).toInt(),
+                    (finalY - half).toInt()
                 )
             }
-            .size(indicatorSize),
-        shape = CircleShape,
-        color = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
-        tonalElevation = 8.dp,
-        shadowElevation = 12.dp,
-        onClick = onTap
+            .size(indicatorSize)
+            .clickable(onClick = onTap),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(2.dp)
-                .background(Color.White, CircleShape)
-                .padding(2.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            UserAvatar(
-                user = user,
-                modifier = Modifier.fillMaxSize(),
-                showInitials = user?.avatarUrl == null
+        // The "Bubble" Shape (Dark Grey Background with Pointer)
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val bubbleRadius = (indicatorSizePx - 8.dp.toPx()) / 2
+            val pointerWidth = 16.dp.toPx()
+            val pointerHeight = 10.dp.toPx()
+            val bubbleColor = Color(0xFF3C4043) // Google Maps dark grey
+
+            // Draw shadow for depth
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.2f),
+                radius = bubbleRadius + 1.dp.toPx(),
+                center = center + Offset(0f, 2.dp.toPx())
             )
+
+            // Draw the pointer tail rotated towards the target
+            rotate(angle, pivot = center) {
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(center.x + bubbleRadius - 1f, center.y - pointerWidth / 2)
+                    lineTo(center.x + bubbleRadius + pointerHeight, center.y)
+                    lineTo(center.x + bubbleRadius - 1f, center.y + pointerWidth / 2)
+                    close()
+                }
+                drawPath(path, bubbleColor)
+            }
+
+            // Draw the main circular body
+            drawCircle(
+                color = bubbleColor,
+                radius = bubbleRadius,
+                center = center
+            )
+        }
+
+        // The Profile Picture Circle
+        Surface(
+            modifier = Modifier.size(indicatorSize - 16.dp),
+            shape = CircleShape,
+            color = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(2.dp)
+                    .background(Color.White, CircleShape)
+                    .padding(1.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                UserAvatar(
+                    user = user,
+                    modifier = Modifier.fillMaxSize(),
+                    showInitials = user?.avatarUrl == null
+                )
+            }
         }
     }
 }

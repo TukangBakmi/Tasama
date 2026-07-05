@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.partner
 
 import android.graphics.Point
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Wifi
@@ -18,11 +18,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -43,8 +42,6 @@ import kotlin.math.*
 import coil3.compose.LocalPlatformContext
 import com.example.tasama.R
 
-private const val OFFSCREEN_VISIBLE_RATIO = 0.4f
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun MapContent(
@@ -57,7 +54,7 @@ actual fun MapContent(
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
-    val paddingPx = indicatorSizePx * OFFSCREEN_VISIBLE_RATIO
+    val marginPx = with(density) { 8.dp.toPx() }
     val radiusPx = indicatorSizePx / 2
 
     var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
@@ -163,21 +160,9 @@ actual fun MapContent(
 
                     if (!isMeVisible) {
                         myEdge = clippedMe
-                        // Calculate marker center (clamped) and adjust polyline start to circle edge
-                        val half = indicatorSizePx / 2f
-                        val visible = half * OFFSCREEN_VISIBLE_RATIO
-
-                        val finalX = when {
-                            clippedMe.x <= 0f -> visible
-                            clippedMe.x >= width -> width - visible
-                            else -> clippedMe.x
-                        }
-
-                        val finalY = when {
-                            clippedMe.y <= 0f -> visible
-                            clippedMe.y >= height -> height - visible
-                            else -> clippedMe.y
-                        }
+                        // Calculate marker center (clamped to stay fully on screen)
+                        val finalX = clippedMe.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
+                        val finalY = clippedMe.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
 
                         val center = Offset(finalX, finalY)
                         val dx = pPartner.x - center.x
@@ -190,21 +175,9 @@ actual fun MapContent(
                     }
                     if (!isPartnerVisible) {
                         partnerEdge = clippedPartner
-                        // Calculate marker center (clamped) and adjust polyline end to circle edge
-                        val half = indicatorSizePx / 2f
-                        val visible = half * OFFSCREEN_VISIBLE_RATIO
-
-                        val finalX = when {
-                            clippedMe.x <= 0f -> visible
-                            clippedMe.x >= width -> width - visible
-                            else -> clippedMe.x
-                        }
-
-                        val finalY = when {
-                            clippedMe.y <= 0f -> visible
-                            clippedMe.y >= height -> height - visible
-                            else -> clippedMe.y
-                        }
+                        // Calculate marker center (clamped to stay fully on screen)
+                        val finalX = clippedPartner.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
+                        val finalY = clippedPartner.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
 
                         val center = Offset(finalX, finalY)
                         val dx = pMe.x - center.x
@@ -280,7 +253,7 @@ actual fun MapContent(
                     strokeColor = MaterialTheme.colorScheme.primary,
                     strokeWidth = 2f
                 )
-                val markerState = rememberMarkerState(position = placeLatLng)
+                val markerState = rememberUpdatedMarkerState(position = placeLatLng)
                 MarkerComposable(
                     state = markerState,
                     title = place.name,
@@ -378,10 +351,25 @@ actual fun MapContent(
                     user = partner,
                     cameraPositionState = cameraPositionState,
                     mapSize = mapSize,
-                    isMe = false,
+                    showArrow = true,
                     onTap = {
                         scope.launch {
                             cameraPositionState.animate(CameraUpdateFactory.newLatLng(partnerLocation))
+                        }
+                    }
+                )
+            }
+            if (!data.isMeVisible && data.myEdgePoint != null && myLocation != null) {
+                OffScreenMarker(
+                    targetLocation = myLocation,
+                    edgePoint = data.myEdgePoint,
+                    user = currentUser,
+                    cameraPositionState = cameraPositionState,
+                    mapSize = mapSize,
+                    showArrow = true,
+                    onTap = {
+                        scope.launch {
+                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
                         }
                     }
                 )
@@ -440,7 +428,7 @@ fun OffScreenMarker(
     user: User?,
     cameraPositionState: CameraPositionState,
     mapSize: IntSize,
-    isMe: Boolean,
+    showArrow: Boolean = true,
     onTap: () -> Unit
 ) {
     val indicatorSize = 56.dp
@@ -452,10 +440,10 @@ fun OffScreenMarker(
 
     // Position clamped to edges to stay fully visible
     val half = indicatorSizePx / 2f
-    val paddingPx = with(density) { 8.dp.toPx() }
+    val marginPx = with(density) { 8.dp.toPx() }
 
-    val finalX = edgePoint.x.coerceIn(half + paddingPx, width - half - paddingPx)
-    val finalY = edgePoint.y.coerceIn(half + paddingPx, height - half - paddingPx)
+    val finalX = edgePoint.x.coerceIn(half + marginPx, width - half - marginPx)
+    val finalY = edgePoint.y.coerceIn(half + marginPx, height - half - marginPx)
 
     val projection = cameraPositionState.projection
     val angle = remember(projection, targetLocation, finalX, finalY) {
@@ -466,6 +454,12 @@ fun OffScreenMarker(
             (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
         } else 0f
     }
+
+    val isDarkTheme = LocalIsDarkTheme.current
+    val bubbleColor = MaterialTheme.colorScheme.surfaceVariant
+    val shadowColor = if (isDarkTheme) Color.Black.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.4f)
+    val bubbleColorArgb = bubbleColor.toArgb()
+    val shadowColorArgb = shadowColor.toArgb()
 
     Box(
         modifier = Modifier
@@ -479,59 +473,52 @@ fun OffScreenMarker(
             .clickable(onClick = onTap),
         contentAlignment = Alignment.Center
     ) {
-        // The "Bubble" Shape (Dark Grey Background with Pointer)
+        // The "Bubble" Shape (Theme-aware Background with Pointer)
         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
             val bubbleRadius = (indicatorSizePx - 8.dp.toPx()) / 2
-            val pointerWidth = 16.dp.toPx()
-            val pointerHeight = 10.dp.toPx()
-            val bubbleColor = Color(0xFF3C4043) // Google Maps dark grey
+            val pointerWidth = 12.dp.toPx()
+            val pointerHeight = 12.dp.toPx()
+            val blurRadius = 8.dp.toPx()
 
-            // Draw shadow for depth
-            drawCircle(
-                color = Color.Black.copy(alpha = 0.2f),
-                radius = bubbleRadius + 1.dp.toPx(),
-                center = center + Offset(0f, 2.dp.toPx())
-            )
-
-            // Draw the pointer tail rotated towards the target
-            rotate(angle, pivot = center) {
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(center.x + bubbleRadius - 1f, center.y - pointerWidth / 2)
-                    lineTo(center.x + bubbleRadius + pointerHeight, center.y)
-                    lineTo(center.x + bubbleRadius - 1f, center.y + pointerWidth / 2)
-                    close()
+            val combinedPath = android.graphics.Path().apply {
+                addCircle(center.x, center.y, bubbleRadius, android.graphics.Path.Direction.CW)
+                if (showArrow) {
+                    val pointerPath = android.graphics.Path().apply {
+                        moveTo(center.x + bubbleRadius - 2.dp.toPx(), center.y - pointerWidth / 2)
+                        lineTo(center.x + bubbleRadius + pointerHeight, center.y)
+                        lineTo(center.x + bubbleRadius - 2.dp.toPx(), center.y + pointerWidth / 2)
+                        close()
+                    }
+                    val matrix = android.graphics.Matrix()
+                    matrix.postRotate(angle, center.x, center.y)
+                    pointerPath.transform(matrix)
+                    addPath(pointerPath)
                 }
-                drawPath(path, bubbleColor)
             }
 
-            // Draw the main circular body
-            drawCircle(
-                color = bubbleColor,
-                radius = bubbleRadius,
-                center = center
-            )
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    color = bubbleColorArgb
+                    isAntiAlias = true
+                    setShadowLayer(blurRadius, 0f, 0f, shadowColorArgb)
+                }
+                canvas.nativeCanvas.drawPath(combinedPath, paint)
+            }
         }
 
-        // The Profile Picture Circle
-        Surface(
-            modifier = Modifier.size(indicatorSize - 16.dp),
-            shape = CircleShape,
-            color = if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+        // The Profile Picture Circle with Theme-aware Ring
+        Box(
+            modifier = Modifier
+                .size(indicatorSize - 16.dp)
+                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                .padding(2.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(2.dp)
-                    .background(Color.White, CircleShape)
-                    .padding(1.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                UserAvatar(
-                    user = user,
-                    modifier = Modifier.fillMaxSize(),
-                    showInitials = user?.avatarUrl == null
-                )
-            }
+            UserAvatar(
+                user = user,
+                modifier = Modifier.fillMaxSize(),
+                showInitials = user?.avatarUrl == null
+            )
         }
     }
 }
@@ -593,18 +580,6 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
     return Offset(start.x + t * dx, start.y + t * dy)
 }
 
-fun calculateBearing(start: LatLng, end: LatLng): Float {
-    val startLat = Math.toRadians(start.latitude)
-    val startLng = Math.toRadians(start.longitude)
-    val endLat = Math.toRadians(end.latitude)
-    val endLng = Math.toRadians(end.longitude)
-
-    val dLng = endLng - startLng
-    val y = sin(dLng) * cos(endLat)
-    val x = cos(startLat) * sin(endLat) - sin(startLat) * cos(endLat) * cos(dLng)
-    return ((Math.toDegrees(atan2(y, x)) + 360) % 360).toFloat()
-}
-
 @Composable
 fun UserMarker(user: User?, isMe: Boolean) {
     val isMoving = (user?.speed ?: 0f) > 0.5f
@@ -651,7 +626,7 @@ fun UserMarker(user: User?, isMe: Boolean) {
                     .size(48.dp)
                     .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
                     .padding(2.dp)
-                    .background(Color.White, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
                     .padding(2.dp),
                 contentAlignment = Alignment.Center
             ) {

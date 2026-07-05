@@ -168,39 +168,31 @@ actual fun MapContent(
                         // Calculate marker center (clamped to stay fully on screen)
                         val finalX = clippedMe.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
                         val finalY = clippedMe.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-
-                        val center = Offset(finalX, finalY)
-                        val dx = pPartner.x - center.x
-                        val dy = pPartner.y - center.y
-                        val len = sqrt(dx * dx + dy * dy)
-                        val adjustedPoint = if (len > 0) {
-                            Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
-                        } else center
-                        polyStart = projection.fromScreenLocation(Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt()))
+                        polyStart = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
                     }
                     if (!isPartnerVisible) {
                         partnerEdge = clippedPartner
                         // Calculate marker center (clamped to stay fully on screen)
                         val finalX = clippedPartner.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
                         val finalY = clippedPartner.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-
-                        val center = Offset(finalX, finalY)
-                        val dx = pMe.x - center.x
-                        val dy = pMe.y - center.y
-                        val len = sqrt(dx * dx + dy * dy)
-                        val adjustedPoint = if (len > 0) {
-                            Offset(center.x + (dx / len) * radiusPx, center.y + (dy / len) * radiusPx)
-                        } else center
-                        polyEnd = projection.fromScreenLocation(
-                            Point(adjustedPoint.x.toInt(), adjustedPoint.y.toInt())
-                        )
+                        polyEnd = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
                     }
                 } else {
                     // Segment doesn't cross the screen. Place indicators using rays from center.
                     val center = Offset(width / 2, height / 2)
-                    if (!isMeVisible) myEdge = findRayIntersection(center, pMe, width, height)
-                    if (!isPartnerVisible) partnerEdge = findRayIntersection(center, pPartner, width, height)
-                    showPolyline = false
+                    if (!isMeVisible) {
+                        myEdge = findRayIntersection(center, pMe, width, height)
+                        val finalX = myEdge.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
+                        val finalY = myEdge.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
+                        polyStart = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                    }
+                    if (!isPartnerVisible) {
+                        partnerEdge = findRayIntersection(center, pPartner, width, height)
+                        val finalX = partnerEdge.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
+                        val finalY = partnerEdge.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
+                        polyEnd = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                    }
+                    showPolyline = true
                 }
             }
 
@@ -238,7 +230,15 @@ actual fun MapContent(
             myLocation?.let {
                 val markerState = rememberUpdatedMarkerState(position = it)
                 MarkerComposable(
-                    keys = arrayOf<Any>(currentUser?.avatarUrl ?: "", currentUser?.name ?: "", it.latitude, it.longitude),
+                    keys = arrayOf<Any>(
+                        currentUser?.avatarUrl ?: "",
+                        currentUser?.name ?: "",
+                        it.latitude,
+                        it.longitude,
+                        currentUser?.batteryLevel ?: 0f,
+                        currentUser?.isCharging ?: false,
+                        currentUser?.connectionType ?: ""
+                    ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
                     visible = markerData?.isMeVisible ?: true
@@ -250,7 +250,15 @@ actual fun MapContent(
             partnerLocation?.let { location ->
                 val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
-                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", location.latitude, location.longitude, partner?.batteryLevel ?: 0f, partner?.isCharging ?: false, partner?.connectionType ?: ""),
+                    keys = arrayOf<Any>(
+                        partner?.avatarUrl ?: "",
+                        partner?.name ?: "",
+                        location.latitude,
+                        location.longitude,
+                        partner?.batteryLevel ?: 0f,
+                        partner?.isCharging ?: false,
+                        partner?.connectionType ?: ""
+                    ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
                     visible = markerData?.isPartnerVisible ?: true,
@@ -316,6 +324,36 @@ actual fun MapContent(
                         width = 10f,
                         pattern = listOf(Dash(30f), Gap(20f))
                     )
+
+                    // Distance label in the center of the line
+                    val midLatLng = LatLng(
+                        (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
+                        (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
+                    )
+                    MarkerComposable(
+                        state = rememberUpdatedMarkerState(position = midLatLng),
+                        anchor = Offset(0.5f, 0.5f),
+                        zIndex = 1f
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 2.dp,
+                            shadowElevation = 2.dp,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Text(
+                                text = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -455,7 +493,6 @@ actual fun MapContent(
                 .align(Alignment.TopCenter)
                 .padding(top = 16.dp),
             partner = partner,
-            distance = distance,
             anniversaryDate = anniversaryDate,
             onEditAnniversary = onEditAnniversary
         )
@@ -790,14 +827,7 @@ fun PartnerStatusCard(user: User) {
                     }
                     
                     // Signal
-                    val signalRes = when (user.signalLevel) {
-                        0 -> R.drawable.ic_signal_0
-                        1 -> R.drawable.ic_signal_1
-                        2 -> R.drawable.ic_signal_2
-                        3 -> R.drawable.ic_signal_3
-                        4 -> R.drawable.ic_signal_4
-                        else -> R.drawable.ic_signal_status
-                    }
+                    val signalRes = R.drawable.ic_signal_status
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
                             painter = painterResource(id = signalRes),
@@ -842,7 +872,6 @@ fun PartnerStatusCard(user: User) {
 fun PartnerDashboard(
     modifier: Modifier = Modifier,
     partner: User?,
-    distance: Double?,
     anniversaryDate: Long?,
     onEditAnniversary: () -> Unit
 ) {
@@ -876,20 +905,6 @@ fun PartnerDashboard(
                         fontWeight = FontWeight.Bold
                     )
                 }
-            }
-
-            if (anniversaryDate != null && distance != null) {
-                VerticalDivider(modifier = Modifier.height(16.dp), thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            }
-
-            // Distance
-            distance?.let { d ->
-                Text(
-                    text = if (d < 1000) "${d.toInt()}m away" else "${(d / 1000).format(1)}km away",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
         }
     }

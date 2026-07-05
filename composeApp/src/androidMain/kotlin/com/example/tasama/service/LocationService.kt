@@ -15,6 +15,7 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.telephony.TelephonyManager
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.bumptech.glide.Glide
@@ -139,7 +140,7 @@ class LocationService : Service() {
 
         return when {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
-                val wifiManager = getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 @Suppress("DEPRECATION")
                 val info = wifiManager.connectionInfo
                 val ssid = info.ssid?.trim('"')
@@ -149,7 +150,7 @@ class LocationService : Service() {
                     "Wi-Fi"
                 }
             }
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cell"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular"
             else -> "Offline"
         }
     }
@@ -219,15 +220,8 @@ class LocationService : Service() {
             collapsedView.setTextViewText(R.id.notification_network, networkDisplay)
             expandedView.setTextViewText(R.id.notification_network, networkDisplay)
 
-            // Set dynamic signal icon
-            val signalRes = when (partner.signalLevel) {
-                0 -> R.drawable.ic_signal_0
-                1 -> R.drawable.ic_signal_1
-                2 -> R.drawable.ic_signal_2
-                3 -> R.drawable.ic_signal_3
-                4 -> R.drawable.ic_signal_4
-                else -> R.drawable.ic_signal_0
-            }
+            // Set static signal icon
+            val signalRes = R.drawable.ic_signal_status
             collapsedView.setImageViewResource(R.id.notification_signal_icon, signalRes)
             expandedView.setImageViewResource(R.id.notification_signal_icon, signalRes)
 

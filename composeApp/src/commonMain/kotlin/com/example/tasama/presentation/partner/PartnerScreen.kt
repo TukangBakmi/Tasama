@@ -75,18 +75,6 @@ fun PartnerScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Partner Tracker") },
-                actions = {
-                    if (!uiState.isGuest) {
-                        IconButton(onClick = { viewModel.refresh() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                    }
-                }
-            )
-        },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -290,16 +278,17 @@ fun PartnerMapContent(
     onDeletePlace: (String) -> Unit,
     onUnlink: () -> Unit
 ) {
-    var showUnlinkDialog by remember { mutableStateOf(false) }
-
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(
             modifier = Modifier.fillMaxSize(),
             currentUser = currentUser,
             partner = partner,
             places = places,
+            anniversaryDate = anniversaryDate,
+            onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
-            onDeletePlace = onDeletePlace
+            onDeletePlace = onDeletePlace,
+            onUnlink = onUnlink
         )
 
         Column(
@@ -319,37 +308,7 @@ fun PartnerMapContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (anniversaryDate != null) {
-                AnniversaryBadge(anniversaryDate, onClick = onEditAnniversary)
-            }
-            if (partner != null) {
-                PartnerCard(partner, onUnlinkClick = { showUnlinkDialog = true })
-            }
         }
-    }
-
-    if (showUnlinkDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnlinkDialog = false },
-            title = { Text("Unlink Partner") },
-            text = { Text("Are you sure you want to unlink from ${partner?.name}? You will no longer see each other's location.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onUnlink()
-                        showUnlinkDialog = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Unlink")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnlinkDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }
 
@@ -406,57 +365,3 @@ private fun Double.formatDecimal(digits: Int): String {
     return ((this * precision).roundToInt() / precision).toString()
 }
 
-@Composable
-fun PartnerCard(partner: User, onUnlinkClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(8.dp),
-        onClick = onUnlinkClick // Tapping the card now allows unlinking
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            UserAvatar(
-                user = partner,
-                modifier = Modifier.size(50.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(partner.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    partner.batteryLevel?.let { level ->
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "${(level * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (level < 0.2f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (partner.isCharging == true) {
-                            Text(" ⚡", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val lastUpdateText = partner.lastLocationUpdate?.let {
-                        val dt = kotlin.time.Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault())
-                        "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
-                    } ?: "Location unknown"
-                    Text(lastUpdateText, style = MaterialTheme.typography.bodySmall)
-
-                    partner.speed?.takeIf { it > 0.1f }?.let { speed ->
-                        Spacer(modifier = Modifier.width(8.dp))
-                        val speedKms = speed / 1000.0
-                        Text(
-                            text = "• ${speedKms.formatDecimal(3)} km/s",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        MovingIndicator()
-                    }
-                }
-            }
-        }
-    }
-}

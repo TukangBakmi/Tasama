@@ -11,6 +11,9 @@ expect fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place> = emptyList(),
+    anniversaryDate: Long? = null,
+    onEditAnniversary: () -> Unit = {},
     onAddPlace: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
-    onDeletePlace: (String) -> Unit = {}
+    onDeletePlace: (String) -> Unit = {},
+    onUnlink: () -> Unit = {}
 )

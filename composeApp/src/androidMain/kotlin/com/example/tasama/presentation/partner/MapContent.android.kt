@@ -5,15 +5,14 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.NetworkCheck
-import androidx.compose.material.icons.filled.SignalCellularAlt
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -49,8 +50,11 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
+    anniversaryDate: Long?,
+    onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
-    onDeletePlace: (String) -> Unit
+    onDeletePlace: (String) -> Unit,
+    onUnlink: () -> Unit
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
@@ -59,6 +63,7 @@ actual fun MapContent(
 
     var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
+    var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var placeName by remember { mutableStateOf("") }
     val defaultRadius = 150.0 // 150m is a good default for geofencing
 
@@ -206,7 +211,8 @@ actual fun MapContent(
                 partnerEffectiveLocation = polyEnd,
                 myEdgePoint = myEdge,
                 partnerEdgePoint = partnerEdge,
-                showPolyline = showPolyline
+                showPolyline = showPolyline,
+                partnerScreenPos = pPartner
             )
         }
     }
@@ -218,7 +224,16 @@ actual fun MapContent(
             uiSettings = uiSettings,
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
-            onMapLongClick = { showAddPlaceDialog = it }
+            onMapLongClick = { latLng ->
+                val existingPlace = places.find { place ->
+                    calculateDistance(latLng, LatLng(place.latitude, place.longitude)) <= place.radius
+                }
+                if (existingPlace != null) {
+                    showDeletePlaceDialog = existingPlace
+                } else {
+                    showAddPlaceDialog = latLng
+                }
+            }
         ) {
             myLocation?.let {
                 val markerState = rememberUpdatedMarkerState(position = it)
@@ -232,13 +247,20 @@ actual fun MapContent(
                 }
             }
 
-            partnerLocation?.let {
-                val markerState = rememberUpdatedMarkerState(position = it)
+            partnerLocation?.let { location ->
+                val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
-                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", it.latitude, it.longitude, partner?.batteryLevel ?: 0f, partner?.isCharging ?: false, partner?.connectionType ?: ""),
+                    keys = arrayOf<Any>(partner?.avatarUrl ?: "", partner?.name ?: "", location.latitude, location.longitude, partner?.batteryLevel ?: 0f, partner?.isCharging ?: false, partner?.connectionType ?: ""),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
-                    visible = markerData?.isPartnerVisible ?: true
+                    visible = markerData?.isPartnerVisible ?: true,
+                    onClick = {
+                        isPartnerInfoVisible = !isPartnerInfoVisible
+                        scope.launch {
+                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(location))
+                        }
+                        true
+                    }
                 ) {
                     UserMarker(user = partner, isMe = false)
                 }
@@ -257,8 +279,7 @@ actual fun MapContent(
                 MarkerComposable(
                     state = markerState,
                     title = place.name,
-                    snippet = "Long press marker to delete",
-                    onInfoWindowLongClick = { 
+                    onInfoWindowLongClick = {
                         showDeletePlaceDialog = place
                     }
                 ) {
@@ -298,6 +319,8 @@ actual fun MapContent(
                 }
             }
         }
+
+
 
         if (showAddPlaceDialog != null) {
             AlertDialog(
@@ -376,24 +399,66 @@ actual fun MapContent(
             }
         }
 
-        if (distance != null) {
-            Surface(
+        // Partner Info Card Overlay
+        val partnerScreenPos = markerData?.partnerScreenPos
+        if (isPartnerInfoVisible && partner != null && markerData?.isPartnerVisible == true && partnerScreenPos != null) {
+            val markerRadiusPx = with(density) { 24.dp.toPx() }
+            
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                shape = CircleShape,
-                tonalElevation = 4.dp
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { isPartnerInfoVisible = false })
+                    }
             ) {
-                Text(
-                    text = if (distance < 1000) "${distance.toInt()}m away" else "${(distance / 1000).format(1)}km away",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
+                var cardSize by remember { mutableStateOf(IntSize.Zero) }
+                
+                Box(
+                    modifier = Modifier
+                        .onSizeChanged { cardSize = it }
+                        .offset {
+                            // Calculate the target position for the card's bottom-center anchor (the pointer tip)
+                            val targetX = partnerScreenPos.x.toInt()
+                            val targetY = (partnerScreenPos.y - markerRadiusPx - 4).toInt()
+                            
+                            val halfWidth = cardSize.width / 2
+                            val margin = 16.dp.toPx().toInt()
+                            
+                            // Clamp the target position so the card remains fully on screen
+                            val clampedX = targetX.coerceIn(
+                                halfWidth + margin, 
+                                mapSize.width - halfWidth - margin
+                            )
+                            val clampedY = targetY.coerceIn(
+                                cardSize.height + margin, 
+                                mapSize.height - margin
+                            )
+                            
+                            // Position the card so its bottom-center (pointer tip) is at (clampedX, clampedY)
+                            IntOffset(clampedX - halfWidth, clampedY - cardSize.height)
+                        }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { /* Consume tap to prevent map dismissal */ }
+                        )
+                ) {
+                    PartnerStatusCard(
+                        user = partner
+                    )
+                }
             }
         }
+
+        PartnerDashboard(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 16.dp),
+            partner = partner,
+            distance = distance,
+            anniversaryDate = anniversaryDate,
+            onEditAnniversary = onEditAnniversary
+        )
 
         if (showDeletePlaceDialog != null) {
             AlertDialog(
@@ -530,7 +595,8 @@ data class MarkerVisibilityData(
     val partnerEffectiveLocation: LatLng,
     val myEdgePoint: Offset?,
     val partnerEdgePoint: Offset?,
-    val showPolyline: Boolean
+    val showPolyline: Boolean,
+    val partnerScreenPos: Offset?
 )
 
 /**
@@ -585,11 +651,6 @@ fun UserMarker(user: User?, isMe: Boolean) {
     val isMoving = (user?.speed ?: 0f) > 0.5f
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (!isMe && user != null) {
-            PartnerStatusInfo(user)
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-        
         Box(contentAlignment = Alignment.Center) {
             if (isMoving) {
                 val infiniteTransition = rememberInfiniteTransition()
@@ -643,57 +704,191 @@ fun UserMarker(user: User?, isMe: Boolean) {
 }
 
 @Composable
-fun PartnerStatusInfo(user: User) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-        shape = RoundedCornerShape(8.dp),
-        shadowElevation = 2.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+fun PartnerStatusCard(user: User) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            color = surfaceColor.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            // Battery
-            user.batteryLevel?.let { level ->
-                val batteryColor = when {
-                    level < 0.2f -> Color.Red
-                    level < 0.5f -> Color(0xFFFFA500) // Orange
-                    else -> Color(0xFF4CAF50) // Green
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = user.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                val isOnline = user.lastActive?.let { 
+                    java.lang.System.currentTimeMillis() - it < 60_000 
+                } ?: false
+                
+                val speed = user.speed ?: 0f
+                val statusText = if (isOnline) {
+                    when {
+                        speed > 10f -> stringResource(R.string.label_driving)
+                        speed > 1.5f -> stringResource(R.string.label_moving)
+                        else -> stringResource(R.string.label_stationary)
+                    }
+                } else {
+                    user.lastActive?.let {
+                        val dt = java.time.Instant.ofEpochMilli(it)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDateTime()
+                        "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
+                    } ?: "Offline"
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${(level * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = batteryColor
-                    )
-                    if (user.isCharging == true) {
-                        Text("⚡", style = MaterialTheme.typography.labelSmall)
+                
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isOnline) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Battery
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val level = user.batteryLevel
+                        val batteryRes = when {
+                            level == null -> R.drawable.ic_battery_status
+                            level <= 0.20f -> R.drawable.ic_battery_20
+                            level <= 0.50f -> R.drawable.ic_battery_50
+                            level <= 0.80f -> R.drawable.ic_battery_80
+                            else -> R.drawable.ic_battery_100
+                        }
+                        val batteryColor = when {
+                            level == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                            level <= 0.20f -> Color.Red
+                            level <= 0.50f -> Color(0xFFFFA500)
+                            else -> Color(0xFF4CAF50)
+                        }
+
+                        Icon(
+                            painter = painterResource(id = batteryRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = batteryColor
+                        )
+                        Text(
+                            text = (level?.let { "${(it * 100).toInt()}%" } ?: "--%"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = batteryColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (user.isCharging == true) {
+                            Text("⚡", style = MaterialTheme.typography.labelSmall, color = batteryColor)
+                        }
+                    }
+                    
+                    // Signal
+                    val signalRes = when (user.signalLevel) {
+                        0 -> R.drawable.ic_signal_0
+                        1 -> R.drawable.ic_signal_1
+                        2 -> R.drawable.ic_signal_2
+                        3 -> R.drawable.ic_signal_3
+                        4 -> R.drawable.ic_signal_4
+                        else -> R.drawable.ic_signal_status
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(
+                            painter = painterResource(id = signalRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = when (user.connectionType) {
+                                "Cellular" -> "Cell"
+                                null -> "Off"
+                                else -> user.connectionType
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
-
-            // Connection/Signal
-            val connectionIcon = when (user.connectionType) {
-                "Wi-Fi" -> Icons.Default.Wifi
-                "Cellular" -> Icons.Default.SignalCellularAlt
-                else -> Icons.Default.NetworkCheck
+        }
+        // Small triangle pointing down
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .size(16.dp, 8.dp)
+                .offset(y = (-1).dp)
+        ) {
+            val path = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(size.width, 0f)
+                lineTo(size.width / 2, size.height)
+                close()
             }
-            
-            Icon(
-                imageVector = connectionIcon,
-                contentDescription = null,
-                modifier = Modifier.size(12.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            drawPath(
+                path = path,
+                color = surfaceColor.copy(alpha = 0.95f)
             )
-            
-            user.signalLevel?.let {
+        }
+    }
+}
+
+@Composable
+fun PartnerDashboard(
+    modifier: Modifier = Modifier,
+    partner: User?,
+    distance: Double?,
+    anniversaryDate: Long?,
+    onEditAnniversary: () -> Unit
+) {
+    Surface(
+        modifier = modifier.statusBarsPadding(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clickable { onEditAnniversary() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (anniversaryDate != null) {
+                val days = (java.lang.System.currentTimeMillis() - anniversaryDate) / (1000 * 60 * 60 * 24)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Favorite,
+                        null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Red
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Together for $days days",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            if (anniversaryDate != null && distance != null) {
+                VerticalDivider(modifier = Modifier.height(16.dp), thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            }
+
+            // Distance
+            distance?.let { d ->
                 Text(
-                    text = "$it/4",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = if (d < 1000) "${d.toInt()}m away" else "${(d / 1000).format(1)}km away",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }

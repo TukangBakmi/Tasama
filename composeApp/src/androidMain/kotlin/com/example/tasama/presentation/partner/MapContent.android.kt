@@ -4,6 +4,7 @@ import android.graphics.Point
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
@@ -64,7 +66,11 @@ actual fun MapContent(
     var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
+    var hasInitialFit by remember { mutableStateOf(false) }
+    var isMapLoaded by remember { mutableStateOf(false) }
     var placeName by remember { mutableStateOf("") }
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
+    val scope = rememberCoroutineScope()
     val defaultRadius = 150.0 // 150m is a good default for geofencing
 
     val myLocation = remember(currentUser?.latitude, currentUser?.longitude) {
@@ -97,16 +103,40 @@ actual fun MapContent(
         } else null
     }
 
-    LaunchedEffect(partnerLocation) {
-        partnerLocation?.let {
-            if (it.latitude != 0.0 || it.longitude != 0.0) {
-                cameraPositionState.animate(CameraUpdateFactory.newLatLng(it))
+    val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
+    val fitMarkers = {
+        val hasMyLoc = myLocation != null && myLocation.latitude != 0.0
+        val hasPartnerLoc = partnerLocation != null && partnerLocation.latitude != 0.0
+
+        scope.launch {
+            if (hasMyLoc && hasPartnerLoc) {
+                val loc1 = myLocation!!
+                val loc2 = partnerLocation!!
+                
+                if (loc1 == loc2) {
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(loc2, 15f))
+                } else {
+                    val bounds = LatLngBounds.Builder()
+                        .include(loc1)
+                        .include(loc2)
+                        .build()
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx))
+                }
+            } else if (hasPartnerLoc) {
+                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(partnerLocation!!, 15f))
+            } else if (hasMyLoc) {
+                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(myLocation!!, 15f))
             }
         }
     }
 
-    var mapSize by remember { mutableStateOf(IntSize.Zero) }
-    val scope = rememberCoroutineScope()
+    LaunchedEffect(myLocation, partnerLocation, mapSize, isMapLoaded) {
+        if (!hasInitialFit && mapSize != IntSize.Zero && isMapLoaded) {
+            fitMarkers()
+            hasInitialFit = true
+        }
+    }
+
     val context = LocalPlatformContext.current
     val isDarkTheme = LocalIsDarkTheme.current
 
@@ -214,6 +244,7 @@ actual fun MapContent(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             uiSettings = uiSettings,
+            onMapLoaded = { isMapLoaded = true },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
@@ -335,23 +366,50 @@ actual fun MapContent(
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
                     ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 2.dp,
-                            shadowElevation = 2.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
-                        ) {
-                            Text(
-                                text = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                        val blurRadius = 8.dp
+                        val shadowColor = if (isDarkTheme) Color.Black.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.2f)
+                        val bubbleColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                        
+                        Box(contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Canvas(
+                                modifier = Modifier.matchParentSize()
+                            ) {
+                                val blurRadiusPx = blurRadius.toPx()
+                                drawIntoCanvas { canvas ->
+                                    val paint = android.graphics.Paint().apply {
+                                        color = bubbleColor.toArgb()
+                                        isAntiAlias = true
+                                        setShadowLayer(blurRadiusPx, 0f, 0f, shadowColor.toArgb())
+                                    }
+                                    // Draw rect inset by blurRadius to ensure the shadow isn't clipped
+                                    val rect = android.graphics.RectF(
+                                        blurRadiusPx, 
+                                        blurRadiusPx, 
+                                        size.width - blurRadiusPx, 
+                                        size.height - blurRadiusPx
+                                    )
+                                    val cornerRadius = 16.dp.toPx()
+                                    canvas.nativeCanvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+                                }
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .padding(blurRadius)
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        RoundedCornerShape(16.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -491,11 +549,23 @@ actual fun MapContent(
         PartnerDashboard(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 16.dp),
-            partner = partner,
+                .padding(top = 14.dp),
             anniversaryDate = anniversaryDate,
             onEditAnniversary = onEditAnniversary
         )
+
+        // Recenter/Fit Button
+        SmallFloatingActionButton(
+            onClick = { fitMarkers() },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 16.dp, end = 16.dp),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.primary,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+        }
 
         if (showDeletePlaceDialog != null) {
             AlertDialog(
@@ -763,7 +833,7 @@ fun PartnerStatusCard(user: User) {
                 )
                 
                 val isOnline = user.lastActive?.let { 
-                    java.lang.System.currentTimeMillis() - it < 60_000 
+                    System.currentTimeMillis() - it < 60_000 
                 } ?: false
                 
                 val speed = user.speed ?: 0f
@@ -871,7 +941,6 @@ fun PartnerStatusCard(user: User) {
 @Composable
 fun PartnerDashboard(
     modifier: Modifier = Modifier,
-    partner: User?,
     anniversaryDate: Long?,
     onEditAnniversary: () -> Unit
 ) {
@@ -890,7 +959,7 @@ fun PartnerDashboard(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (anniversaryDate != null) {
-                val days = (java.lang.System.currentTimeMillis() - anniversaryDate) / (1000 * 60 * 60 * 24)
+                val days = (System.currentTimeMillis() - anniversaryDate) / (1000 * 60 * 60 * 24)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.Favorite,

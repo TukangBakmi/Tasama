@@ -800,7 +800,7 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 
 @Composable
 fun UserMarker(user: User?, isMe: Boolean) {
-    val isMoving = (user?.speed ?: 0f) > 0.5f
+    val isMoving = (user?.speed ?: 0f) > 0.6f
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -825,7 +825,7 @@ fun UserMarker(user: User?, isMe: Boolean) {
                 
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(64.dp)
                         .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
                         .background(
                             if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
@@ -871,37 +871,42 @@ fun PartnerStatusCard(user: User) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = user.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                
+                val now = System.currentTimeMillis()
                 val isOnline = user.lastActive?.let { 
-                    System.currentTimeMillis() - it < 60_000 
+                    now - it < 60_000 
                 } ?: false
-                
-                val speed = user.speed ?: 0f
-                val statusText = if (isOnline) {
-                    when {
-                        speed > 10f -> stringResource(R.string.label_driving)
-                        speed > 1.5f -> stringResource(R.string.label_moving)
-                        else -> stringResource(R.string.label_stationary)
-                    }
-                } else {
-                    user.lastActive?.let {
-                        val dt = java.time.Instant.ofEpochMilli(it)
-                            .atZone(java.time.ZoneId.systemDefault())
-                            .toLocalDateTime()
-                        "Last seen: ${dt.hour}:${dt.minute.toString().padStart(2, '0')}"
-                    } ?: "Offline"
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(if (isOnline) Color(0xFF4CAF50) else Color(0xFF9E9E9E), CircleShape)
+                            .border(1.dp, surfaceColor.copy(alpha = 0.5f), CircleShape)
+                    )
+                    Text(
+                        text = user.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
                 
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isOnline) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val speed = user.speed ?: 0f
+                val isMoving = speed > 0.6f
+
+                if (isMoving) {
+                    val speedKmh = (speed * 3.6f).toInt()
+                    val statusLabel = if (speed > 10f) stringResource(R.string.label_driving) else stringResource(R.string.label_moving)
+                    Text(
+                        text = "$statusLabel • $speedKmh km/h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF4CAF50),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -910,7 +915,9 @@ fun PartnerStatusCard(user: User) {
                     // Battery
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         val level = user.batteryLevel
+                        val isCharging = user.isCharging == true
                         val batteryRes = when {
+                            isCharging -> R.drawable.ic_battery_charging
                             level == null -> R.drawable.ic_battery_status
                             level <= 0.20f -> R.drawable.ic_battery_20
                             level <= 0.50f -> R.drawable.ic_battery_50
@@ -918,6 +925,7 @@ fun PartnerStatusCard(user: User) {
                             else -> R.drawable.ic_battery_100
                         }
                         val batteryColor = when {
+                            isCharging -> Color(0xFF4CAF50)
                             level == null -> MaterialTheme.colorScheme.onSurfaceVariant
                             level <= 0.20f -> Color.Red
                             level <= 0.50f -> Color(0xFFFFA500)
@@ -930,15 +938,13 @@ fun PartnerStatusCard(user: User) {
                             modifier = Modifier.size(16.dp),
                             tint = batteryColor
                         )
+                        val chargingSign = if (isCharging) " ⚡" else ""
                         Text(
-                            text = (level?.let { "${(it * 100).toInt()}%" } ?: "--%"),
+                            text = (level?.let { "${(it * 100).toInt()}%$chargingSign" } ?: "--%"),
                             style = MaterialTheme.typography.labelSmall,
                             color = batteryColor,
                             fontWeight = FontWeight.Bold
                         )
-                        if (user.isCharging == true) {
-                            Text("⚡", style = MaterialTheme.typography.labelSmall, color = batteryColor)
-                        }
                     }
                     
                     // Signal
@@ -964,21 +970,24 @@ fun PartnerStatusCard(user: User) {
             }
         }
         // Small triangle pointing down
-        androidx.compose.foundation.Canvas(
+        Box(
             modifier = Modifier
-                .size(16.dp, 8.dp)
+                .width(16.dp)
+                .height(8.dp)
                 .offset(y = (-1).dp)
         ) {
-            val path = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(size.width, 0f)
-                lineTo(size.width / 2, size.height)
-                close()
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val path = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, 0f)
+                    lineTo(size.width / 2, size.height)
+                    close()
+                }
+                drawPath(
+                    path = path,
+                    color = surfaceColor.copy(alpha = 0.95f)
+                )
             }
-            drawPath(
-                path = path,
-                color = surfaceColor.copy(alpha = 0.95f)
-            )
         }
     }
 }

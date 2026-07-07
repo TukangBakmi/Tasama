@@ -264,12 +264,14 @@ class LocationService : Service() {
             expandedView.setTextViewText(R.id.notification_partner_name, "${partner.name}'s")
             expandedView.setTextViewText(R.id.notification_activity_status, "activity")
 
-            val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%" } ?: "--%"
+            val chargingSign = if (partner.isCharging == true) " ⚡" else ""
+            val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%$chargingSign" } ?: "--%"
             collapsedView.setTextViewText(R.id.notification_battery, batteryPercent)
             expandedView.setTextViewText(R.id.notification_battery, batteryPercent)
 
             // Set dynamic battery icon
             val batteryRes = when {
+                partner.isCharging == true -> R.drawable.ic_battery_charging
                 partner.batteryLevel == null -> R.drawable.ic_battery_status
                 partner.batteryLevel <= 0.20f -> R.drawable.ic_battery_20
                 partner.batteryLevel <= 0.50f -> R.drawable.ic_battery_50
@@ -278,6 +280,9 @@ class LocationService : Service() {
             }
             collapsedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
             expandedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
+
+            // Color handling for notification icons (must use setInt or similar for RemoteViews if needed, 
+            // but usually standard drawables are better. Let's stick to the charging icon swap for now).
 
             val networkDisplay = when (partner.connectionType) {
                 "Cellular" -> "Cell"

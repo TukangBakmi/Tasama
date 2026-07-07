@@ -25,7 +25,7 @@ import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.service.GeofenceMonitor
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.*
 import org.koin.android.ext.android.inject
 import java.util.*
 
@@ -40,6 +40,16 @@ class LocationService : Service() {
     private var partnerObservationJob: Job? = null
     private var lastPartnerData: User? = null
     private var partnerAvatarBitmap: Bitmap? = null
+    private var lastAddress: String? = null
+    private var lastAddressLocation: Pair<Double, Double>? = null
+    private var lastNotificationUpdateTime = 0L
+    private var isAvatarLoading = false
+    private var isServiceStarted = false
+
+    private val contentIntent by lazy {
+        val intent = Intent(this, MainActivity::class.java)
+        PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+    }
 
     companion object {
         const val CHANNEL_ID = "location_updates"
@@ -77,6 +87,9 @@ class LocationService : Service() {
     }
 
     private fun startLocationService() {
+        if (isServiceStarted) return
+        isServiceStarted = true
+
         val notificationManager = getSystemService(NotificationManager::class.java)
         
         val channel = NotificationChannel(
@@ -102,20 +115,74 @@ class LocationService : Service() {
                 stopLocationService()
                 return@launch
             }
-            authRepository.getUserFlow(uid).collectLatest { user ->
-                val partnerId = user?.partnerId
-                if (partnerId != null) {
-                    authRepository.getUserFlow(partnerId).collectLatest { partner ->
-                        if (partner != null) {
-                            lastPartnerData = partner
-                            updateNotification(partner)
+
+            // Observe ONLY partnerId changes to avoid restarting the partner flow unnecessarily
+            authRepository.getUserFlow(uid)
+                .map { it?.partnerId }
+                .distinctUntilChanged()
+                .collectLatest { partnerId ->
+                    if (partnerId != null) {
+                        authRepository.getUserFlow(partnerId).collect { partner ->
+                            if (partner != null) {
+                                if (shouldUpdateNotification(partner)) {
+                                    updateNotification(partner)
+                                    lastPartnerData = partner
+                                    lastNotificationUpdateTime = System.currentTimeMillis()
+                                }
+                            }
                         }
+                    } else {
+                        // Optional: show a "No partner linked" notification state
                     }
-                } else {
-                    stopLocationService()
                 }
-            }
         }
+    }
+
+    private fun shouldUpdateNotification(newPartner: User): Boolean {
+        val now = System.currentTimeMillis()
+        val oldPartner = lastPartnerData ?: return true
+
+        // 1. Force update for critical profile changes
+        if (oldPartner.name != newPartner.name ||
+            oldPartner.avatarUrl != newPartner.avatarUrl) return true
+
+        // 2. Force update for battery changes (even 1%) or charging status
+        val oldBattery = ((oldPartner.batteryLevel ?: 0f) * 100).toInt()
+        val newBattery = ((newPartner.batteryLevel ?: 0f) * 100).toInt()
+        if (oldBattery != newBattery) return true
+        if (oldPartner.isCharging != newPartner.isCharging) return true
+
+        // 3. Force update for connection type changes
+        if (oldPartner.connectionType != newPartner.connectionType) return true
+
+        // 4. Force update for status transitions (Stationary <-> Moving)
+        val oldIsMoving = (oldPartner.speed ?: 0f) > 0.6f
+        val newIsMoving = (newPartner.speed ?: 0f) > 0.6f
+        if (oldIsMoving != newIsMoving) return true
+
+        // 5. Time throttle: Only throttle minor jitter (Location/Speed) to once every 15s
+        if (now - lastNotificationUpdateTime < 15000) return false
+
+        // 6. Update if speed changes significantly (5+ km/h)
+        val oldSpeedKmh = ((oldPartner.speed ?: 0f) * 3.6f).toInt()
+        val newSpeedKmh = ((newPartner.speed ?: 0f) * 3.6f).toInt()
+        if (Math.abs(oldSpeedKmh - newSpeedKmh) >= 5) return true
+
+        // 7. Update if moved significantly (40+ meters)
+        val distance = calculateDistance(
+            oldPartner.latitude, oldPartner.longitude,
+            newPartner.latitude, newPartner.longitude
+        )
+        if (distance > 40) return true
+
+        return false
+    }
+
+    private fun calculateDistance(lat1: Double?, lon1: Double?, lat2: Double?, lon2: Double?): Float {
+        if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return Float.MAX_VALUE
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, results)
+        return results[0]
     }
 
     private fun monitorLocalStatus() {
@@ -152,13 +219,20 @@ class LocationService : Service() {
     }
 
     private fun updateNotification(partner: User) {
+        val notificationManager = getSystemService(NotificationManager::class.java)
+
         if (partner.avatarUrl != lastPartnerData?.avatarUrl) {
             partnerAvatarBitmap = null
+            isAvatarLoading = false
         }
         
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        
-        if (partnerAvatarBitmap == null && partner.avatarUrl != null) {
+        // Always trigger an immediate notification update with current data
+        // Throttling is handled by the caller (shouldUpdateNotification)
+        notificationManager.notify(NOTIFICATION_ID, createNotification(partner))
+
+        // Trigger avatar load if we don't have it yet
+        if (partnerAvatarBitmap == null && partner.avatarUrl != null && !isAvatarLoading) {
+            isAvatarLoading = true
             Glide.with(this)
                 .asBitmap()
                 .load(partner.avatarUrl)
@@ -166,13 +240,17 @@ class LocationService : Service() {
                 .into(object : CustomTarget<Bitmap>() {
                     override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                         partnerAvatarBitmap = resource
+                        isAvatarLoading = false
                         notificationManager.notify(NOTIFICATION_ID, createNotification(partner))
                     }
-                    override fun onLoadCleared(placeholder: Drawable?) {}
+                    override fun onLoadCleared(placeholder: Drawable?) {
+                        isAvatarLoading = false
+                    }
+                    override fun onLoadFailed(errorDrawable: Drawable?) {
+                        isAvatarLoading = false
+                    }
                 })
         }
-        
-        notificationManager.notify(NOTIFICATION_ID, createNotification(partner))
     }
 
     private fun createNotification(partner: User?): android.app.Notification {
@@ -249,33 +327,43 @@ class LocationService : Service() {
             }
         }
 
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setCustomContentView(collapsedView)
             .setCustomBigContentView(expandedView)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setContentIntent(pendingIntent)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setContentIntent(contentIntent)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setWhen(0)
             .build()
     }
 
     private fun getAddress(lat: Double?, lon: Double?): String {
         if (lat == null || lon == null) return "Location unknown"
+        
+        // Cache check: only re-fetch if moved more than 30 meters
+        lastAddressLocation?.let { (lastLat, lastLon) ->
+            if (calculateDistance(lat, lon, lastLat, lastLon) < 30 && lastAddress != null) {
+                return lastAddress!!
+            }
+        }
+
         return try {
             val geocoder = Geocoder(this, Locale.getDefault())
+            @Suppress("DEPRECATION")
             val addresses = geocoder.getFromLocation(lat, lon, 1)
-            if (!addresses.isNullOrEmpty()) {
+            val result = if (!addresses.isNullOrEmpty()) {
                 val addressLine = addresses[0].getAddressLine(0)
                 if (addressLine.isNullOrEmpty()) "Unknown location" else addressLine
             } else {
                 "Unknown location"
             }
+            lastAddress = result
+            lastAddressLocation = lat to lon
+            result
         } catch (_: Exception) {
-            "Locating..."
+            lastAddress ?: "Locating..."
         }
     }
 
@@ -296,6 +384,7 @@ class LocationService : Service() {
     }
 
     private fun stopLocationService() {
+        isServiceStarted = false
         fusedLocationClient.removeLocationUpdates(locationCallback)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

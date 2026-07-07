@@ -2,6 +2,7 @@ package com.example.tasama.presentation.partner
 
 import android.graphics.Point
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,7 +44,6 @@ import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 import kotlin.math.*
-import coil3.compose.LocalPlatformContext
 import com.example.tasama.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +73,16 @@ actual fun MapContent(
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
     val defaultRadius = 150.0 // 150m is a good default for geofencing
+
+    val isDarkTheme = LocalIsDarkTheme.current
+    val context = LocalContext.current
+    val mapProperties = remember(isDarkTheme) {
+        MapProperties(
+            mapStyleOptions = if (isDarkTheme) {
+                MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark)
+            } else null
+        )
+    }
 
     val myLocation = remember(currentUser?.latitude, currentUser?.longitude) {
         if (currentUser?.latitude != null && currentUser.longitude != null) {
@@ -105,49 +116,46 @@ actual fun MapContent(
 
     val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
     val fitMarkers = {
-        val hasMyLoc = myLocation != null && myLocation.latitude != 0.0
-        val hasPartnerLoc = partnerLocation != null && partnerLocation.latitude != 0.0
+        if (isMapLoaded && mapSize != IntSize.Zero) {
+            val hasMyLoc = myLocation != null && myLocation.latitude != 0.0
+            val hasPartnerLoc = partnerLocation != null && partnerLocation.latitude != 0.0
 
-        scope.launch {
-            if (hasMyLoc && hasPartnerLoc) {
-                val loc1 = myLocation!!
-                val loc2 = partnerLocation!!
-                
-                if (loc1 == loc2) {
-                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(loc2, 15f))
-                } else {
-                    val bounds = LatLngBounds.Builder()
-                        .include(loc1)
-                        .include(loc2)
-                        .build()
-                    cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx))
+            scope.launch {
+                val update = when {
+                    hasMyLoc && hasPartnerLoc -> {
+                        if (myLocation == partnerLocation) {
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.builder().target(myLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                            )
+                        } else {
+                            val bounds = LatLngBounds.Builder().include(myLocation).include(
+                                partnerLocation
+                            ).build()
+                            CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx)
+                        }
+                    }
+                    hasPartnerLoc -> {
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.builder().target(partnerLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                        )
+                    }
+                    hasMyLoc -> {
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.builder().target(myLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                        )
+                    }
+                    else -> null
                 }
-            } else if (hasPartnerLoc) {
-                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(partnerLocation!!, 15f))
-            } else if (hasMyLoc) {
-                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(myLocation!!, 15f))
+                update?.let { cameraPositionState.animate(it) }
             }
         }
     }
 
-    LaunchedEffect(myLocation, partnerLocation, mapSize, isMapLoaded) {
-        if (!hasInitialFit && mapSize != IntSize.Zero && isMapLoaded) {
+    LaunchedEffect(isMapLoaded, mapSize, myLocation, partnerLocation) {
+        if (isMapLoaded && mapSize != IntSize.Zero && !hasInitialFit && (myLocation != null || partnerLocation != null)) {
             fitMarkers()
             hasInitialFit = true
         }
-    }
-
-    val context = LocalPlatformContext.current
-    val isDarkTheme = LocalIsDarkTheme.current
-
-    val mapProperties = remember(isDarkTheme) {
-        MapProperties(
-            isMyLocationEnabled = false,
-            mapType = MapType.NORMAL,
-            mapStyleOptions = if (isDarkTheme) {
-                MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark)
-            } else null
-        )
     }
 
     // Derived states for real-time intersection and visibility
@@ -158,36 +166,39 @@ actual fun MapContent(
             cameraPositionState.isMoving
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
-            if (myLocation == null || partnerLocation == null || mapSize == IntSize.Zero) {
+            if (mapSize == IntSize.Zero || (myLocation == null && partnerLocation == null)) {
                 return@derivedStateOf null
             }
 
             val width = mapSize.width.toFloat()
             val height = mapSize.height.toFloat()
 
-            val pMe = projection.toScreenLocation(myLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) }
-            val pPartner = projection.toScreenLocation(partnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) }
+            val pMe = if (myLocation != null) projection.toScreenLocation(myLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
+            val pPartner = if (partnerLocation != null) projection.toScreenLocation(partnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
 
             // Buffer to determine visibility and avoid edge flickering
             val buffer = 5f
 
             // Check visibility using screen coordinates AND visible region (crucial for tilted maps)
-            val isMeVisible = pMe.x in buffer..width - buffer &&
-                    pMe.y in buffer..height - buffer &&
-                    projection.visibleRegion.latLngBounds.contains(myLocation)
+            val isMeVisible = myLocation?.let {
+                pMe.x in buffer..width - buffer &&
+                        pMe.y in buffer..height - buffer &&
+                        projection.visibleRegion.latLngBounds.contains(it)
+            } ?: true
 
-            val isPartnerVisible = pPartner.x in buffer..width - buffer &&
-                    pPartner.y in buffer..height - buffer &&
-                    projection.visibleRegion.latLngBounds.contains(partnerLocation)
+            val isPartnerVisible = partnerLocation?.let {
+                pPartner.x in buffer..width - buffer &&
+                        pPartner.y in buffer..height - buffer &&
+                        projection.visibleRegion.latLngBounds.contains(it)
+            } ?: true
 
-            // Calculate intersection points for the polyline and off-screen markers
             var myEdge: Offset? = null
             var partnerEdge: Offset? = null
             var polyStart = myLocation
             var polyEnd = partnerLocation
-            var showPolyline = true
+            val showPolyline = myLocation != null && partnerLocation != null
 
-            if (!isMeVisible || !isPartnerVisible) {
+            if (showPolyline && (!isMeVisible || !isPartnerVisible)) {
                 val intersections = clipSegmentToRect(pMe, pPartner, width, height)
 
                 if (intersections != null) {
@@ -222,20 +233,48 @@ actual fun MapContent(
                         val finalY = partnerEdge.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
                         polyEnd = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
                     }
-                    showPolyline = true
+                }
+            } else if (!showPolyline) {
+                // Handle single marker off-screen indicators
+                val center = Offset(width / 2, height / 2)
+                if (myLocation != null && !isMeVisible) {
+                    myEdge = findRayIntersection(center, pMe, width, height)
+                }
+                if (partnerLocation != null && !isPartnerVisible) {
+                    partnerEdge = findRayIntersection(center, pPartner, width, height)
                 }
             }
 
             MarkerVisibilityData(
                 isMeVisible = isMeVisible,
                 isPartnerVisible = isPartnerVisible,
-                myEffectiveLocation = polyStart,
-                partnerEffectiveLocation = polyEnd,
+                myEffectiveLocation = polyStart ?: LatLng(0.0, 0.0),
+                partnerEffectiveLocation = polyEnd ?: LatLng(0.0, 0.0),
                 myEdgePoint = myEdge,
                 partnerEdgePoint = partnerEdge,
                 showPolyline = showPolyline,
                 partnerScreenPos = pPartner
             )
+        }
+    }
+
+    val showFitButton by remember(myLocation, partnerLocation, mapSize) {
+        derivedStateOf {
+            val position = cameraPositionState.position
+            // Condition 1: Map is rotated or tilted
+            val isRotated = abs(position.bearing) > 0.05f || abs(position.tilt) > 0.05f
+            
+            // Condition 2: Either person exists and is currently off-screen (one or both)
+            val data = markerData
+            val isAnyOffScreen = if (data != null) {
+                val meOff = (myLocation != null && myLocation.latitude != 0.0) && !data.isMeVisible
+                val partnerOff = (partnerLocation != null && partnerLocation.latitude != 0.0) && !data.isPartnerVisible
+                meOff || partnerOff
+            } else {
+                false
+            }
+            
+            isMapLoaded && (isRotated || isAnyOffScreen)
         }
     }
 
@@ -555,16 +594,22 @@ actual fun MapContent(
         )
 
         // Recenter/Fit Button
-        SmallFloatingActionButton(
-            onClick = { fitMarkers() },
+        AnimatedVisibility(
+            visible = showFitButton,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp),
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.primary,
-            shape = CircleShape
+                .padding(bottom = 16.dp, end = 16.dp)
         ) {
-            Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+            SmallFloatingActionButton(
+                onClick = { fitMarkers() },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+            }
         }
 
         if (showDeletePlaceDialog != null) {

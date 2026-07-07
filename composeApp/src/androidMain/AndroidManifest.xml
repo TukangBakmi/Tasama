@@ -22,6 +22,9 @@
 
         <receiver android:name=".service.NotificationReplyReceiver"    android:exported="false" />
         <receiver android:name=".service.NotificationMarkReadReceiver" android:exported="false" />
+        <receiver
+            android:name=".service.NotificationDeleteReceiver"
+            android:exported="false" />
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"

@@ -1,5 +1,6 @@
 package com.example.tasama.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -220,14 +221,25 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             .setLargeIcon(largeIcon)
             .setContentTitle(title)
             .setContentText(body)
-            .setSubText("Tasama")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(body)
+            )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS) // atau CATEGORY_EVENT
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setGroup(category.groupKey)
+
+        val hasExistingChild = manager.activeNotifications.any {
+            it.notification.group == category.groupKey &&
+                    (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0
+        }
+
+        if (hasExistingChild) {
+            builder.setGroup(category.groupKey)
+        }
 
         manager.notify(type.hashCode(), builder.build())
-        postSummaryNotification(manager, category)
     }
 
     private suspend fun resolveLargeIcon(
@@ -235,7 +247,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         avatar: String?,
         senderName: String
     ): Bitmap {
-        photoUrl?.let {
+        photoUrl?.let { it ->
             loadBitmap(it)?.let { return it }
         }
 
@@ -384,7 +396,6 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         }
 
         manager.notify(notificationId, builder.build())
-        postSummaryNotification(manager, category)
     }
 
     private fun createConversationShortcut(
@@ -484,40 +495,6 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         }
 
         manager.createNotificationChannel(channel)
-    }
-
-    private fun postSummaryNotification(manager: NotificationManager, category: NotificationCategory) {
-        val destination = when (category) {
-            Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
-            Categories.MESSAGING -> "chat"
-            else -> "dashboard"
-        }
-
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = "com.example.tasama.ACTION_NAVIGATE_SUMMARY_${category.id}"
-            `package` = packageName
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("navigate_to", destination)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            category.groupKey.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val summaryNotification = NotificationCompat.Builder(this, category.id)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(category.name)
-            .setContentText("You have new ${category.name.lowercase()} updates")
-            .setSubText("Tasama")
-            .setGroup(category.groupKey)
-            .setGroupSummary(true)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        manager.notify(category.groupKey.hashCode(), summaryNotification)
     }
 
     private suspend fun resolvePersonIcon(

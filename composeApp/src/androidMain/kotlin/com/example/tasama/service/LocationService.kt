@@ -4,18 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.location.Geocoder
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.os.IBinder
-import android.telephony.TelephonyManager
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.bumptech.glide.Glide
@@ -134,13 +130,13 @@ class LocationService : Service() {
     }
 
     private fun getConnectionType(): String {
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = cm.activeNetwork ?: return "Offline"
         val capabilities = cm.getNetworkCapabilities(network) ?: return "Offline"
 
         return when {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
-                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
                 @Suppress("DEPRECATION")
                 val info = wifiManager.connectionInfo
                 val ssid = info.ssid?.trim('"')
@@ -184,18 +180,11 @@ class LocationService : Service() {
         val expandedView = RemoteViews(packageName, R.layout.notification_custom_expanded)
 
         if (partner != null) {
-            val speed = partner.speed ?: 0f
-            val (activityStatusSuffix, activityLabel) = when {
-                speed > 10f -> getString(R.string.status_driving) to getString(R.string.label_driving)
-                speed > 1.5f -> getString(R.string.status_moving) to getString(R.string.label_moving)
-                else -> "'s activity" to "activity"
-            }
-            
-            val titleText = "${partner.name}$activityStatusSuffix"
+            val titleText = "${partner.name}'s activity"
             collapsedView.setTextViewText(R.id.notification_title, titleText)
             
             expandedView.setTextViewText(R.id.notification_partner_name, "${partner.name}'s")
-            expandedView.setTextViewText(R.id.notification_activity_status, activityLabel)
+            expandedView.setTextViewText(R.id.notification_activity_status, "activity")
 
             val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%" } ?: "--%"
             collapsedView.setTextViewText(R.id.notification_battery, batteryPercent)
@@ -204,9 +193,9 @@ class LocationService : Service() {
             // Set dynamic battery icon
             val batteryRes = when {
                 partner.batteryLevel == null -> R.drawable.ic_battery_status
-                partner.batteryLevel!! <= 0.20f -> R.drawable.ic_battery_20
-                partner.batteryLevel!! <= 0.50f -> R.drawable.ic_battery_50
-                partner.batteryLevel!! <= 0.80f -> R.drawable.ic_battery_80
+                partner.batteryLevel <= 0.20f -> R.drawable.ic_battery_20
+                partner.batteryLevel <= 0.50f -> R.drawable.ic_battery_50
+                partner.batteryLevel <= 0.80f -> R.drawable.ic_battery_80
                 else -> R.drawable.ic_battery_100
             }
             collapsedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
@@ -264,7 +253,7 @@ class LocationService : Service() {
             } else {
                 "Unknown location"
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "Locating..."
         }
     }
@@ -280,7 +269,7 @@ class LocationService : Service() {
                 locationCallback,
                 null
             )
-        } catch (unlikely: SecurityException) {
+        } catch (_: SecurityException) {
             stopSelf()
         }
     }

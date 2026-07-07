@@ -67,15 +67,32 @@
 
             <TextView
                 android:id="@+id/notification_network"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="LTE"
                 android:textColor="@color/status_text"
                 android:textSize="11sp" />
+
+            <ImageView
+                android:id="@+id/notification_speed_icon"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/speed_status"
+                android:src="@drawable/ic_speed"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/notification_speed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:textColor="@color/status_text"
+                android:textSize="11sp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

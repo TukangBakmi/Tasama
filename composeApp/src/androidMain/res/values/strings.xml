@@ -5,6 +5,7 @@
     <string name="signal_status">Signal Status</string>
     <string name="divider">Divider</string>
     <string name="location_pin">Location Pin</string>
+    <string name="speed_status">Speed Status</string>
     <string name="activity_label">activity</string>
     <string name="status_driving"> is Driving</string>
     <string name="status_moving"> is Moving</string>

@@ -209,6 +209,27 @@ class LocationService : Service() {
             collapsedView.setTextViewText(R.id.notification_network, networkDisplay)
             expandedView.setTextViewText(R.id.notification_network, networkDisplay)
 
+            // Speed display
+            val speedMs = partner.speed ?: 0f
+            if (speedMs > 0.5f) {
+                val speedKmh = (speedMs * 3.6f).toInt()
+                val speedText = "$speedKmh km/h"
+                
+                collapsedView.setViewVisibility(R.id.notification_speed_icon, android.view.View.VISIBLE)
+                collapsedView.setViewVisibility(R.id.notification_speed, android.view.View.VISIBLE)
+                collapsedView.setTextViewText(R.id.notification_speed, speedText)
+                
+                expandedView.setViewVisibility(R.id.notification_speed_icon, android.view.View.VISIBLE)
+                expandedView.setViewVisibility(R.id.notification_speed, android.view.View.VISIBLE)
+                expandedView.setTextViewText(R.id.notification_speed, speedText)
+            } else {
+                collapsedView.setViewVisibility(R.id.notification_speed_icon, android.view.View.GONE)
+                collapsedView.setViewVisibility(R.id.notification_speed, android.view.View.GONE)
+                
+                expandedView.setViewVisibility(R.id.notification_speed_icon, android.view.View.GONE)
+                expandedView.setViewVisibility(R.id.notification_speed, android.view.View.GONE)
+            }
+
             // Set static signal icon
             val signalRes = R.drawable.ic_signal_status
             collapsedView.setImageViewResource(R.id.notification_signal_icon, signalRes)

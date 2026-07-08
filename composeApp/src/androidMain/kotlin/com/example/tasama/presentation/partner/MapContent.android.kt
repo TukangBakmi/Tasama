@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -858,6 +859,7 @@ fun UserMarker(user: User?, isMe: Boolean) {
 @Composable
 fun PartnerStatusCard(user: User) {
     val surfaceColor = MaterialTheme.colorScheme.surface
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             color = surfaceColor.copy(alpha = 0.95f),
@@ -986,6 +988,17 @@ fun PartnerStatusCard(user: User) {
                 drawPath(
                     path = path,
                     color = surfaceColor.copy(alpha = 0.95f)
+                )
+                // Diagonal border lines to match the card's border
+                val strokePath = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width / 2, size.height)
+                    lineTo(size.width, 0f)
+                }
+                drawPath(
+                    path = strokePath,
+                    color = outlineColor,
+                    style = Stroke(width = 1.dp.toPx())
                 )
             }
         }

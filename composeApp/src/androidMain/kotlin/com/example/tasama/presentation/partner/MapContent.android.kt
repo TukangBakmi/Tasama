@@ -49,6 +49,26 @@ import kotlin.math.*
 import com.example.tasama.R
 import kotlin.time.Clock
 
+@Composable
+fun animateLatLngAsState(
+    targetValue: LatLng,
+    animationSpec: AnimationSpec<LatLng> = tween(durationMillis = 1000, easing = LinearEasing),
+    finishedListener: ((LatLng) -> Unit)? = null
+): State<LatLng> {
+    val typeConverter = remember {
+        TwoWayConverter<LatLng, AnimationVector2D>(
+            convertToVector = { AnimationVector2D(it.latitude.toFloat(), it.longitude.toFloat()) },
+            convertFromVector = { LatLng(it.v1.toDouble(), it.v2.toDouble()) }
+        )
+    }
+    return animateValueAsState(
+        targetValue,
+        typeConverter,
+        animationSpec,
+        finishedListener = finishedListener
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun MapContent(
@@ -113,6 +133,18 @@ actual fun MapContent(
         } else null
     }
 
+    val animatedMyLocation by animateLatLngAsState(
+        targetValue = myLocation ?: LatLng(0.0, 0.0),
+        animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+    )
+    val animatedPartnerLocation by animateLatLngAsState(
+        targetValue = partnerLocation ?: LatLng(0.0, 0.0),
+        animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+    )
+
+    val currentMyLocation = if (myLocation != null) animatedMyLocation else null
+    val currentPartnerLocation = if (partnerLocation != null) animatedPartnerLocation else null
+
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(partnerLocation ?: LatLng(-6.2000, 106.8166), 12f)
     }
@@ -125,40 +157,40 @@ actual fun MapContent(
         )
     }
 
-    val distance = remember(myLocation, partnerLocation) {
-        if (myLocation != null && partnerLocation != null) {
-            calculateDistance(myLocation, partnerLocation)
+    val distance = remember(currentMyLocation, currentPartnerLocation) {
+        if (currentMyLocation != null && currentPartnerLocation != null) {
+            calculateDistance(currentMyLocation, currentPartnerLocation)
         } else null
     }
 
     val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
     val fitMarkers = {
         if (isMapLoaded && mapSize != IntSize.Zero) {
-            val hasMyLoc = myLocation != null && myLocation.latitude != 0.0
-            val hasPartnerLoc = partnerLocation != null && partnerLocation.latitude != 0.0
+            val hasMyLoc = currentMyLocation != null && currentMyLocation.latitude != 0.0
+            val hasPartnerLoc = currentPartnerLocation != null && currentPartnerLocation.latitude != 0.0
 
             scope.launch {
                 val update = when {
                     hasMyLoc && hasPartnerLoc -> {
-                        if (myLocation == partnerLocation) {
+                        if (currentMyLocation == currentPartnerLocation) {
                             CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.builder().target(myLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                                CameraPosition.builder().target(currentMyLocation).zoom(15f).bearing(0f).tilt(0f).build()
                             )
                         } else {
-                            val bounds = LatLngBounds.Builder().include(myLocation).include(
-                                partnerLocation
+                            val bounds = LatLngBounds.Builder().include(currentMyLocation).include(
+                                currentPartnerLocation
                             ).build()
                             CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx)
                         }
                     }
                     hasPartnerLoc -> {
                         CameraUpdateFactory.newCameraPosition(
-                            CameraPosition.builder().target(partnerLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                            CameraPosition.builder().target(currentPartnerLocation).zoom(15f).bearing(0f).tilt(0f).build()
                         )
                     }
                     hasMyLoc -> {
                         CameraUpdateFactory.newCameraPosition(
-                            CameraPosition.builder().target(myLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                            CameraPosition.builder().target(currentMyLocation).zoom(15f).bearing(0f).tilt(0f).build()
                         )
                     }
                     else -> null
@@ -168,42 +200,42 @@ actual fun MapContent(
         }
     }
 
-    LaunchedEffect(isMapLoaded, mapSize, myLocation, partnerLocation) {
-        if (isMapLoaded && mapSize != IntSize.Zero && !hasInitialFit && (myLocation != null || partnerLocation != null)) {
+    LaunchedEffect(isMapLoaded, mapSize, currentMyLocation, currentPartnerLocation) {
+        if (isMapLoaded && mapSize != IntSize.Zero && !hasInitialFit && (currentMyLocation != null || currentPartnerLocation != null)) {
             fitMarkers()
             hasInitialFit = true
         }
     }
 
     // Derived states for real-time intersection and visibility
-    val markerData by remember(myLocation, partnerLocation, mapSize, cameraPositionState, density) {
+    val markerData by remember(currentMyLocation, currentPartnerLocation, mapSize, cameraPositionState, density) {
         derivedStateOf {
             // Read state to trigger recomposition during camera movement
             cameraPositionState.position
             cameraPositionState.isMoving
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
-            if (mapSize == IntSize.Zero || (myLocation == null && partnerLocation == null)) {
+            if (mapSize == IntSize.Zero || (currentMyLocation == null && currentPartnerLocation == null)) {
                 return@derivedStateOf null
             }
 
             val width = mapSize.width.toFloat()
             val height = mapSize.height.toFloat()
 
-            val pMe = if (myLocation != null) projection.toScreenLocation(myLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
-            val pPartner = if (partnerLocation != null) projection.toScreenLocation(partnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
+            val pMe = if (currentMyLocation != null) projection.toScreenLocation(currentMyLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
+            val pPartner = if (currentPartnerLocation != null) projection.toScreenLocation(currentPartnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
 
             // Buffer to determine visibility and avoid edge flickering
             val buffer = 5f
 
             // Check visibility using screen coordinates AND visible region (crucial for tilted maps)
-            val isMeVisible = myLocation?.let {
+            val isMeVisible = currentMyLocation?.let {
                 pMe.x in buffer..width - buffer &&
                         pMe.y in buffer..height - buffer &&
                         projection.visibleRegion.latLngBounds.contains(it)
             } ?: true
 
-            val isPartnerVisible = partnerLocation?.let {
+            val isPartnerVisible = currentPartnerLocation?.let {
                 pPartner.x in buffer..width - buffer &&
                         pPartner.y in buffer..height - buffer &&
                         projection.visibleRegion.latLngBounds.contains(it)
@@ -211,9 +243,9 @@ actual fun MapContent(
 
             var myEdge: Offset? = null
             var partnerEdge: Offset? = null
-            var polyStart = myLocation
-            var polyEnd = partnerLocation
-            val showPolyline = myLocation != null && partnerLocation != null
+            var polyStart = currentMyLocation
+            var polyEnd = currentPartnerLocation
+            val showPolyline = currentMyLocation != null && currentPartnerLocation != null
 
             if (showPolyline && (!isMeVisible || !isPartnerVisible)) {
                 val intersections = clipSegmentToRect(pMe, pPartner, width, height)
@@ -254,10 +286,10 @@ actual fun MapContent(
             } else if (!showPolyline) {
                 // Handle single marker off-screen indicators
                 val center = Offset(width / 2, height / 2)
-                if (myLocation != null && !isMeVisible) {
+                if (currentMyLocation != null && !isMeVisible) {
                     myEdge = findRayIntersection(center, pMe, width, height)
                 }
-                if (partnerLocation != null && !isPartnerVisible) {
+                if (currentPartnerLocation != null && !isPartnerVisible) {
                     partnerEdge = findRayIntersection(center, pPartner, width, height)
                 }
             }
@@ -275,7 +307,7 @@ actual fun MapContent(
         }
     }
 
-    val showFitButton by remember(myLocation, partnerLocation, mapSize) {
+    val showFitButton by remember(currentMyLocation, currentPartnerLocation, mapSize) {
         derivedStateOf {
             val position = cameraPositionState.position
             // Condition 1: Map is rotated or tilted
@@ -284,8 +316,8 @@ actual fun MapContent(
             // Condition 2: Either person exists and is currently off-screen (one or both)
             val data = markerData
             val isAnyOffScreen = if (data != null) {
-                val meOff = (myLocation != null && myLocation.latitude != 0.0) && !data.isMeVisible
-                val partnerOff = (partnerLocation != null && partnerLocation.latitude != 0.0) && !data.isPartnerVisible
+                val meOff = (currentMyLocation != null && currentMyLocation.latitude != 0.0) && !data.isMeVisible
+                val partnerOff = (currentPartnerLocation != null && currentPartnerLocation.latitude != 0.0) && !data.isPartnerVisible
                 meOff || partnerOff
             } else {
                 false
@@ -315,8 +347,11 @@ actual fun MapContent(
                 }
             }
         ) {
-            myLocation?.let {
-                val markerState = rememberUpdatedMarkerState(position = it)
+            currentMyLocation?.let {
+                val markerState = rememberMarkerState(position = it)
+                LaunchedEffect(it) {
+                    markerState.position = it
+                }
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         currentUser?.avatarUrl ?: "",
@@ -335,8 +370,11 @@ actual fun MapContent(
                 }
             }
 
-            partnerLocation?.let { location ->
-                val markerState = rememberUpdatedMarkerState(position = location)
+            currentPartnerLocation?.let { location ->
+                val markerState = rememberMarkerState(position = location)
+                LaunchedEffect(location) {
+                    markerState.position = location
+                }
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         partner?.avatarUrl ?: "",

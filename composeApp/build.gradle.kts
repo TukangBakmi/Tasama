@@ -110,10 +110,12 @@ android {
             localProperties.load(localPropertiesFile.inputStream())
         }
         val groqKey = localProperties.getProperty("GROQ_API_KEY") ?: ""
+        val googleMapsKey = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
         val fcmProjectId = localProperties.getProperty("FCM_PROJECT_ID") ?: ""
         val fcmAccessToken = localProperties.getProperty("FCM_ACCESS_TOKEN") ?: ""
         
         buildConfigField("String", "GROQ_API_KEY", "\"$groqKey\"")
+        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$googleMapsKey\"")
         buildConfigField("String", "FCM_PROJECT_ID", "\"$fcmProjectId\"")
         buildConfigField("String", "FCM_ACCESS_TOKEN", "\"$fcmAccessToken\"")
     }

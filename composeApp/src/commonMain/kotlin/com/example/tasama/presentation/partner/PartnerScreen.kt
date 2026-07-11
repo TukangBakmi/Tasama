@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -86,6 +87,10 @@ fun PartnerScreen(
                     partner = uiState.partner,
                     places = uiState.places,
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
+                    etaInfo = uiState.etaInfo,
+                    isPartnerComingToMe = uiState.isPartnerComingToMe,
+                    isEtaLoading = uiState.isEtaLoading,
+                    etaError = uiState.etaError,
                     onEditAnniversary = { showDatePicker = true },
                     onAddPlace = viewModel::addPlace,
                     onDeletePlace = viewModel::deletePlace,
@@ -273,6 +278,10 @@ fun PartnerMapContent(
     partner: User?,
     places: List<Place>,
     anniversaryDate: Long?,
+    etaInfo: EtaInfo?,
+    isPartnerComingToMe: Boolean,
+    isEtaLoading: Boolean,
+    etaError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
     onDeletePlace: (String) -> Unit,
@@ -285,6 +294,10 @@ fun PartnerMapContent(
             partner = partner,
             places = places,
             anniversaryDate = anniversaryDate,
+            etaInfo = etaInfo,
+            isPartnerComingToMe = isPartnerComingToMe,
+            isEtaLoading = isEtaLoading,
+            etaError = etaError,
             onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,

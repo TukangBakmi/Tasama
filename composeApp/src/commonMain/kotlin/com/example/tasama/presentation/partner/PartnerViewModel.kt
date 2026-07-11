@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.DirectionsRepository
+import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.PlaceRepository
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.math.*
 
 data class PartnerUiState(
     val currentUser: User? = null,
@@ -23,12 +25,17 @@ data class PartnerUiState(
     val isLinked: Boolean = false,
     val isGuest: Boolean = false,
     val partnerShortIdInput: String = "",
-    val isOperationSuccess: Boolean = false
+    val isOperationSuccess: Boolean = false,
+    val etaInfo: EtaInfo? = null,
+    val isPartnerComingToMe: Boolean = false,
+    val isEtaLoading: Boolean = false,
+    val etaError: String? = null
 )
 
 class PartnerViewModel(
     private val authRepository: AuthRepository,
-    private val placeRepository: PlaceRepository
+    private val placeRepository: PlaceRepository,
+    private val directionsRepository: DirectionsRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
@@ -36,6 +43,12 @@ class PartnerViewModel(
     private var partnerObservationJob: Job? = null
     private var placesObservationJob: Job? = null
     private var currentUserJob: Job? = null
+    private var etaJob: Job? = null
+
+    private var lastEtaRequestLocationMe: Pair<Double, Double>? = null
+    private var lastEtaRequestLocationPartner: Pair<Double, Double>? = null
+    private var lastEtaTimestamp: Long = 0
+    private var lastDistanceMeters: Int? = null
 
     init {
         refresh()
@@ -54,6 +67,7 @@ class PartnerViewModel(
                         if (user != null) {
                             handlePartnerAndRequests(user)
                             observePlaces(user.id, user.partnerId)
+                            checkAndFetchEta()
                         }
                     }
                 } else {
@@ -64,14 +78,12 @@ class PartnerViewModel(
     }
 
     private suspend fun handlePartnerAndRequests(user: User) {
-        // Handle Linked Partner
         if (user.partnerId != null) {
             observePartner(user.partnerId)
             _uiState.update { it.copy(isLinked = true, pendingRequestFrom = null, pendingRequestTo = null) }
         } else {
             _uiState.update { it.copy(partner = null, isLinked = false) }
 
-            // Handle Incoming Request
             if (user.partnerRequestFrom != null) {
                 val requester = authRepository.getUser(user.partnerRequestFrom)
                 _uiState.update { it.copy(pendingRequestFrom = requester) }
@@ -79,7 +91,6 @@ class PartnerViewModel(
                 _uiState.update { it.copy(pendingRequestFrom = null) }
             }
 
-            // Handle Outgoing Request
             if (user.partnerRequestTo != null) {
                 val requested = authRepository.getUser(user.partnerRequestTo)
                 _uiState.update { it.copy(pendingRequestTo = requested) }
@@ -93,9 +104,80 @@ class PartnerViewModel(
         partnerObservationJob?.cancel()
         partnerObservationJob = viewModelScope.launch {
             authRepository.getUserFlow(partnerId).collect { partner ->
+                val oldPartner = _uiState.value.partner
                 _uiState.update { it.copy(partner = partner) }
+                
+                // Trigger ETA if partner just started moving or moved significantly
+                if (partner != null) {
+                    val justStartedMoving = (partner.speed ?: 0f) > 0.3f && (oldPartner?.speed ?: 0f) <= 0.3f
+                    checkAndFetchEta(force = justStartedMoving)
+                }
             }
         }
+    }
+
+    private fun checkAndFetchEta(force: Boolean = false) {
+        if (uiState.value.isEtaLoading) return
+        
+        val me = uiState.value.currentUser ?: return
+        val partner = uiState.value.partner ?: return
+        
+        val myLat = me.latitude ?: return
+        val myLon = me.longitude ?: return
+        val pLat = partner.latitude ?: return
+        val pLon = partner.longitude ?: return
+
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val locationChangedSignificantly = lastEtaRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > 100 } ?: true ||
+                lastEtaRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > 100 } ?: true
+        
+        val timePassed = now - lastEtaTimestamp > 120_000 // 2 minutes
+
+        if (force || locationChangedSignificantly || timePassed) {
+            fetchEta(myLat, myLon, pLat, pLon)
+        }
+    }
+
+    private fun fetchEta(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
+        etaJob?.cancel()
+        lastEtaTimestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        // Update these even before the request to avoid immediate retries on failure
+        lastEtaRequestLocationMe = myLat to myLon
+        lastEtaRequestLocationPartner = pLat to pLon
+        
+        etaJob = viewModelScope.launch {
+            _uiState.update { it.copy(isEtaLoading = true, etaError = null) }
+            val result = directionsRepository.getEta(pLat, pLon, myLat, myLon)
+            result.onSuccess { etaInfo ->
+                val isComing = lastDistanceMeters?.let { it > etaInfo.distanceMeters + 50 } ?: false
+                _uiState.update { 
+                    it.copy(
+                        etaInfo = etaInfo, 
+                        isPartnerComingToMe = isComing,
+                        isEtaLoading = false,
+                        etaError = null
+                    ) 
+                }
+                lastDistanceMeters = etaInfo.distanceMeters
+            }.onFailure { error ->
+                _uiState.update { 
+                    it.copy(
+                        isEtaLoading = false,
+                        etaError = error.message ?: "Failed to fetch ETA",
+                        etaInfo = null
+                    ) 
+                }
+            }
+        }
+    }
+
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371e3
+        val dLat = (lat2 - lat1) * PI / 180
+        val dLon = (lon2 - lon1) * PI / 180
+        val a = sin(dLat / 2).pow(2) + cos(lat1 * PI / 180) * cos(lat2 * PI / 180) * sin(dLon / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return r * c
     }
 
     private fun observePlaces(userId: String, partnerId: String?) {
@@ -157,7 +239,6 @@ class PartnerViewModel(
             _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
             val result = authRepository.acceptPartnerRequest(uid, anniversaryDate)
             if (result.isSuccess) {
-                // Remove all places from both users to start fresh with the new partner
                 placeRepository.deleteAllPlaces(uid)
                 if (partnerUid != null) {
                     placeRepository.deleteAllPlaces(partnerUid)

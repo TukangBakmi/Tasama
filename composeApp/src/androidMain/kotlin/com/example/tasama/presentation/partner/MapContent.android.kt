@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -46,6 +47,7 @@ import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 import kotlin.math.*
 import com.example.tasama.R
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +57,10 @@ actual fun MapContent(
     partner: User?,
     places: List<Place>,
     anniversaryDate: Long?,
+    etaInfo: EtaInfo?,
+    isPartnerComingToMe: Boolean,
+    isEtaLoading: Boolean,
+    etaError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
     onDeletePlace: (String) -> Unit,
@@ -68,6 +74,11 @@ actual fun MapContent(
     var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
+    
+    // Auto-show info if partner is moving
+    val partnerIsMoving = (partner?.speed ?: 0f) > 0.3f
+    val shouldShowPartnerInfo = isPartnerInfoVisible || partnerIsMoving
+
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
     var placeName by remember { mutableStateOf("") }
@@ -537,8 +548,15 @@ actual fun MapContent(
 
         // Partner Info Card Overlay
         val partnerScreenPos = markerData?.partnerScreenPos
-        if (isPartnerInfoVisible && partner != null && markerData?.isPartnerVisible == true && partnerScreenPos != null) {
+        val isPartnerCurrentlyVisible = markerData?.isPartnerVisible == true
+        
+        // Show info if manually clicked OR if moving (even if slightly off-screen, it will clamp)
+        val showCard = (isPartnerInfoVisible && isPartnerCurrentlyVisible) || (partnerIsMoving && partnerScreenPos != null)
+        
+        if (showCard && partner != null && partnerScreenPos != null) {
             val markerRadiusPx = with(density) { 24.dp.toPx() }
+            
+            val isOverlayActive = shouldShowPartnerInfo
             
             Box(
                 modifier = Modifier
@@ -580,7 +598,11 @@ actual fun MapContent(
                         )
                 ) {
                     PartnerStatusCard(
-                        user = partner
+                        user = partner,
+                        etaInfo = etaInfo,
+                        isPartnerComingToMe = isPartnerComingToMe,
+                        isEtaLoading = isEtaLoading,
+                        etaError = etaError
                     )
                 }
             }
@@ -801,7 +823,7 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 
 @Composable
 fun UserMarker(user: User?, isMe: Boolean) {
-    val isMoving = (user?.speed ?: 0f) > 0.6f
+    val isMoving = (user?.speed ?: 0f) > 0.3f
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -857,7 +879,13 @@ fun UserMarker(user: User?, isMe: Boolean) {
 }
 
 @Composable
-fun PartnerStatusCard(user: User) {
+fun PartnerStatusCard(
+    user: User, 
+    etaInfo: EtaInfo? = null, 
+    isPartnerComingToMe: Boolean = false,
+    isEtaLoading: Boolean = false,
+    etaError: String? = null
+) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -873,7 +901,7 @@ fun PartnerStatusCard(user: User) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val now = System.currentTimeMillis()
+                val now = Clock.System.now().toEpochMilliseconds()
                 val isOnline = user.lastActive?.let { 
                     now - it < 60_000 
                 } ?: false
@@ -895,9 +923,37 @@ fun PartnerStatusCard(user: User) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
+
+                if (etaInfo != null) {
+                    val etaStatus = if (isPartnerComingToMe) {
+                        "Coming to you • ETA ${etaInfo.durationText}"
+                    } else {
+                        "${etaInfo.distanceText} • ${etaInfo.durationText}"
+                    }
+                    Text(
+                        text = etaStatus,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else if (isEtaLoading) {
+                    Text(
+                        text = "Calculating ETA...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Medium
+                    )
+                } else if (etaError != null) {
+                    Text(
+                        text = "ETA Unavailable",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 
                 val speed = user.speed ?: 0f
-                val isMoving = speed > 0.6f
+                val isMoving = speed > 0.3f
 
                 if (isMoving) {
                     val speedKmh = (speed * 3.6f).toInt()
@@ -1026,7 +1082,7 @@ fun PartnerDashboard(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (anniversaryDate != null) {
-                val days = (System.currentTimeMillis() - anniversaryDate) / (1000 * 60 * 60 * 24)
+                val days = (Clock.System.now().toEpochMilliseconds() - anniversaryDate) / (1000 * 60 * 60 * 24)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.Favorite,

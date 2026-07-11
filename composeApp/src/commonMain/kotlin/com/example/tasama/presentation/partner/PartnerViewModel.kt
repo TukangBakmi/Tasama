@@ -29,7 +29,8 @@ data class PartnerUiState(
     val etaInfo: EtaInfo? = null,
     val isPartnerComingToMe: Boolean = false,
     val isEtaLoading: Boolean = false,
-    val etaError: String? = null
+    val etaError: String? = null,
+    val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING
 )
 
 class PartnerViewModel(
@@ -128,17 +129,17 @@ class PartnerViewModel(
         val pLon = partner.longitude ?: return
 
         val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
-        val locationChangedSignificantly = lastEtaRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > 100 } ?: true ||
-                lastEtaRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > 100 } ?: true
+        val locationChangedSignificantly = lastEtaRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > 30 } ?: true ||
+                lastEtaRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > 30 } ?: true
         
-        val timePassed = now - lastEtaTimestamp > 120_000 // 2 minutes
+        val timePassed = now - lastEtaTimestamp > 30_000 // 30 seconds
 
         if (force || locationChangedSignificantly || timePassed) {
-            fetchEta(myLat, myLon, pLat, pLon)
+            fetchEta(myLat, myLon, pLat, pLon, uiState.value.travelMode)
         }
     }
 
-    private fun fetchEta(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
+    private fun fetchEta(myLat: Double, myLon: Double, pLat: Double, pLon: Double, mode: com.example.tasama.domain.repository.TravelMode) {
         etaJob?.cancel()
         lastEtaTimestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
         // Update these even before the request to avoid immediate retries on failure
@@ -147,7 +148,7 @@ class PartnerViewModel(
         
         etaJob = viewModelScope.launch {
             _uiState.update { it.copy(isEtaLoading = true, etaError = null) }
-            val result = directionsRepository.getEta(pLat, pLon, myLat, myLon)
+            val result = directionsRepository.getEta(pLat, pLon, myLat, myLon, mode)
             result.onSuccess { etaInfo ->
                 val isComing = lastDistanceMeters?.let { it > etaInfo.distanceMeters + 50 } ?: false
                 _uiState.update { 
@@ -169,6 +170,12 @@ class PartnerViewModel(
                 }
             }
         }
+    }
+
+    fun setTravelMode(mode: com.example.tasama.domain.repository.TravelMode) {
+        if (_uiState.value.travelMode == mode) return
+        _uiState.update { it.copy(travelMode = mode) }
+        checkAndFetchEta(force = true)
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

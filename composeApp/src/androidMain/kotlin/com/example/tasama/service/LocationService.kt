@@ -264,19 +264,28 @@ class LocationService : Service() {
             expandedView.setTextViewText(R.id.notification_partner_name, "${partner.name}'s")
             expandedView.setTextViewText(R.id.notification_activity_status, "activity")
 
-            val chargingSign = if (partner.isCharging == true) " ⚡" else ""
-            val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%$chargingSign" } ?: "--%"
+            val batteryPercent = partner.batteryLevel?.let { "${(it * 100).toInt()}%" } ?: "--%"
             collapsedView.setTextViewText(R.id.notification_battery, batteryPercent)
             expandedView.setTextViewText(R.id.notification_battery, batteryPercent)
 
             // Set dynamic battery icon
+            val level = partner.batteryLevel
+            val isCharging = partner.isCharging == true
             val batteryRes = when {
-                partner.isCharging == true -> R.drawable.ic_battery_charging
-                partner.batteryLevel == null -> R.drawable.ic_battery_status
-                partner.batteryLevel <= 0.20f -> R.drawable.ic_battery_20
-                partner.batteryLevel <= 0.50f -> R.drawable.ic_battery_50
-                partner.batteryLevel <= 0.80f -> R.drawable.ic_battery_80
-                else -> R.drawable.ic_battery_100
+                isCharging -> when {
+                    level == null -> R.drawable.ic_battery_status
+                    level <= 0.20f -> R.drawable.ic_battery_charging_20
+                    level <= 0.50f -> R.drawable.ic_battery_charging_50
+                    level <= 0.80f -> R.drawable.ic_battery_charging_80
+                    else -> R.drawable.ic_battery_charging
+                }
+                else -> when {
+                    level == null -> R.drawable.ic_battery_status
+                    level <= 0.20f -> R.drawable.ic_battery_20
+                    level <= 0.50f -> R.drawable.ic_battery_50
+                    level <= 0.80f -> R.drawable.ic_battery_80
+                    else -> R.drawable.ic_battery_100
+                }
             }
             collapsedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)
             expandedView.setImageViewResource(R.id.notification_battery_icon, batteryRes)

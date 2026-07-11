@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.EtaInfo
 
 @Composable
 actual fun MapContent(
@@ -17,8 +18,15 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
+    anniversaryDate: Long?,
+    etaInfo: EtaInfo?,
+    isPartnerComingToMe: Boolean,
+    isEtaLoading: Boolean,
+    etaError: String?,
+    onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
-    onDeletePlace: (String) -> Unit
+    onDeletePlace: (String) -> Unit,
+    onUnlink: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

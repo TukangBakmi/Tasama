@@ -88,12 +88,14 @@ fun PartnerScreen(
                     places = uiState.places,
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
                     etaInfo = uiState.etaInfo,
+                    travelMode = uiState.travelMode,
                     isPartnerComingToMe = uiState.isPartnerComingToMe,
                     isEtaLoading = uiState.isEtaLoading,
                     etaError = uiState.etaError,
                     onEditAnniversary = { showDatePicker = true },
                     onAddPlace = viewModel::addPlace,
                     onDeletePlace = viewModel::deletePlace,
+                    onSetTravelMode = viewModel::setTravelMode,
                     onUnlink = viewModel::unlinkPartner
                 )
                 else -> LinkingContent(
@@ -279,12 +281,14 @@ fun PartnerMapContent(
     places: List<Place>,
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
+    travelMode: com.example.tasama.domain.repository.TravelMode,
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
     onDeletePlace: (String) -> Unit,
+    onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -295,12 +299,14 @@ fun PartnerMapContent(
             places = places,
             anniversaryDate = anniversaryDate,
             etaInfo = etaInfo,
+            travelMode = travelMode,
             isPartnerComingToMe = isPartnerComingToMe,
             isEtaLoading = isEtaLoading,
             etaError = etaError,
             onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,
+            onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink
         )
 

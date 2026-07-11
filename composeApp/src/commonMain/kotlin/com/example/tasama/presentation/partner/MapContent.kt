@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.TravelMode
 
 @Composable
 expect fun MapContent(
@@ -14,11 +15,13 @@ expect fun MapContent(
     places: List<Place> = emptyList(),
     anniversaryDate: Long? = null,
     etaInfo: EtaInfo? = null,
+    travelMode: TravelMode = TravelMode.DRIVING,
     isPartnerComingToMe: Boolean = false,
     isEtaLoading: Boolean = false,
     etaError: String? = null,
     onEditAnniversary: () -> Unit = {},
     onAddPlace: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
     onDeletePlace: (String) -> Unit = {},
+    onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {}
 )

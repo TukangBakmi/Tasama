@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.partner
 
 import android.graphics.Point
+import android.location.Location
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -14,10 +15,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.TravelMode
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -52,7 +60,7 @@ import kotlin.time.Clock
 @Composable
 fun animateLatLngAsState(
     targetValue: LatLng,
-    animationSpec: AnimationSpec<LatLng> = tween(durationMillis = 1000, easing = LinearEasing),
+    animationSpec: AnimationSpec<LatLng> = tween(durationMillis = 1500, easing = LinearEasing),
     finishedListener: ((LatLng) -> Unit)? = null
 ): State<LatLng> {
     val typeConverter = remember {
@@ -61,12 +69,31 @@ fun animateLatLngAsState(
             convertFromVector = { LatLng(it.v1.toDouble(), it.v2.toDouble()) }
         )
     }
-    return animateValueAsState(
-        targetValue,
-        typeConverter,
-        animationSpec,
-        finishedListener = finishedListener
-    )
+    
+    // Use a state that is initialized with the first non-zero targetValue to avoid animating from (0,0)
+    val animatable = remember { 
+        Animatable(targetValue, typeConverter) 
+    }
+
+    LaunchedEffect(targetValue) {
+        if (animatable.value.latitude == 0.0 && animatable.value.longitude == 0.0 && 
+            (targetValue.latitude != 0.0 || targetValue.longitude != 0.0)) {
+            animatable.snapTo(targetValue)
+        } else {
+            animatable.animateTo(targetValue, animationSpec)
+        }
+    }
+
+    return animatable.asState()
+}
+
+@Composable
+fun rememberUpdatedMarkerState(position: LatLng): MarkerState {
+    val state = rememberMarkerState(position = position)
+    LaunchedEffect(position) {
+        state.position = position
+    }
+    return state
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,12 +105,14 @@ actual fun MapContent(
     places: List<Place>,
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
+    travelMode: TravelMode,
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
     onDeletePlace: (String) -> Unit,
+    onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
     val density = LocalDensity.current
@@ -94,6 +123,8 @@ actual fun MapContent(
     var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
+    var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
+    var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
     
     // Auto-show info if partner is moving
     val partnerIsMoving = (partner?.speed ?: 0f) > 0.3f
@@ -110,6 +141,7 @@ actual fun MapContent(
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
     val defaultRadius = 150.0 // 150m is a good default for geofencing
+    val followZoom = 16.5f
 
     val isDarkTheme = LocalIsDarkTheme.current
     val context = LocalContext.current
@@ -135,15 +167,39 @@ actual fun MapContent(
 
     val animatedMyLocation by animateLatLngAsState(
         targetValue = myLocation ?: LatLng(0.0, 0.0),
-        animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+        animationSpec = tween(durationMillis = 1500, easing = LinearEasing)
     )
     val animatedPartnerLocation by animateLatLngAsState(
         targetValue = partnerLocation ?: LatLng(0.0, 0.0),
-        animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+        animationSpec = tween(durationMillis = 1500, easing = LinearEasing)
     )
 
     val currentMyLocation = if (myLocation != null) animatedMyLocation else null
     val currentPartnerLocation = if (partnerLocation != null) animatedPartnerLocation else null
+
+    // Navigation Route Logic
+    val routePoints = remember(etaInfo?.encodedPolyline) {
+        etaInfo?.encodedPolyline?.let { decodePolyline(it) } ?: emptyList()
+    }
+
+    // Connect the route points to the animated avatar positions for a seamless look
+    val connectedRoutePoints = remember(routePoints, currentMyLocation, currentPartnerLocation) {
+        if (routePoints.isEmpty() || currentMyLocation == null || currentPartnerLocation == null) {
+            routePoints
+        } else {
+            val list = routePoints.toMutableList()
+            // The Directions API request is always Partner -> Me
+            list[0] = currentPartnerLocation
+            list[list.lastIndex] = currentMyLocation
+            list
+        }
+    }
+
+    val routeAlpha = animateFloatAsState(
+        targetValue = if (isRouteEnabled && routePoints.isNotEmpty()) 1f else 0f,
+        animationSpec = tween(600),
+        label = "routeAlpha"
+    )
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(partnerLocation ?: LatLng(-6.2000, 106.8166), 12f)
@@ -157,15 +213,17 @@ actual fun MapContent(
         )
     }
 
-    val distance = remember(currentMyLocation, currentPartnerLocation) {
-        if (currentMyLocation != null && currentPartnerLocation != null) {
-            calculateDistance(currentMyLocation, currentPartnerLocation)
+    val distance = remember(myLocation, partnerLocation) {
+        if (myLocation != null && partnerLocation != null && 
+            myLocation.latitude != 0.0 && partnerLocation.latitude != 0.0) {
+            calculateDistance(myLocation, partnerLocation)
         } else null
     }
 
     val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
     val fitMarkers = {
         if (isMapLoaded && mapSize != IntSize.Zero) {
+            isFollowModeEnabled = false
             val hasMyLoc = currentMyLocation != null && currentMyLocation.latitude != 0.0
             val hasPartnerLoc = currentPartnerLocation != null && currentPartnerLocation.latitude != 0.0
 
@@ -174,7 +232,7 @@ actual fun MapContent(
                     hasMyLoc && hasPartnerLoc -> {
                         if (currentMyLocation == currentPartnerLocation) {
                             CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.builder().target(currentMyLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                                CameraPosition.builder().target(currentMyLocation).zoom(followZoom).bearing(0f).tilt(0f).build()
                             )
                         } else {
                             val bounds = LatLngBounds.Builder().include(currentMyLocation).include(
@@ -185,12 +243,12 @@ actual fun MapContent(
                     }
                     hasPartnerLoc -> {
                         CameraUpdateFactory.newCameraPosition(
-                            CameraPosition.builder().target(currentPartnerLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                            CameraPosition.builder().target(currentPartnerLocation).zoom(followZoom).bearing(0f).tilt(0f).build()
                         )
                     }
                     hasMyLoc -> {
                         CameraUpdateFactory.newCameraPosition(
-                            CameraPosition.builder().target(currentMyLocation).zoom(15f).bearing(0f).tilt(0f).build()
+                            CameraPosition.builder().target(currentMyLocation).zoom(followZoom).bearing(0f).tilt(0f).build()
                         )
                     }
                     else -> null
@@ -204,6 +262,22 @@ actual fun MapContent(
         if (isMapLoaded && mapSize != IntSize.Zero && !hasInitialFit && (currentMyLocation != null || currentPartnerLocation != null)) {
             fitMarkers()
             hasInitialFit = true
+        }
+    }
+
+    // Smart Follow Mode: Disable on user gesture
+    LaunchedEffect(cameraPositionState.isMoving) {
+        if (cameraPositionState.isMoving && cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) {
+            isFollowModeEnabled = false
+        }
+    }
+
+    // Smart Follow Mode: Synchronized follow
+    LaunchedEffect(currentPartnerLocation, isFollowModeEnabled) {
+        if (isFollowModeEnabled && currentPartnerLocation != null) {
+            // Using move() instead of animate() to keep the camera perfectly 
+            // locked to the animated avatar position without any extra lag.
+            cameraPositionState.move(CameraUpdateFactory.newLatLng(currentPartnerLocation))
         }
     }
 
@@ -347,17 +421,12 @@ actual fun MapContent(
                 }
             }
         ) {
-            currentMyLocation?.let {
-                val markerState = rememberMarkerState(position = it)
-                LaunchedEffect(it) {
-                    markerState.position = it
-                }
+            currentMyLocation?.let { location ->
+                val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         currentUser?.avatarUrl ?: "",
                         currentUser?.name ?: "",
-                        it.latitude,
-                        it.longitude,
                         currentUser?.batteryLevel ?: 0f,
                         currentUser?.isCharging ?: false,
                         currentUser?.connectionType ?: ""
@@ -371,19 +440,15 @@ actual fun MapContent(
             }
 
             currentPartnerLocation?.let { location ->
-                val markerState = rememberMarkerState(position = location)
-                LaunchedEffect(location) {
-                    markerState.position = location
-                }
+                val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         partner?.avatarUrl ?: "",
                         partner?.name ?: "",
-                        location.latitude,
-                        location.longitude,
                         partner?.batteryLevel ?: 0f,
                         partner?.isCharging ?: false,
-                        partner?.connectionType ?: ""
+                        partner?.connectionType ?: "",
+                        partner?.speed ?: 0f
                     ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
@@ -444,20 +509,58 @@ actual fun MapContent(
 
             markerData?.let { data ->
                 if (data.showPolyline) {
-                    Polyline(
-                        points = listOf(data.myEffectiveLocation, data.partnerEffectiveLocation),
-                        color = MaterialTheme.colorScheme.primary,
-                        width = 10f,
-                        pattern = listOf(Dash(30f), Gap(20f))
-                    )
+                    // 1. Dynamic Route (Google Directions) - Only visible when partner info is shown
+                    if (routeAlpha.value > 0f && connectedRoutePoints.isNotEmpty()) {
+                        val isWalking = travelMode == TravelMode.WALKING
+                        
+                        // Route Border/Shadow for depth
+                        Polyline(
+                            points = connectedRoutePoints,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f * routeAlpha.value),
+                            width = 16f,
+                            jointType = JointType.ROUND,
+                            startCap = RoundCap(),
+                            endCap = RoundCap(),
+                            pattern = if (isWalking) listOf(Dash(20f), Gap(20f)) else null
+                        )
+                        // Main Route Line
+                        Polyline(
+                            points = connectedRoutePoints,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = routeAlpha.value),
+                            width = 10f,
+                            jointType = JointType.ROUND,
+                            startCap = RoundCap(),
+                            endCap = RoundCap(),
+                            pattern = if (isWalking) listOf(Dash(20f), Gap(20f)) else null
+                        )
+                    }
 
-                    // Distance label in the center of the line
-                    val midLatLng = LatLng(
-                        (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
-                        (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
-                    )
+                    // 2. Straight Dashed Line - Fades out when the real route fades in
+                    val dashedAlpha = 1f - routeAlpha.value
+                    if (dashedAlpha > 0f) {
+                        Polyline(
+                            points = listOf(data.myEffectiveLocation, data.partnerEffectiveLocation),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = dashedAlpha),
+                            width = 10f,
+                            pattern = listOf(Dash(30f), Gap(20f))
+                        )
+                    }
+
+                    // Distance label - follows the route if visible, otherwise midpoint
+                    val labelPosition = if (routeAlpha.value > 0.5f && connectedRoutePoints.isNotEmpty()) {
+                        getPolylineMidpoint(connectedRoutePoints) ?: LatLng(
+                            (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
+                            (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
+                        )
+                    } else {
+                        LatLng(
+                            (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
+                            (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
+                        )
+                    }
+
                     MarkerComposable(
-                        state = rememberUpdatedMarkerState(position = midLatLng),
+                        state = rememberUpdatedMarkerState(position = labelPosition),
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
                     ) {
@@ -498,8 +601,15 @@ actual fun MapContent(
                                     )
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
+                                val distanceText = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km"
+                                val labelText = if (routeAlpha.value > 0.5f && etaInfo != null) {
+                                    "${etaInfo.durationText} ($distanceText)"
+                                } else {
+                                    distanceText
+                                }
+
                                 Text(
-                                    text = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km",
+                                    text = labelText,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -657,22 +767,95 @@ actual fun MapContent(
             onEditAnniversary = onEditAnniversary
         )
 
-        // Recenter/Fit Button
-        AnimatedVisibility(
-            visible = showFitButton,
-            enter = fadeIn(),
-            exit = fadeOut(),
+        // Floating action buttons container
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp)
+                .padding(bottom = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.End
         ) {
+            // Follow Mode Button
+            AnimatedVisibility(
+                visible = !isFollowModeEnabled && partnerLocation != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch {
+                            partnerLocation?.let {
+                                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(it, followZoom), 1000)
+                            }
+                            isFollowModeEnabled = true
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.MyLocation, contentDescription = "Follow Partner")
+                }
+            }
+
+            // Recenter/Fit Button
+            AnimatedVisibility(
+                visible = showFitButton,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { fitMarkers() },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                }
+            }
+
+            // Route Toggle Button
             SmallFloatingActionButton(
-                onClick = { fitMarkers() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
+                onClick = { isRouteEnabled = !isRouteEnabled },
+                containerColor = if (isRouteEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = if (isRouteEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                 shape = CircleShape
             ) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                Icon(Icons.Default.Directions, contentDescription = "Toggle Route")
+            }
+
+            // Travel Mode Selector (Only when route is enabled)
+            AnimatedVisibility(
+                visible = isRouteEnabled,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(24.dp),
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        TravelModeButton(
+                            selected = travelMode == TravelMode.DRIVING,
+                            onClick = { onSetTravelMode(TravelMode.DRIVING) },
+                            icon = Icons.Default.DirectionsCar
+                        )
+                        TravelModeButton(
+                            selected = travelMode == TravelMode.MOTORCYCLE,
+                            onClick = { onSetTravelMode(TravelMode.MOTORCYCLE) },
+                            icon = Icons.Default.TwoWheeler
+                        )
+                        TravelModeButton(
+                            selected = travelMode == TravelMode.WALKING,
+                            onClick = { onSetTravelMode(TravelMode.WALKING) },
+                            icon = Icons.AutoMirrored.Filled.DirectionsWalk
+                        )
+                    }
+                }
             }
         }
 
@@ -699,6 +882,30 @@ actual fun MapContent(
                 }
             )
         }
+    }
+}
+
+@Composable
+fun TravelModeButton(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(36.dp)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                CircleShape
+            )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -993,7 +1200,7 @@ fun PartnerStatusCard(
                         val etaStatus = if (isPartnerComingToMe) {
                             "Coming to you • ETA ${etaInfo.durationText}"
                         } else {
-                            "${etaInfo.distanceText} • ${etaInfo.durationText}"
+                            "${etaInfo.durationText} away"
                         }
                         Text(
                             text = etaStatus,
@@ -1027,15 +1234,22 @@ fun PartnerStatusCard(
                         val level = user.batteryLevel
                         val isCharging = user.isCharging == true
                         val batteryRes = when {
-                            isCharging -> R.drawable.ic_battery_charging
-                            level == null -> R.drawable.ic_battery_status
-                            level <= 0.20f -> R.drawable.ic_battery_20
-                            level <= 0.50f -> R.drawable.ic_battery_50
-                            level <= 0.80f -> R.drawable.ic_battery_80
-                            else -> R.drawable.ic_battery_100
+                            isCharging -> when {
+                                level == null -> R.drawable.ic_battery_status
+                                level <= 0.20f -> R.drawable.ic_battery_charging_20
+                                level <= 0.50f -> R.drawable.ic_battery_charging_50
+                                level <= 0.80f -> R.drawable.ic_battery_charging_80
+                                else -> R.drawable.ic_battery_charging
+                            }
+                            else -> when {
+                                level == null -> R.drawable.ic_battery_status
+                                level <= 0.20f -> R.drawable.ic_battery_20
+                                level <= 0.50f -> R.drawable.ic_battery_50
+                                level <= 0.80f -> R.drawable.ic_battery_80
+                                else -> R.drawable.ic_battery_100
+                            }
                         }
                         val batteryColor = when {
-                            isCharging -> Color(0xFF4CAF50)
                             level == null -> MaterialTheme.colorScheme.onSurfaceVariant
                             level <= 0.20f -> Color.Red
                             level <= 0.50f -> Color(0xFFFFA500)
@@ -1046,11 +1260,10 @@ fun PartnerStatusCard(
                             painter = painterResource(id = batteryRes),
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = batteryColor
+                            tint = Color.Unspecified
                         )
-                        val chargingSign = if (isCharging) " ⚡" else ""
                         Text(
-                            text = (level?.let { "${(it * 100).toInt()}%$chargingSign" } ?: "--%"),
+                            text = (level?.let { "${(it * 100).toInt()}%" } ?: "--%"),
                             style = MaterialTheme.typography.labelSmall,
                             color = batteryColor,
                             fontWeight = FontWeight.Bold
@@ -1155,15 +1368,79 @@ fun PartnerDashboard(
 }
 
 fun calculateDistance(p1: LatLng, p2: LatLng): Double {
-    val r = 6371e3 // Earth's radius in meters
-    val lat1 = p1.latitude * PI / 180
-    val lat2 = p2.latitude * PI / 180
-    val dLat = (p2.latitude - p1.latitude) * PI / 180
-    val dLon = (p2.longitude - p1.longitude) * PI / 180
-
-    val a = sin(dLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(dLon / 2).pow(2)
-    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return r * c
+    val results = FloatArray(1)
+    android.location.Location.distanceBetween(
+        p1.latitude, p1.longitude,
+        p2.latitude, p2.longitude,
+        results
+    )
+    return results[0].toDouble()
 }
 
 fun Double.format(digits: Int) = "%.${digits}f".format(this)
+
+/**
+ * Decodes an encoded polyline string into a list of LatLng points.
+ */
+fun decodePolyline(encoded: String): List<LatLng> {
+    val poly = ArrayList<LatLng>()
+    var index = 0
+    val len = encoded.length
+    var lat = 0
+    var lng = 0
+
+    while (index < len) {
+        var b: Int
+        var shift = 0
+        var result = 0
+        do {
+            b = encoded[index++].code - 63
+            result = result or (b and 0x1f shl shift)
+            shift += 5
+        } while (b >= 0x20)
+        val dlat = if (result and 1 != 0) (result shr 1).inv() else result shr 1
+        lat += dlat
+
+        shift = 0
+        result = 0
+        do {
+            b = encoded[index++].code - 63
+            result = result or (b and 0x1f shl shift)
+            shift += 5
+        } while (b >= 0x20)
+        val dlng = if (result and 1 != 0) (result shr 1).inv() else result shr 1
+        lng += dlng
+
+        val p = LatLng(lat.toDouble() / 1E5, lng.toDouble() / 1E5)
+        poly.add(p)
+    }
+
+    return poly
+}
+
+/**
+ * Calculates the midpoint along a polyline path.
+ */
+fun getPolylineMidpoint(points: List<LatLng>): LatLng? {
+    if (points.isEmpty()) return null
+    if (points.size == 1) return points[0]
+
+    var totalDistance = 0.0
+    for (i in 0 until points.size - 1) {
+        totalDistance += calculateDistance(points[i], points[i+1])
+    }
+
+    val midDistance = totalDistance / 2.0
+    var currentDistance = 0.0
+    for (i in 0 until points.size - 1) {
+        val segmentDist = calculateDistance(points[i], points[i+1])
+        if (currentDistance + segmentDist >= midDistance) {
+            val ratio = if (segmentDist > 0) (midDistance - currentDistance) / segmentDist else 0.0
+            val lat = points[i].latitude + (points[i+1].latitude - points[i].latitude) * ratio
+            val lng = points[i].longitude + (points[i+1].longitude - points[i].longitude) * ratio
+            return LatLng(lat, lng)
+        }
+        currentDistance += segmentDist
+    }
+    return points.last()
+}

@@ -77,7 +77,12 @@ actual fun MapContent(
     
     // Auto-show info if partner is moving
     val partnerIsMoving = (partner?.speed ?: 0f) > 0.3f
-    val shouldShowPartnerInfo = isPartnerInfoVisible || partnerIsMoving
+    
+    LaunchedEffect(partnerIsMoving) {
+        if (partnerIsMoving) {
+            isPartnerInfoVisible = true
+        }
+    }
 
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
@@ -296,6 +301,7 @@ actual fun MapContent(
             cameraPositionState = cameraPositionState,
             uiSettings = uiSettings,
             onMapLoaded = { isMapLoaded = true },
+            onMapClick = { isPartnerInfoVisible = false },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
@@ -548,15 +554,12 @@ actual fun MapContent(
 
         // Partner Info Card Overlay
         val partnerScreenPos = markerData?.partnerScreenPos
-        val isPartnerCurrentlyVisible = markerData?.isPartnerVisible == true
         
-        // Show info if manually clicked OR if moving (even if slightly off-screen, it will clamp)
-        val showCard = (isPartnerInfoVisible && isPartnerCurrentlyVisible) || (partnerIsMoving && partnerScreenPos != null)
+        // Show info if manually clicked OR if triggered by movement
+        val showCard = isPartnerInfoVisible && partnerScreenPos != null
         
         if (showCard && partner != null && partnerScreenPos != null) {
             val markerRadiusPx = with(density) { 24.dp.toPx() }
-            
-            val isOverlayActive = shouldShowPartnerInfo
             
             Box(
                 modifier = Modifier
@@ -823,7 +826,8 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 
 @Composable
 fun UserMarker(user: User?, isMe: Boolean) {
-    val isMoving = (user?.speed ?: 0f) > 0.3f
+    val speed = user?.speed ?: 0f
+    val isMoving = speed > 0.3f
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -872,6 +876,25 @@ fun UserMarker(user: User?, isMe: Boolean) {
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     showInitials = user?.avatarUrl == null
+                )
+            }
+        }
+        
+        if (isMoving && !isMe) {
+            val speedKmh = (speed * 3.6f).toInt()
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 4.dp,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(
+                    text = "$speedKmh km/h",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
         }
@@ -924,46 +947,37 @@ fun PartnerStatusCard(
                     )
                 }
 
-                if (etaInfo != null) {
-                    val etaStatus = if (isPartnerComingToMe) {
-                        "Coming to you • ETA ${etaInfo.durationText}"
-                    } else {
-                        "${etaInfo.distanceText} • ${etaInfo.durationText}"
-                    }
-                    Text(
-                        text = etaStatus,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                } else if (isEtaLoading) {
-                    Text(
-                        text = "Calculating ETA...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Medium
-                    )
-                } else if (etaError != null) {
-                    Text(
-                        text = "ETA Unavailable",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                
                 val speed = user.speed ?: 0f
                 val isMoving = speed > 0.3f
 
                 if (isMoving) {
-                    val speedKmh = (speed * 3.6f).toInt()
-                    val statusLabel = if (speed > 10f) stringResource(R.string.label_driving) else stringResource(R.string.label_moving)
-                    Text(
-                        text = "$statusLabel • $speedKmh km/h",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF4CAF50),
-                        fontWeight = FontWeight.Medium
-                    )
+                    if (etaInfo != null) {
+                        val etaStatus = if (isPartnerComingToMe) {
+                            "Coming to you • ETA ${etaInfo.durationText}"
+                        } else {
+                            "${etaInfo.distanceText} • ${etaInfo.durationText}"
+                        }
+                        Text(
+                            text = etaStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else if (isEtaLoading) {
+                        Text(
+                            text = "Calculating ETA...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    } else if (etaError != null) {
+                        Text(
+                            text = "ETA Unavailable",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
 
                 Row(

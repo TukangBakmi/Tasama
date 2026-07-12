@@ -1,7 +1,6 @@
 package com.example.tasama.presentation.partner
 
 import android.graphics.Point
-import android.location.Location
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -38,7 +37,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -213,11 +211,13 @@ actual fun MapContent(
         )
     }
 
-    val distance = remember(myLocation, partnerLocation) {
-        if (myLocation != null && partnerLocation != null && 
-            myLocation.latitude != 0.0 && partnerLocation.latitude != 0.0) {
-            calculateDistance(myLocation, partnerLocation)
-        } else null
+    val distance by remember(currentMyLocation, currentPartnerLocation) {
+        derivedStateOf {
+            if (currentMyLocation != null && currentPartnerLocation != null && 
+                currentMyLocation.latitude != 0.0 && currentPartnerLocation.latitude != 0.0) {
+                calculateDistance(currentMyLocation, currentPartnerLocation)
+            } else null
+        }
     }
 
     val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
@@ -560,6 +560,7 @@ actual fun MapContent(
                     }
 
                     MarkerComposable(
+                        keys = arrayOf(distance ?: 0.0, etaInfo ?: 0, labelPosition, routeAlpha.value),
                         state = rememberUpdatedMarkerState(position = labelPosition),
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
@@ -601,7 +602,7 @@ actual fun MapContent(
                                     )
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
-                                val distanceText = if (distance!! < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km"
+                                val distanceText = if ((distance ?: 0.0) < 1000) "${distance?.toInt() ?: 0}m" else "${((distance ?: 0.0) / 1000).format(1)}km"
                                 val labelText = if (routeAlpha.value > 0.5f && etaInfo != null) {
                                     "${etaInfo.durationText} ($distanceText)"
                                 } else {
@@ -764,6 +765,8 @@ actual fun MapContent(
                 .align(Alignment.TopCenter)
                 .padding(top = 14.dp),
             anniversaryDate = anniversaryDate,
+            distance = distance,
+            isMoving = partnerIsMoving,
             onEditAnniversary = onEditAnniversary
         )
 
@@ -1330,6 +1333,8 @@ fun PartnerStatusCard(
 fun PartnerDashboard(
     modifier: Modifier = Modifier,
     anniversaryDate: Long?,
+    distance: Double? = null,
+    isMoving: Boolean = false,
     onEditAnniversary: () -> Unit
 ) {
     Surface(

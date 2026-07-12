@@ -46,6 +46,10 @@ class PartnerViewModel(
     private var currentUserJob: Job? = null
     private var etaJob: Job? = null
 
+    private var currentPartnerId: String? = null
+    private var currentPlacesUserId: String? = null
+    private var currentPlacesPartnerId: String? = null
+
     private var lastEtaRequestLocationMe: Pair<Double, Double>? = null
     private var lastEtaRequestLocationPartner: Pair<Double, Double>? = null
     private var lastEtaTimestamp: Long = 0
@@ -102,6 +106,9 @@ class PartnerViewModel(
     }
 
     private fun observePartner(partnerId: String) {
+        if (partnerObservationJob?.isActive == true && currentPartnerId == partnerId) return
+        currentPartnerId = partnerId
+        
         partnerObservationJob?.cancel()
         partnerObservationJob = viewModelScope.launch {
             authRepository.getUserFlow(partnerId).collect { partner ->
@@ -188,6 +195,10 @@ class PartnerViewModel(
     }
 
     private fun observePlaces(userId: String, partnerId: String?) {
+        if (placesObservationJob?.isActive == true && currentPlacesUserId == userId && currentPlacesPartnerId == partnerId) return
+        currentPlacesUserId = userId
+        currentPlacesPartnerId = partnerId
+
         placesObservationJob?.cancel()
         placesObservationJob = viewModelScope.launch {
             val myPlacesFlow = placeRepository.getPlaces(userId)

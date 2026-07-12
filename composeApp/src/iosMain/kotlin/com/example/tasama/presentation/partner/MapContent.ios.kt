@@ -20,12 +20,16 @@ actual fun MapContent(
     places: List<Place>,
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
+    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    isWeatherLoading: Boolean,
+    travelMode: com.example.tasama.domain.repository.TravelMode,
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (String, Double, Double, Double) -> Unit,
     onDeletePlace: (String) -> Unit,
+    onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
     Box(

@@ -21,7 +21,9 @@ import com.example.tasama.presentation.profile.ProfileViewModel
 import com.example.tasama.presentation.savings.SavingsViewModel
 import com.example.tasama.presentation.transaction.TransactionViewModel
 import com.example.tasama.data.repository.FirebasePlaceRepository
+import com.example.tasama.data.repository.WeatherRepositoryImpl
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.domain.service.GeofenceMonitor
 import kotlinx.coroutines.MainScope
 import org.koin.core.module.dsl.viewModel
@@ -50,6 +52,10 @@ val appModule = module {
         FirebasePlaceRepository()
     }
 
+    single<WeatherRepository> {
+        WeatherRepositoryImpl()
+    }
+
     single<ChatRepository> {
         FirebaseChatRepository(get())
     }
@@ -67,7 +73,7 @@ val appModule = module {
     viewModel { ChatViewModel(get(), get()) }
     viewModel { ChatListViewModel(get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
-    viewModel { PartnerViewModel(get(), get(), get()) }
+    viewModel { PartnerViewModel(get(), get(), get(), get()) }
     viewModel { MainViewModel(get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

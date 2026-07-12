@@ -8,10 +8,12 @@ import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.WeatherRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.math.*
+import kotlin.time.Clock
 
 data class PartnerUiState(
     val currentUser: User? = null,
@@ -30,13 +32,17 @@ data class PartnerUiState(
     val isPartnerComingToMe: Boolean = false,
     val isEtaLoading: Boolean = false,
     val etaError: String? = null,
-    val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING
+    val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING,
+    val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
+    val isWeatherLoading: Boolean = false,
+    val weatherError: String? = null
 )
 
 class PartnerViewModel(
     private val authRepository: AuthRepository,
     private val placeRepository: PlaceRepository,
-    private val directionsRepository: DirectionsRepository
+    private val directionsRepository: DirectionsRepository,
+    private val weatherRepository: WeatherRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
@@ -45,6 +51,7 @@ class PartnerViewModel(
     private var placesObservationJob: Job? = null
     private var currentUserJob: Job? = null
     private var etaJob: Job? = null
+    private var weatherJob: Job? = null
 
     private var currentPartnerId: String? = null
     private var currentPlacesUserId: String? = null
@@ -54,6 +61,9 @@ class PartnerViewModel(
     private var lastEtaRequestLocationPartner: Pair<Double, Double>? = null
     private var lastEtaTimestamp: Long = 0
     private var lastDistanceMeters: Int? = null
+
+    private var lastWeatherRequestLocation: Pair<Double, Double>? = null
+    private var lastWeatherTimestamp: Long = 0
 
     init {
         refresh()
@@ -115,8 +125,13 @@ class PartnerViewModel(
                 val oldPartner = _uiState.value.partner
                 _uiState.update { it.copy(partner = partner) }
                 
-                // Trigger ETA if partner just started moving or moved significantly
                 if (partner != null) {
+                    // Fetch weather for partner
+                    if (partner.latitude != null && partner.longitude != null) {
+                        checkAndFetchWeather(partner.latitude, partner.longitude)
+                    }
+
+                    // Trigger ETA if partner just started moving or moved significantly
                     val justStartedMoving = (partner.speed ?: 0f) > 0.3f && (oldPartner?.speed ?: 0f) <= 0.3f
                     checkAndFetchEta(force = justStartedMoving)
                 }
@@ -176,6 +191,49 @@ class PartnerViewModel(
                     ) 
                 }
             }
+        }
+    }
+
+    private fun checkAndFetchWeather(lat: Double, lon: Double) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val lastLoc = lastWeatherRequestLocation
+        val distance = if (lastLoc != null) {
+            calculateDistance(lat, lon, lastLoc.first, lastLoc.second)
+        } else {
+            Double.MAX_VALUE
+        }
+
+        // Fetch if it's the first time, if they moved more than 500m, or if 15 minutes have passed
+        if (lastWeatherRequestLocation == null || distance > 500 || (now - lastWeatherTimestamp) > 15 * 60 * 1000) {
+            fetchWeather(lat, lon)
+        }
+    }
+
+    private fun fetchWeather(lat: Double, lon: Double) {
+        weatherJob?.cancel()
+        weatherJob = viewModelScope.launch {
+            _uiState.update { it.copy(isWeatherLoading = true, weatherError = null) }
+            weatherRepository.getWeather(lat, lon)
+                .onSuccess { weatherInfo ->
+                    _uiState.update { 
+                        it.copy(
+                            weatherInfo = weatherInfo,
+                            isWeatherLoading = false,
+                            weatherError = null
+                        )
+                    }
+                    lastWeatherRequestLocation = lat to lon
+                    lastWeatherTimestamp = Clock.System.now().toEpochMilliseconds()
+                }
+                .onFailure { error ->
+                    _uiState.update { 
+                        it.copy(
+                            isWeatherLoading = false,
+                            weatherError = error.message ?: "Failed to fetch weather"
+                            // WeatherInfo is kept as a cache
+                        )
+                    }
+                }
         }
     }
 

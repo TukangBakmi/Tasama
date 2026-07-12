@@ -14,7 +14,21 @@ import com.example.tasama.domain.model.User
 actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
-    partner: User?
+    partner: User?,
+    places: List<com.example.tasama.domain.model.Place>,
+    anniversaryDate: Long?,
+    etaInfo: com.example.tasama.domain.repository.EtaInfo?,
+    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    isWeatherLoading: Boolean,
+    travelMode: com.example.tasama.domain.repository.TravelMode,
+    isPartnerComingToMe: Boolean,
+    isEtaLoading: Boolean,
+    etaError: String?,
+    onEditAnniversary: () -> Unit,
+    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onDeletePlace: (String) -> Unit,
+    onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
+    onUnlink: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
@@ -58,8 +59,7 @@ import kotlin.time.Clock
 @Composable
 fun animateLatLngAsState(
     targetValue: LatLng,
-    animationSpec: AnimationSpec<LatLng> = tween(durationMillis = 1500, easing = LinearEasing),
-    finishedListener: ((LatLng) -> Unit)? = null
+    animationSpec: AnimationSpec<LatLng> = tween(durationMillis = 1500, easing = LinearEasing)
 ): State<LatLng> {
     val typeConverter = remember {
         TwoWayConverter<LatLng, AnimationVector2D>(
@@ -103,6 +103,8 @@ actual fun MapContent(
     places: List<Place>,
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
+    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    isWeatherLoading: Boolean,
     travelMode: TravelMode,
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
@@ -707,7 +709,7 @@ actual fun MapContent(
         // Show info if manually clicked OR if triggered by movement
         val showCard = isPartnerInfoVisible && partnerScreenPos != null
         
-        if (showCard && partner != null && partnerScreenPos != null) {
+        if (showCard && partner != null) {
             val markerRadiusPx = with(density) { 24.dp.toPx() }
             
             Box(
@@ -765,9 +767,16 @@ actual fun MapContent(
                 .align(Alignment.TopCenter)
                 .padding(top = 14.dp),
             anniversaryDate = anniversaryDate,
-            distance = distance,
-            isMoving = partnerIsMoving,
             onEditAnniversary = onEditAnniversary
+        )
+
+        WeatherWidget(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 14.dp, end = 16.dp),
+            weatherInfo = weatherInfo,
+            isLoading = isWeatherLoading
         )
 
         // Floating action buttons container
@@ -1333,8 +1342,6 @@ fun PartnerStatusCard(
 fun PartnerDashboard(
     modifier: Modifier = Modifier,
     anniversaryDate: Long?,
-    distance: Double? = null,
-    isMoving: Boolean = false,
     onEditAnniversary: () -> Unit
 ) {
     Surface(
@@ -1448,4 +1455,50 @@ fun getPolylineMidpoint(points: List<LatLng>): LatLng? {
         currentDistance += segmentDist
     }
     return points.last()
+}
+
+@Composable
+fun WeatherWidget(
+    modifier: Modifier = Modifier,
+    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    isLoading: Boolean
+) {
+    AnimatedVisibility(
+        visible = weatherInfo != null || isLoading,
+        enter = fadeIn() + expandHorizontally(),
+        exit = fadeOut() + shrinkHorizontally(),
+        modifier = modifier
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isLoading && weatherInfo == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else if (weatherInfo != null) {
+                    Text(
+                        text = weatherInfo.iconCode,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${weatherInfo.temperature.toInt()}°C",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
 }

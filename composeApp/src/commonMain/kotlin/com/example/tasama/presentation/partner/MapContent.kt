@@ -15,6 +15,8 @@ expect fun MapContent(
     places: List<Place> = emptyList(),
     anniversaryDate: Long? = null,
     etaInfo: EtaInfo? = null,
+    weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
+    isWeatherLoading: Boolean = false,
     travelMode: TravelMode = TravelMode.DRIVING,
     isPartnerComingToMe: Boolean = false,
     isEtaLoading: Boolean = false,

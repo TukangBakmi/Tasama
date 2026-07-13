@@ -22,7 +22,7 @@ interface AuthRepository {
     suspend fun uploadProfilePicture(uid: String, bytes: ByteArray): String
     suspend fun updateProfilePicture(uid: String, url: String?)
     suspend fun updateDisplayName(uid: String, name: String)
-    suspend fun updateLocation(uid: String, lat: Double, lon: Double, speed: Float? = null)
+    suspend fun updateLocation(uid: String, lat: Double, lon: Double, speed: Float? = null, accuracy: Float? = null)
     suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean)
     suspend fun updateConnectionType(uid: String, type: String)
     suspend fun updateLastActive(uid: String, timestamp: Long? = null)

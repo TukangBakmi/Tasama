@@ -70,8 +70,9 @@ class LocationService : Service() {
                 val uid = authRepository.getCurrentUserId() ?: return
                 for (location in locationResult.locations) {
                     val speed = if (location.hasSpeed()) location.speed else null
+                    val accuracy = if (location.hasAccuracy()) location.accuracy else null
                     serviceScope.launch {
-                        authRepository.updateLocation(uid, location.latitude, location.longitude, speed)
+                        authRepository.updateLocation(uid, location.latitude, location.longitude, speed, accuracy)
                     }
                 }
             }

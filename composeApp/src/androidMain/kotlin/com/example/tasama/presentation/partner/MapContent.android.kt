@@ -51,6 +51,7 @@ import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.*
 import com.example.tasama.R
@@ -87,7 +88,7 @@ fun animateLatLngAsState(
 
 @Composable
 fun rememberUpdatedMarkerState(position: LatLng): MarkerState {
-    val state = rememberMarkerState(position = position)
+    val state = remember { MarkerState(position = position) }
     LaunchedEffect(position) {
         state.position = position
     }
@@ -1034,6 +1035,72 @@ data class MarkerVisibilityData(
     val partnerScreenPos: Offset?
 )
 
+enum class ConnectionStatus {
+    LIVE, WEAK, OFFLINE
+}
+
+@Composable
+fun rememberPartnerStatus(user: User?): ConnectionStatus {
+    if (user == null) return ConnectionStatus.OFFLINE
+    
+    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = Clock.System.now().toEpochMilliseconds()
+            delay(5000)
+        }
+    }
+    
+    return remember(user.lastLocationUpdate, user.accuracy, now) {
+        val lastUpdate = user.lastLocationUpdate ?: 0L
+        val delayMs = now - lastUpdate
+        val accuracy = user.accuracy ?: 0f
+        
+        when {
+            lastUpdate == 0L || delayMs > 30_000 -> ConnectionStatus.OFFLINE
+            delayMs > 10_000 || accuracy > 50f -> ConnectionStatus.WEAK
+            else -> ConnectionStatus.LIVE
+        }
+    }
+}
+
+@Composable
+fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifier) {
+    val (text, color) = when (status) {
+        ConnectionStatus.LIVE -> "Live" to Color(0xFF4CAF50)
+        ConnectionStatus.WEAK -> "Weak GPS" to Color(0xFFFF9800)
+        ConnectionStatus.OFFLINE -> "No Signal" to Color(0xFFF44336)
+    }
+
+    Surface(
+        color = color,
+        shape = RoundedCornerShape(percent = 50),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp),
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+fun formatLastUpdated(lastUpdate: Long?): String {
+    if (lastUpdate == null) return "never"
+    val now = Clock.System.now().toEpochMilliseconds()
+    val diffSec = (now - lastUpdate) / 1000
+    return when {
+        diffSec < 60 -> "just now"
+        diffSec < 3600 -> "${diffSec / 60}m ago"
+        diffSec < 86400 -> "${diffSec / 3600}h ago"
+        else -> "${diffSec / 86400}d ago"
+    }
+}
+
 /**
  * Clips a line segment to the screen rectangle using Liang-Barsky algorithm.
  * Returns the clipped segment endpoints as a pair of Offsets.
@@ -1085,6 +1152,7 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 fun UserMarker(user: User?, isMe: Boolean) {
     val speed = user?.speed ?: 0f
     val isMoving = speed > 0.3f
+    val status = rememberPartnerStatus(user)
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -1118,22 +1186,31 @@ fun UserMarker(user: User?, isMe: Boolean) {
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
-                    .padding(2.dp)
-                    .background(MaterialTheme.colorScheme.surface, CircleShape)
-                    .padding(2.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                UserAvatar(
-                    user = user,
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    showInitials = user?.avatarUrl == null
-                )
+            Box(contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    modifier = Modifier
+                        .padding(bottom = 6.dp) // Create space for the badge to overlap
+                        .size(48.dp)
+                        .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(2.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .padding(2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    UserAvatar(
+                        user = user,
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        showInitials = user?.avatarUrl == null
+                    )
+                }
+
+                if (!isMe && user != null) {
+                    ConnectionStatusBadge(
+                        status = status
+                    )
+                }
             }
         }
         
@@ -1166,6 +1243,7 @@ fun PartnerStatusCard(
     isEtaLoading: Boolean = false,
     etaError: String? = null
 ) {
+    val status = rememberPartnerStatus(user)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1181,26 +1259,24 @@ fun PartnerStatusCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val now = Clock.System.now().toEpochMilliseconds()
-                val isOnline = user.lastActive?.let { 
-                    now - it < 60_000 
-                } ?: false
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(if (isOnline) Color(0xFF4CAF50) else Color(0xFF9E9E9E), CircleShape)
-                            .border(1.dp, surfaceColor.copy(alpha = 0.5f), CircleShape)
-                    )
                     Text(
                         text = user.name,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                if (status == ConnectionStatus.OFFLINE) {
+                    Text(
+                        text = "Last updated ${formatLastUpdated(user.lastLocationUpdate)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Medium
                     )
                 }
 

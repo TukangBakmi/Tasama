@@ -21,5 +21,6 @@ data class User(
     val batteryLevel: Float? = null,
     val isCharging: Boolean? = null,
     val connectionType: String? = null, // "Wi-Fi", "Cellular", "Offline"
-    val speed: Float? = null // speed in m/s
+    val speed: Float? = null, // speed in m/s
+    val accuracy: Float? = null // accuracy in meters
 )

@@ -426,23 +426,26 @@ actual fun MapContent(
         ) {
             currentMyLocation?.let { location ->
                 val markerState = rememberUpdatedMarkerState(position = location)
+                val status = rememberPartnerStatus(currentUser)
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         currentUser?.avatarUrl ?: "",
                         currentUser?.name ?: "",
                         currentUser?.batteryLevel ?: 0f,
                         currentUser?.isCharging ?: false,
-                        currentUser?.connectionType ?: ""
+                        currentUser?.connectionType ?: "",
+                        status
                     ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
                     visible = markerData?.isMeVisible ?: true
                 ) {
-                    UserMarker(user = currentUser, isMe = true)
+                    UserMarker(user = currentUser, isMe = true, status = status)
                 }
             }
 
             currentPartnerLocation?.let { location ->
+                val status = rememberPartnerStatus(partner)
                 val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
                     keys = arrayOf<Any>(
@@ -451,7 +454,8 @@ actual fun MapContent(
                         partner?.batteryLevel ?: 0f,
                         partner?.isCharging ?: false,
                         partner?.connectionType ?: "",
-                        partner?.speed ?: 0f
+                        partner?.speed ?: 0f,
+                        status
                     ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
@@ -464,7 +468,7 @@ actual fun MapContent(
                         true
                     }
                 ) {
-                    UserMarker(user = partner, isMe = false)
+                    UserMarker(user = partner, isMe = false, status = status)
                 }
             }
 
@@ -1043,9 +1047,9 @@ enum class ConnectionStatus {
 fun rememberPartnerStatus(user: User?): ConnectionStatus {
     if (user == null) return ConnectionStatus.OFFLINE
     
-    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    var now by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     
-    LaunchedEffect(Unit) {
+    LaunchedEffect(user.lastLocationUpdate) {
         while (true) {
             now = Clock.System.now().toEpochMilliseconds()
             delay(5000)
@@ -1149,10 +1153,9 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 }
 
 @Composable
-fun UserMarker(user: User?, isMe: Boolean) {
+fun UserMarker(user: User?, isMe: Boolean, status: ConnectionStatus) {
     val speed = user?.speed ?: 0f
-    val isMoving = speed > 0.3f
-    val status = rememberPartnerStatus(user)
+    val isMoving = speed > 0.3f && status != ConnectionStatus.OFFLINE
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -1186,10 +1189,12 @@ fun UserMarker(user: User?, isMe: Boolean) {
                 )
             }
 
-            Box(contentAlignment = Alignment.BottomCenter) {
+            Box(
+                contentAlignment = Alignment.BottomCenter,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 6.dp) // Create space for the badge to overlap
                         .size(48.dp)
                         .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(2.dp)
@@ -1208,7 +1213,8 @@ fun UserMarker(user: User?, isMe: Boolean) {
 
                 if (!isMe && user != null) {
                     ConnectionStatusBadge(
-                        status = status
+                        status = status,
+                        modifier = Modifier.offset(y = 8.dp)
                     )
                 }
             }

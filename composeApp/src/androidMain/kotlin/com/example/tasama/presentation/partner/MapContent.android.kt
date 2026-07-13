@@ -1153,90 +1153,73 @@ fun findRayIntersection(start: Offset, end: Offset, width: Float, height: Float)
 }
 
 @Composable
-fun UserMarker(user: User?, isMe: Boolean, status: ConnectionStatus) {
+fun UserMarker(
+    user: User?,
+    isMe: Boolean,
+    status: ConnectionStatus
+) {
     val speed = user?.speed ?: 0f
     val isMoving = speed > 0.3f && status != ConnectionStatus.OFFLINE
-    
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center) {
-            if (isMoving) {
-                val infiniteTransition = rememberInfiniteTransition()
-                val scale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 2f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1500, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    )
-                )
-                val alpha by infiniteTransition.animateFloat(
-                    initialValue = 0.6f,
-                    targetValue = 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1500, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    )
-                )
-                
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
-                        .background(
-                            if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
-                            CircleShape
-                        )
-                )
-            }
 
+    Box(
+        modifier = Modifier
+            .width(64.dp)
+            .height(76.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+
+        // Ripple
+        if (isMoving) {
             Box(
-                contentAlignment = Alignment.BottomCenter,
-                modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(if (isMe) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape)
-                        .padding(2.dp)
-                        .background(MaterialTheme.colorScheme.surface, CircleShape)
-                        .padding(2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    UserAvatar(
-                        user = user,
-                        modifier = Modifier.fillMaxSize(),
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        showInitials = user?.avatarUrl == null
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(
+                        color = if (isMe)
+                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
+                        else
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                        shape = CircleShape
                     )
-                }
-
-                if (!isMe && user != null) {
-                    ConnectionStatusBadge(
-                        status = status,
-                        modifier = Modifier.offset(y = 8.dp)
-                    )
-                }
-            }
+            )
         }
-        
-        if (isMoving && !isMe) {
-            val speedKmh = (speed * 3.6f).toInt()
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                shape = RoundedCornerShape(8.dp),
-                tonalElevation = 2.dp,
-                shadowElevation = 4.dp,
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Text(
-                    text = "$speedKmh km/h",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF4CAF50),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+
+        // Avatar
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 8.dp)
+                .size(48.dp)
+                .background(
+                    if (isMe)
+                        MaterialTheme.colorScheme.secondary
+                    else
+                        MaterialTheme.colorScheme.primary,
+                    CircleShape
                 )
-            }
+                .padding(2.dp)
+                .background(
+                    MaterialTheme.colorScheme.surface,
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            UserAvatar(
+                user = user,
+                modifier = Modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                showInitials = user?.avatarUrl == null
+            )
+        }
+
+        // Connection Badge
+        if (!isMe && user != null) {
+            ConnectionStatusBadge(
+                status = status,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = 48.dp)
+            )
         }
     }
 }
@@ -1275,6 +1258,23 @@ fun PartnerStatusCard(
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    val speed = user.speed ?: 0f
+                    if (speed > 0.3f) {
+                        val speedKmh = (speed * 3.6f).toInt()
+                        Surface(
+                            color = Color(0xFF4CAF50).copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "$speedKmh km/h",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
 
                 if (status == ConnectionStatus.OFFLINE) {

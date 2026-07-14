@@ -138,15 +138,6 @@ actual fun MapContent(
     var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
     
-    // Auto-show info if partner is moving
-    val partnerIsMoving = (partner?.speed ?: 0f) > 0.3f
-    
-    LaunchedEffect(partnerIsMoving) {
-        if (partnerIsMoving) {
-            isPartnerInfoVisible = true
-        }
-    }
-
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
@@ -464,7 +455,7 @@ actual fun MapContent(
 
             places.forEach { place ->
                 val placeLatLng = LatLng(place.latitude, place.longitude)
-                val placeColor = place.color?.let { Color(it.toULong()) } ?: MaterialTheme.colorScheme.primary
+                val placeColor = place.color?.let { Color(it.toInt()) } ?: MaterialTheme.colorScheme.primary
                 
                 Circle(
                     center = placeLatLng,
@@ -690,8 +681,8 @@ actual fun MapContent(
         // Partner Info Card Overlay
         val partnerScreenPos = markerData?.partnerScreenPos
         
-        // Show info if manually clicked OR if triggered by movement
-        val showCard = isPartnerInfoVisible && partnerScreenPos != null
+        // Show info if manually clicked
+        val showCard = isPartnerInfoVisible && partnerScreenPos != null && showAddPlaceSheet == null
         
         if (showCard && partner != null) {
             val markerRadiusPx = with(density) { 24.dp.toPx() }
@@ -969,9 +960,6 @@ fun AddPlaceSheetContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onCancel) {
-                Icon(Icons.Default.Close, contentDescription = "Close")
-            }
         }
 
         OutlinedTextField(
@@ -1022,18 +1010,29 @@ fun AddPlaceSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 colors.forEach { color ->
+                    val isSelected = selectedColor == color
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .aspectRatio(1f)
-                            .background(color, CircleShape)
-                            .border(
-                                width = if (selectedColor == color) 2.dp else 0.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = CircleShape
-                            )
-                            .clickable { selectedColor = color }
-                    )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { selectedColor = color },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .border(
+                                    width = if (isSelected) 2.dp else 0.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    shape = CircleShape
+                                )
+                                .padding(if (isSelected) 4.dp else 0.dp)
+                                .background(color, CircleShape)
+                        )
+                    }
                 }
             }
 
@@ -1080,7 +1079,7 @@ fun AddPlaceSheetContent(
                         radius = radius.toDouble(),
                         notifyOnEntry = notifyOnEntry,
                         notifyOnExit = notifyOnExit,
-                        color = selectedColor.toArgb().toLong(),
+                        color = selectedColor.toArgb().toLong() and 0xFFFFFFFFL,
                         iconName = selectedIconName
                     )
                 )
@@ -1089,7 +1088,7 @@ fun AddPlaceSheetContent(
             enabled = name.isNotBlank() || address != "Fetching address...",
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Save Reminder")
+            Text("Save Place")
         }
         
         Spacer(modifier = Modifier.height(16.dp))

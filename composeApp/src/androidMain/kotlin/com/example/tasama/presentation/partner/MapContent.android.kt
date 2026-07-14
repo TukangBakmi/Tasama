@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.toArgb
@@ -39,6 +40,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -57,6 +60,7 @@ import android.location.Geocoder
 import java.util.Locale
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.*
@@ -479,7 +483,10 @@ actual fun MapContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape)
+                            .border(2.dp, placeColor, CircleShape)
+                            .padding(8.dp)
                             .pointerInput(place.id) {
                                 detectTapGestures(
                                     onTap = {
@@ -507,7 +514,7 @@ actual fun MapContent(
                             imageVector = icon,
                             contentDescription = null,
                             tint = placeColor,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
@@ -877,7 +884,7 @@ fun AddPlaceSheetContent(
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("Fetching address...") }
-    var radius by remember { mutableFloatStateOf(100f) }
+    val radius = 200f // Fixed to 200m as requested
     var notifyOnEntry by remember { mutableStateOf(true) }
     var notifyOnExit by remember { mutableStateOf(true) }
     var selectedColor by remember { mutableStateOf(Color(0xFF2196F3)) } // Default Blue
@@ -941,150 +948,168 @@ fun AddPlaceSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Add Reminder Marker",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Add Place Marker",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Get notified when your partner enters or leaves this area.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Default.Close, contentDescription = "Close")
+            }
+        }
 
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
             label = { Text("Place Name") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
         )
 
-        Text(
-            text = address,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        HorizontalDivider()
-
-        Text(
-            text = "Notification Radius: ${radius.toInt()}m",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Slider(
-            value = radius,
-            onValueChange = { radius = it },
-            valueRange = 50f..200f,
-            steps = 2
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Notify on Entry")
-            Switch(checked = notifyOnEntry, onCheckedChange = { notifyOnEntry = it })
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Notify on Exit")
-            Switch(checked = notifyOnExit, onCheckedChange = { notifyOnExit = it })
-        }
-
-        HorizontalDivider()
-
-        Text("Marker Color", style = MaterialTheme.typography.titleSmall)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            colors.forEach { color ->
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(color, CircleShape)
-                        .border(
-                            width = if (selectedColor == color) 3.dp else 0.dp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            shape = CircleShape
-                        )
-                        .clickable { selectedColor = color }
-                )
-            }
+            NotificationChip(
+                label = "Entry",
+                selected = notifyOnEntry,
+                onClick = { notifyOnEntry = !notifyOnEntry },
+                modifier = Modifier.weight(1f)
+            )
+            NotificationChip(
+                label = "Exit",
+                selected = notifyOnExit,
+                onClick = { notifyOnExit = !notifyOnExit },
+                modifier = Modifier.weight(1f)
+            )
         }
 
-        Text("Marker Icon", style = MaterialTheme.typography.titleSmall)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
+
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            icons.chunked(5).forEach { rowIcons ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    rowIcons.forEach { (iconName, icon) ->
-                        IconButton(
-                            onClick = { selectedIconName = iconName },
-                            modifier = Modifier
-                                .background(
-                                    if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(8.dp)
-                                )
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = iconName,
-                                tint = if (selectedIconName == iconName) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+            Text("Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                colors.forEach { color ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .background(color, CircleShape)
+                            .border(
+                                width = if (selectedColor == color) 2.dp else 0.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape
                             )
-                        }
+                            .clickable { selectedColor = color }
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                icons.forEach { (iconName, icon) ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                            .clickable { selectedIconName = iconName },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = iconName,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (selectedIconName == iconName) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCancel,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Cancel")
-            }
-            Button(
-                onClick = {
-                    onAddPlace(
-                        Place(
-                            id = "",
-                            name = name.ifBlank { address },
-                            address = address,
-                            latitude = location.latitude,
-                            longitude = location.longitude,
-                            radius = radius.toDouble(),
-                            notifyOnEntry = notifyOnEntry,
-                            notifyOnExit = notifyOnExit,
-                            color = selectedColor.toArgb().toLong(),
-                            iconName = selectedIconName
-                        )
+        Button(
+            onClick = {
+                onAddPlace(
+                    Place(
+                        id = "",
+                        name = name.ifBlank { address },
+                        address = address,
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        radius = radius.toDouble(),
+                        notifyOnEntry = notifyOnEntry,
+                        notifyOnExit = notifyOnExit,
+                        color = selectedColor.toArgb().toLong(),
+                        iconName = selectedIconName
                     )
-                },
-                modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() || address != "Fetching address..."
-            ) {
-                Text("Add Place")
-            }
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = name.isNotBlank() || address != "Fetching address...",
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Save Reminder")
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
     }
+}
+
+@Composable
+fun NotificationChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp)
+    )
 }
 
 @Composable

@@ -13,14 +13,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.TwoWheeler
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Park
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,7 +33,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -51,6 +52,11 @@ import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
+import kotlinx.coroutines.*
+import android.location.Geocoder
+import java.util.Locale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.*
@@ -111,7 +117,7 @@ actual fun MapContent(
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
-    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit
@@ -121,9 +127,10 @@ actual fun MapContent(
     val marginPx = with(density) { 8.dp.toPx() }
     val radiusPx = indicatorSizePx / 2
 
-    var showAddPlaceDialog by remember { mutableStateOf<LatLng?>(null) }
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
+    var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
     
@@ -138,10 +145,8 @@ actual fun MapContent(
 
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
-    var placeName by remember { mutableStateOf("") }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
-    val defaultRadius = 150.0 // 150m is a good default for geofencing
     val followZoom = 16.5f
 
     val isDarkTheme = LocalIsDarkTheme.current
@@ -384,25 +389,6 @@ actual fun MapContent(
         }
     }
 
-    val showFitButton by remember(currentMyLocation, currentPartnerLocation, mapSize) {
-        derivedStateOf {
-            val position = cameraPositionState.position
-            // Condition 1: Map is rotated or tilted
-            val isRotated = abs(position.bearing) > 0.05f || abs(position.tilt) > 0.05f
-            
-            // Condition 2: Either person exists and is currently off-screen (one or both)
-            val data = markerData
-            val isAnyOffScreen = if (data != null) {
-                val meOff = (currentMyLocation != null && currentMyLocation.latitude != 0.0) && !data.isMeVisible
-                val partnerOff = (currentPartnerLocation != null && currentPartnerLocation.latitude != 0.0) && !data.isPartnerVisible
-                meOff || partnerOff
-            } else {
-                false
-            }
-            
-            isMapLoaded && (isRotated || isAnyOffScreen)
-        }
-    }
 
     Box(modifier = modifier.onSizeChanged { mapSize = it }) {
         GoogleMap(
@@ -420,7 +406,7 @@ actual fun MapContent(
                 if (existingPlace != null) {
                     showDeletePlaceDialog = existingPlace
                 } else {
-                    showAddPlaceDialog = latLng
+                    showAddPlaceSheet = latLng
                 }
             }
         ) {
@@ -474,11 +460,13 @@ actual fun MapContent(
 
             places.forEach { place ->
                 val placeLatLng = LatLng(place.latitude, place.longitude)
+                val placeColor = place.color?.let { Color(it.toULong()) } ?: MaterialTheme.colorScheme.primary
+                
                 Circle(
                     center = placeLatLng,
                     radius = place.radius,
-                    fillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    strokeColor = MaterialTheme.colorScheme.primary,
+                    fillColor = placeColor.copy(alpha = 0.2f),
+                    strokeColor = placeColor,
                     strokeWidth = 2f
                 )
                 val markerState = rememberUpdatedMarkerState(position = placeLatLng)
@@ -504,10 +492,21 @@ actual fun MapContent(
                             },
                         contentAlignment = Alignment.Center
                     ) {
+                        val icon = when (place.iconName) {
+                            "Home" -> Icons.Default.Home
+                            "Work" -> Icons.Default.Work
+                            "School" -> Icons.Default.School
+                            "Shopping" -> Icons.Default.ShoppingCart
+                            "Restaurant" -> Icons.Default.Restaurant
+                            "Gym" -> Icons.Default.FitnessCenter
+                            "Hospital" -> Icons.Default.LocalHospital
+                            "Park" -> Icons.Default.Park
+                            else -> Icons.Default.LocationOn
+                        }
                         Icon(
-                            imageVector = Icons.Filled.LocationOn,
+                            imageVector = icon,
                             contentDescription = null,
-                            tint = Color(0xFF007BFF), // Azure color
+                            tint = placeColor,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -631,47 +630,20 @@ actual fun MapContent(
 
 
 
-        if (showAddPlaceDialog != null) {
-            AlertDialog(
-                onDismissRequest = { showAddPlaceDialog = null },
-                title = { Text("Add Place") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Save this location to receive notifications when you or your partner arrive or leave.")
-                        OutlinedTextField(
-                            value = placeName,
-                            onValueChange = { placeName = it },
-                            label = { Text("Place Name (e.g. Home, Office)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        Text(
-                            text = "Radius set to ${defaultRadius.toInt()}m",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        enabled = placeName.isNotBlank(),
-                        onClick = {
-                            showAddPlaceDialog?.let {
-                                onAddPlace(placeName, it.latitude, it.longitude, defaultRadius)
-                            }
-                            showAddPlaceDialog = null
-                            placeName = ""
-                        }
-                    ) {
-                        Text("Add")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddPlaceDialog = null }) {
-                        Text("Cancel")
-                    }
-                }
-            )
+        if (showAddPlaceSheet != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showAddPlaceSheet = null },
+                sheetState = bottomSheetState
+            ) {
+                AddPlaceSheetContent(
+                    location = showAddPlaceSheet!!,
+                    onAddPlace = { place: Place ->
+                        onAddPlace(place)
+                        showAddPlaceSheet = null
+                    },
+                    onCancel = { showAddPlaceSheet = null }
+                )
+            }
         }
 
         // Off-screen markers
@@ -816,19 +788,13 @@ actual fun MapContent(
             }
 
             // Recenter/Fit Button
-            AnimatedVisibility(
-                visible = showFitButton,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+            SmallFloatingActionButton(
+                onClick = { fitMarkers() },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
             ) {
-                SmallFloatingActionButton(
-                    onClick = { fitMarkers() },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
-                }
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
             }
 
             // Route Toggle Button
@@ -899,6 +865,225 @@ actual fun MapContent(
                 }
             )
         }
+    }
+}
+
+@Composable
+fun AddPlaceSheetContent(
+    location: LatLng,
+    onAddPlace: (Place) -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    var name by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("Fetching address...") }
+    var radius by remember { mutableFloatStateOf(100f) }
+    var notifyOnEntry by remember { mutableStateOf(true) }
+    var notifyOnExit by remember { mutableStateOf(true) }
+    var selectedColor by remember { mutableStateOf(Color(0xFF2196F3)) } // Default Blue
+    var selectedIconName by remember { mutableStateOf("Location") }
+
+    val colors = listOf(
+        Color(0xFF2196F3), // Blue
+        Color(0xFF4CAF50), // Green
+        Color(0xFFF44336), // Red
+        Color(0xFFFFC107), // Amber
+        Color(0xFF9C27B0), // Purple
+        Color(0xFF795548)  // Brown
+    )
+
+    val icons = listOf(
+        "Location" to Icons.Default.LocationOn,
+        "Home" to Icons.Default.Home,
+        "Work" to Icons.Default.Work,
+        "School" to Icons.Default.School,
+        "Shopping" to Icons.Default.ShoppingCart,
+        "Restaurant" to Icons.Default.Restaurant,
+        "Gym" to Icons.Default.FitnessCenter,
+        "Hospital" to Icons.Default.LocalHospital,
+        "Park" to Icons.Default.Park
+    )
+
+    LaunchedEffect(location) {
+        withContext(Dispatchers.IO) {
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                @Suppress("DEPRECATION")
+                val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val addr = addresses[0]
+                    val thoroughfare = addr.thoroughfare ?: ""
+                    val subThoroughfare = addr.subThoroughfare ?: ""
+                    val locality = addr.locality ?: ""
+                    
+                    val formattedAddress = if (thoroughfare.isNotEmpty()) {
+                        if (subThoroughfare.isNotEmpty()) "$thoroughfare $subThoroughfare, $locality"
+                        else "$thoroughfare, $locality"
+                    } else locality
+                    
+                    withContext(Dispatchers.Main) {
+                        address = formattedAddress.ifBlank { "Dropped Pin" }
+                        if (name.isEmpty()) name = thoroughfare.ifEmpty { locality }.ifEmpty { "Dropped Pin" }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        address = "Unknown Location"
+                    }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    address = "Error fetching address"
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "Add Reminder Marker",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Place Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Text(
+            text = address,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        HorizontalDivider()
+
+        Text(
+            text = "Notification Radius: ${radius.toInt()}m",
+            style = MaterialTheme.typography.titleSmall
+        )
+        Slider(
+            value = radius,
+            onValueChange = { radius = it },
+            valueRange = 50f..200f,
+            steps = 2
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Notify on Entry")
+            Switch(checked = notifyOnEntry, onCheckedChange = { notifyOnEntry = it })
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Notify on Exit")
+            Switch(checked = notifyOnExit, onCheckedChange = { notifyOnExit = it })
+        }
+
+        HorizontalDivider()
+
+        Text("Marker Color", style = MaterialTheme.typography.titleSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            colors.forEach { color ->
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(color, CircleShape)
+                        .border(
+                            width = if (selectedColor == color) 3.dp else 0.dp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            shape = CircleShape
+                        )
+                        .clickable { selectedColor = color }
+                )
+            }
+        }
+
+        Text("Marker Icon", style = MaterialTheme.typography.titleSmall)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            icons.chunked(5).forEach { rowIcons ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowIcons.forEach { (iconName, icon) ->
+                        IconButton(
+                            onClick = { selectedIconName = iconName },
+                            modifier = Modifier
+                                .background(
+                                    if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(8.dp)
+                                )
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = iconName,
+                                tint = if (selectedIconName == iconName) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancel")
+            }
+            Button(
+                onClick = {
+                    onAddPlace(
+                        Place(
+                            id = "",
+                            name = name.ifBlank { address },
+                            address = address,
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            radius = radius.toDouble(),
+                            notifyOnEntry = notifyOnEntry,
+                            notifyOnExit = notifyOnExit,
+                            color = selectedColor.toArgb().toLong(),
+                            iconName = selectedIconName
+                        )
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                enabled = name.isNotBlank() || address != "Fetching address..."
+            ) {
+                Text("Add Place")
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -1404,7 +1589,7 @@ fun PartnerStatusCard(
                     path = path,
                     color = surfaceColor.copy(alpha = 0.95f)
                 )
-                // Diagonal border lines to match the card's border
+                // Diagonal borderlines to match the card's border
                 val strokePath = Path().apply {
                     moveTo(0f, 0f)
                     lineTo(size.width / 2, size.height)

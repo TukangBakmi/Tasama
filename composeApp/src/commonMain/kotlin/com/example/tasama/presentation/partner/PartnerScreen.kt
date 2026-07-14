@@ -95,7 +95,7 @@ fun PartnerScreen(
                     isEtaLoading = uiState.isEtaLoading,
                     etaError = uiState.etaError,
                     onEditAnniversary = { showDatePicker = true },
-                    onAddPlace = viewModel::addPlace,
+                    onAddPlace = { viewModel.addPlace(it) },
                     onDeletePlace = viewModel::deletePlace,
                     onSetTravelMode = viewModel::setTravelMode,
                     onUnlink = viewModel::unlinkPartner
@@ -290,7 +290,7 @@ fun PartnerMapContent(
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
-    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit

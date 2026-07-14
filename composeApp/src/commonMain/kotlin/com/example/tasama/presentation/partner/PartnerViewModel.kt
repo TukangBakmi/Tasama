@@ -270,10 +270,9 @@ class PartnerViewModel(
         }
     }
 
-    fun addPlace(name: String, lat: Double, lon: Double, radius: Double) {
+    fun addPlace(place: Place) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            val place = Place(name = name, latitude = lat, longitude = lon, radius = radius)
             placeRepository.addPlace(uid, place)
         }
     }

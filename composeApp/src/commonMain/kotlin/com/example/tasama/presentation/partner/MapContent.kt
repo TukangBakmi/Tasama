@@ -22,7 +22,7 @@ expect fun MapContent(
     isEtaLoading: Boolean = false,
     etaError: String? = null,
     onEditAnniversary: () -> Unit = {},
-    onAddPlace: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
+    onAddPlace: (Place) -> Unit = {},
     onDeletePlace: (String) -> Unit = {},
     onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {}

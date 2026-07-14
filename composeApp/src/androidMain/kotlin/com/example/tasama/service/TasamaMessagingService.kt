@@ -78,6 +78,12 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                 groupKey = "com.example.tasama.LOCATION_GROUP",
                 importance = NotificationManager.IMPORTANCE_LOW
             )
+            val PLACES = NotificationCategory(
+                id = "place_alerts",
+                name = "Place Alerts",
+                groupKey = "com.example.tasama.PLACES_GROUP",
+                importance = NotificationManager.IMPORTANCE_HIGH
+            )
             val RELATIONSHIP = NotificationCategory(
                 id = "relationship_events",
                 name = "Relationship Events",
@@ -127,6 +133,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                 val category = when {
                     type.startsWith("PARTNER_") -> Categories.PARTNER
                     type.startsWith("LOCATION_") -> Categories.LOCATION
+                    type.startsWith("PLACE_") || type == "GEOFENCE" -> Categories.PLACES
                     type.startsWith("RELATIONSHIP_") -> Categories.RELATIONSHIP
                     else -> Categories.GENERAL
                 }
@@ -170,12 +177,6 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             }
         }
 
-        val senderName = data["sender_name"] ?: "Tasama"
-        val senderPhoto = data["sender_photo"]
-        val senderAvatar = data["sender_avatar"]
-
-        val largeIcon = resolveLargeIcon(senderPhoto, senderAvatar, senderName)
-
         // Title mapping based on type and category
         val mappedTitle = when (category) {
             Categories.PARTNER -> when {
@@ -186,6 +187,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                 else -> "Partner Update"
             }
             Categories.LOCATION -> "Location Alert"
+            Categories.PLACES -> "Place Alert"
             Categories.RELATIONSHIP -> "Relationship Milestone"
             else -> category.name
         }
@@ -218,7 +220,6 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
         val builder = NotificationCompat.Builder(this, category.id)
             .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(largeIcon)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(
@@ -240,41 +241,6 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         }
 
         manager.notify(type.hashCode(), builder.build())
-    }
-
-    private suspend fun resolveLargeIcon(
-        photoUrl: String?,
-        avatar: String?,
-        senderName: String
-    ): Bitmap {
-        photoUrl?.let { it ->
-            loadBitmap(it)?.let { return it }
-        }
-
-        avatar?.let {
-            val resId = resources.getIdentifier(
-                it.lowercase().replace("_", ""),
-                "drawable",
-                packageName
-            )
-
-            if (resId != 0) {
-                val drawable = androidx.core.content.ContextCompat.getDrawable(this, resId)
-                if (drawable is BitmapDrawable) {
-                    return drawable.bitmap
-                }
-                // If it's a VectorDrawable or something else, we might need to render it to a bitmap
-                // But for simplicity and consistency with createInitialAvatar:
-                val size = 128
-                val bitmap = createBitmap(size, size)
-                val canvas = Canvas(bitmap)
-                drawable?.setBounds(0, 0, canvas.width, canvas.height)
-                drawable?.draw(canvas)
-                return bitmap
-            }
-        }
-
-        return createInitialAvatar(senderName)
     }
 
     private suspend fun showMessagingNotification(

@@ -52,7 +52,7 @@ class LocationService : Service() {
     }
 
     companion object {
-        const val CHANNEL_ID = "location_updates"
+        const val CHANNEL_ID = "location_sharing" // Changed from location_updates
         const val NOTIFICATION_ID = 12345
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
@@ -351,6 +351,7 @@ class LocationService : Service() {
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setWhen(0)
+            .setGroup("com.example.tasama.SERVICE_GROUP")
             .build()
     }
 

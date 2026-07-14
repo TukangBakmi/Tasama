@@ -85,8 +85,9 @@ class GeofenceMonitor(
         scope.launch {
             authRepository.sendNotification(
                 targetUid = targetUserId,
-                title = "Location Update",
-                body = message
+                title = "Place Update",
+                body = message,
+                type = "PLACE_ALERT"
             )
         }
     }

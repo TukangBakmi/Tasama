@@ -204,7 +204,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             
             val destination = when (category) {
-                Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
+                Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP, Categories.PLACES -> "partner"
                 Categories.MESSAGING -> "chat"
                 else -> "dashboard"
             }

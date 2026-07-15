@@ -315,25 +315,6 @@ fun PartnerMapContent(
             onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink
         )
-
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                shape = CircleShape,
-                tonalElevation = 2.dp
-            ) {
-                Text(
-                    text = if (places.isEmpty()) "Long press on the map to add a place" else "Long press map to add more places",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 

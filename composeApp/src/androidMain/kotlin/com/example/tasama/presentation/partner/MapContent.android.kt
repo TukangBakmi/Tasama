@@ -210,7 +210,8 @@ actual fun MapContent(
         MapUiSettings(
             zoomControlsEnabled = false,
             myLocationButtonEnabled = false,
-            compassEnabled = false
+            compassEnabled = false,
+            mapToolbarEnabled = false
         )
     }
 
@@ -265,6 +266,20 @@ actual fun MapContent(
         if (isMapLoaded && mapSize != IntSize.Zero && !hasInitialFit && (currentMyLocation != null || currentPartnerLocation != null)) {
             fitMarkers()
             hasInitialFit = true
+        }
+    }
+
+    // Auto-fit when route is enabled
+    LaunchedEffect(isRouteEnabled) {
+        if (isRouteEnabled) {
+            fitMarkers()
+        }
+    }
+
+    // Auto-fit when travel mode changes and route updates
+    LaunchedEffect(travelMode) {
+        if (isRouteEnabled) {
+            fitMarkers()
         }
     }
 
@@ -467,6 +482,7 @@ actual fun MapContent(
                 val markerState = rememberUpdatedMarkerState(position = placeLatLng)
                 MarkerComposable(
                     state = markerState,
+                    anchor = Offset(0.5f, 0.5f),
                     title = place.name,
                     onInfoWindowLongClick = {
                         showDeletePlaceDialog = place

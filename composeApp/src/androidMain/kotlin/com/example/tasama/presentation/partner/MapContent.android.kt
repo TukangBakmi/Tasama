@@ -134,6 +134,7 @@ actual fun MapContent(
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
+    var editingPlace by remember { mutableStateOf<Place?>(null) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
@@ -406,7 +407,20 @@ actual fun MapContent(
             cameraPositionState = cameraPositionState,
             uiSettings = uiSettings,
             onMapLoaded = { isMapLoaded = true },
-            onMapClick = { isPartnerInfoVisible = false },
+            onMapClick = { latLng ->
+                println("DEBUG: Map clicked at $latLng")
+                isPartnerInfoVisible = false
+                val clickedPlace = places.find { place ->
+                    val distance = calculateDistance(latLng, LatLng(place.latitude, place.longitude))
+                    // Increase tolerance: hit if inside the circle OR within 50 meters of center
+                    distance <= maxOf(place.radius, 50.0) 
+                }
+                if (clickedPlace != null) {
+                    println("DEBUG: Map click detected place: ${clickedPlace.name}")
+                    editingPlace = clickedPlace
+                    showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
+                }
+            },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
@@ -416,6 +430,7 @@ actual fun MapContent(
                 if (existingPlace != null) {
                     showDeletePlaceDialog = existingPlace
                 } else {
+                    editingPlace = null
                     showAddPlaceSheet = latLng
                 }
             }
@@ -481,9 +496,16 @@ actual fun MapContent(
                 )
                 val markerState = rememberUpdatedMarkerState(position = placeLatLng)
                 MarkerComposable(
+                    keys = arrayOf<Any>(place.id, place.name, place.latitude, place.longitude, place.color ?: 0L, place.iconName ?: ""),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
                     title = place.name,
+                    onClick = {
+                        println("DEBUG: Marker content clicked for place: ${place.name}")
+                        editingPlace = place
+                        showAddPlaceSheet = placeLatLng
+                        true
+                    },
                     onInfoWindowLongClick = {
                         showDeletePlaceDialog = place
                     }
@@ -493,17 +515,7 @@ actual fun MapContent(
                             .size(42.dp)
                             .background(MaterialTheme.colorScheme.surface, CircleShape)
                             .border(2.dp, placeColor, CircleShape)
-                            .padding(8.dp)
-                            .pointerInput(place.id) {
-                                detectTapGestures(
-                                    onTap = {
-                                        markerState.showInfoWindow()
-                                    },
-                                    onLongPress = {
-                                        showDeletePlaceDialog = place
-                                    }
-                                )
-                            },
+                            .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         val icon = when (place.iconName) {
@@ -580,7 +592,7 @@ actual fun MapContent(
                     }
 
                     MarkerComposable(
-                        keys = arrayOf(distance ?: 0.0, etaInfo ?: 0, labelPosition, routeAlpha.value),
+                        keys = arrayOf<Any>(distance ?: 0.0, etaInfo ?: 0, labelPosition, routeAlpha.value),
                         state = rememberUpdatedMarkerState(position = labelPosition),
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
@@ -646,16 +658,24 @@ actual fun MapContent(
 
         if (showAddPlaceSheet != null) {
             ModalBottomSheet(
-                onDismissRequest = { showAddPlaceSheet = null },
+                onDismissRequest = { 
+                    showAddPlaceSheet = null
+                    editingPlace = null
+                },
                 sheetState = bottomSheetState
             ) {
                 AddPlaceSheetContent(
                     location = showAddPlaceSheet!!,
+                    initialPlace = editingPlace,
                     onAddPlace = { place: Place ->
                         onAddPlace(place)
                         showAddPlaceSheet = null
+                        editingPlace = null
                     },
-                    onCancel = { showAddPlaceSheet = null }
+                    onCancel = { 
+                        showAddPlaceSheet = null
+                        editingPlace = null
+                    }
                 )
             }
         }
@@ -885,17 +905,20 @@ actual fun MapContent(
 @Composable
 fun AddPlaceSheetContent(
     location: LatLng,
+    initialPlace: Place? = null,
     onAddPlace: (Place) -> Unit,
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("Fetching address...") }
-    val radius = 200f // Fixed to 200m as requested
-    var notifyOnEntry by remember { mutableStateOf(true) }
-    var notifyOnExit by remember { mutableStateOf(true) }
-    var selectedColor by remember { mutableStateOf(Color(0xFF2196F3)) } // Default Blue
-    var selectedIconName by remember { mutableStateOf("Location") }
+    var name by remember { mutableStateOf(initialPlace?.name ?: "") }
+    var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
+    val radius = initialPlace?.radius?.toFloat() ?: 200f
+    var notifyOnEntry by remember { mutableStateOf(initialPlace?.notifyOnEntry ?: true) }
+    var notifyOnExit by remember { mutableStateOf(initialPlace?.notifyOnExit ?: true) }
+    var selectedColor by remember { 
+        mutableStateOf(initialPlace?.color?.let { Color(it.toInt()) } ?: Color(0xFF2196F3)) 
+    }
+    var selectedIconName by remember { mutableStateOf(initialPlace?.iconName ?: "Location") }
 
     val colors = listOf(
         Color(0xFF2196F3), // Blue
@@ -918,7 +941,9 @@ fun AddPlaceSheetContent(
         "Park" to Icons.Default.Park
     )
 
-    LaunchedEffect(location) {
+    LaunchedEffect(location, initialPlace) {
+        if (initialPlace != null) return@LaunchedEffect
+        
         withContext(Dispatchers.IO) {
             try {
                 val geocoder = Geocoder(context, Locale.getDefault())
@@ -966,7 +991,7 @@ fun AddPlaceSheetContent(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Add Place Marker",
+                    text = if (initialPlace == null) "Add Place Marker" else "Edit Place Marker",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -1087,7 +1112,7 @@ fun AddPlaceSheetContent(
             onClick = {
                 onAddPlace(
                     Place(
-                        id = "",
+                        id = initialPlace?.id ?: "",
                         name = name.ifBlank { address },
                         address = address,
                         latitude = location.latitude,
@@ -1104,7 +1129,7 @@ fun AddPlaceSheetContent(
             enabled = name.isNotBlank() || address != "Fetching address...",
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Save Place")
+            Text(if (initialPlace == null) "Save Place" else "Update Place")
         }
         
         Spacer(modifier = Modifier.height(16.dp))

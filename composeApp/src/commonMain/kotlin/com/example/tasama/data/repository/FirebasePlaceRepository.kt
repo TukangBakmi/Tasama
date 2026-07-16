@@ -12,14 +12,23 @@ class FirebasePlaceRepository : PlaceRepository {
 
     override fun getPlaces(userId: String): Flow<List<Place>> {
         return firestore.collection("users").document(userId).collection("places").snapshots.map { snapshot ->
-            snapshot.documents.map { it.data() }
+            snapshot.documents.map { doc ->
+                val place: Place = doc.data()
+                place.copy(id = doc.id)
+            }
         }
     }
 
     override suspend fun addPlace(userId: String, place: Place) {
         val collection = firestore.collection("users").document(userId).collection("places")
-        // Generate a random ID if GitLive doesn't provide an easy auto-id document()
-        val id = (1..20).map { (('a'..'z') + ('A'..'Z') + ('0'..'9')).random() }.joinToString("")
+        
+        val id = if (place.id.isNotBlank()) {
+            place.id
+        } else {
+            // Generate a random ID if none exists
+            (1..20).map { (('a'..'z') + ('A'..'Z') + ('0'..'9')).random() }.joinToString("")
+        }
+
         val newPlace = place.copy(id = id, createdBy = userId)
         collection.document(id).set(newPlace)
     }

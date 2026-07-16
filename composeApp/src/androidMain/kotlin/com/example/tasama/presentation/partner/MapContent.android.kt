@@ -216,9 +216,11 @@ actual fun MapContent(
         )
     }
 
-    val distance by remember(currentMyLocation, currentPartnerLocation) {
+    val distance by remember(currentMyLocation, currentPartnerLocation, etaInfo, isRouteEnabled) {
         derivedStateOf {
-            if (currentMyLocation != null && currentPartnerLocation != null && 
+            if (isRouteEnabled && etaInfo != null) {
+                etaInfo.distanceMeters.toDouble()
+            } else if (currentMyLocation != null && currentPartnerLocation != null &&
                 currentMyLocation.latitude != 0.0 && currentPartnerLocation.latitude != 0.0) {
                 calculateDistance(currentMyLocation, currentPartnerLocation)
             } else null

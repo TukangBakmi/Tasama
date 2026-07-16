@@ -225,7 +225,7 @@ actual fun MapContent(
         }
     }
 
-    val fitPaddingPx = with(density) { 64.dp.toPx().toInt() }
+    val fitPaddingPx = with(density) { 100.dp.toPx().toInt() }
     val fitMarkers = {
         if (isMapLoaded && mapSize != IntSize.Zero) {
             isFollowModeEnabled = false
@@ -234,6 +234,11 @@ actual fun MapContent(
 
             scope.launch {
                 val update = when {
+                    isRouteEnabled && connectedRoutePoints.isNotEmpty() -> {
+                        val builder = LatLngBounds.Builder()
+                        connectedRoutePoints.forEach { builder.include(it) }
+                        CameraUpdateFactory.newLatLngBounds(builder.build(), fitPaddingPx)
+                    }
                     hasMyLoc && hasPartnerLoc -> {
                         if (currentMyLocation == currentPartnerLocation) {
                             CameraUpdateFactory.newCameraPosition(
@@ -270,16 +275,9 @@ actual fun MapContent(
         }
     }
 
-    // Auto-fit when route is enabled
-    LaunchedEffect(isRouteEnabled) {
-        if (isRouteEnabled) {
-            fitMarkers()
-        }
-    }
-
-    // Auto-fit when travel mode changes and route updates
-    LaunchedEffect(travelMode) {
-        if (isRouteEnabled) {
+    // Auto-fit when route is enabled or points change (e.g. travel mode change)
+    LaunchedEffect(isRouteEnabled, connectedRoutePoints) {
+        if (isRouteEnabled && connectedRoutePoints.isNotEmpty()) {
             fitMarkers()
         }
     }

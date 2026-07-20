@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.partner
 
 import android.graphics.Point
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -268,6 +269,10 @@ actual fun MapContent(
         }
     }
 
+    val isTogether by remember(distance) {
+        derivedStateOf { (distance ?: Double.MAX_VALUE) < 25.0 }
+    }
+
     val fitPaddingPx = with(density) { 100.dp.toPx().toInt() }
     val fitMarkers = {
         if (isMapLoaded && mapSize != IntSize.Zero) {
@@ -480,9 +485,9 @@ actual fun MapContent(
                 println("DEBUG: Map clicked at $latLng")
                 isPartnerInfoVisible = false
                 val clickedPlace = places.find { place ->
-                    val distance = calculateDistance(latLng, LatLng(place.latitude, place.longitude))
+                    val distanceValue = calculateDistance(latLng, LatLng(place.latitude, place.longitude))
                     // Increase tolerance: hit if inside the circle OR within 50 meters of center
-                    distance <= maxOf(place.radius, 50.0) 
+                    distanceValue <= maxOf(place.radius, 50.0) 
                 }
                 if (clickedPlace != null) {
                     println("DEBUG: Map click detected place: ${clickedPlace.name}")
@@ -504,6 +509,31 @@ actual fun MapContent(
                 }
             }
         ) {
+            // Combined Together Marker
+            if (isTogether && currentMyLocation != null && currentPartnerLocation != null) {
+                val midpoint = LatLng(
+                    (currentMyLocation.latitude + currentPartnerLocation.latitude) / 2,
+                    (currentMyLocation.longitude + currentPartnerLocation.longitude) / 2
+                )
+                val statusMe = rememberPartnerStatus(currentUser)
+                val statusPartner = rememberPartnerStatus(partner)
+                
+                MarkerComposable(
+                    keys = arrayOf<Any>(currentUser?.id ?: "me", partner?.id ?: "partner", isTogether),
+                    state = rememberUpdatedMarkerState(position = midpoint),
+                    anchor = Offset(0.5f, 0.5f),
+                    visible = markerData?.isMeVisible ?: true,
+                    zIndex = 2f
+                ) {
+                    CombinedUserMarker(
+                        currentUser = currentUser,
+                        partner = partner,
+                        statusMe = statusMe,
+                        statusPartner = statusPartner
+                    )
+                }
+            }
+
             currentMyLocation?.let { location ->
                 val markerState = rememberUpdatedMarkerState(position = location)
                 val status = rememberPartnerStatus(currentUser)
@@ -514,11 +544,12 @@ actual fun MapContent(
                         currentUser?.batteryLevel ?: 0f,
                         currentUser?.isCharging ?: false,
                         currentUser?.connectionType ?: "",
-                        status
+                        status,
+                        isTogether
                     ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
-                    visible = markerData?.isMeVisible ?: true
+                    visible = (markerData?.isMeVisible ?: true) && !isTogether
                 ) {
                     UserMarker(user = currentUser, isMe = true, status = status)
                 }
@@ -535,11 +566,12 @@ actual fun MapContent(
                         partner?.isCharging ?: false,
                         partner?.connectionType ?: "",
                         partner?.speed ?: 0f,
-                        status
+                        status,
+                        isTogether
                     ),
                     state = markerState,
                     anchor = Offset(0.5f, 0.5f),
-                    visible = markerData?.isPartnerVisible ?: true,
+                    visible = (markerData?.isPartnerVisible ?: true) && !isTogether,
                     onClick = {
                         isPartnerInfoVisible = !isPartnerInfoVisible
                         scope.launch {
@@ -1555,6 +1587,141 @@ fun UserMarker(
                     .align(Alignment.TopCenter)
                     .offset(y = 48.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun CombinedUserMarker(
+    currentUser: User?,
+    partner: User?,
+    statusMe: ConnectionStatus,
+    statusPartner: ConnectionStatus
+) {
+    Box(
+        modifier = Modifier
+            .width(100.dp)
+            .height(110.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Background Glow/Circle
+        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 0.9f,
+            targetValue = 1.1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulseScale"
+        )
+
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Heart icons above
+            Row(
+                modifier = Modifier.offset(y = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy((-4).dp)
+            ) {
+                Icon(Icons.Default.Favorite, null, modifier = Modifier.size(12.dp), tint = Color(0xFFFF4081))
+                Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp).offset(y = (-4).dp), tint = Color(0xFFFF4081))
+                Icon(Icons.Default.Favorite, null, modifier = Modifier.size(12.dp), tint = Color(0xFFFF4081))
+            }
+
+            // Avatars Bubble
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 4.dp,
+                shadowElevation = 6.dp,
+                border = BorderStroke(2.dp, Color(0xFFFF4081).copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy((-8).dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                            .clip(CircleShape)
+                    ) {
+                        UserAvatar(
+                            user = currentUser,
+                            modifier = Modifier.fillMaxSize(),
+                            showInitials = currentUser?.avatarUrl == null
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                            .clip(CircleShape)
+                    ) {
+                        UserAvatar(
+                            user = partner,
+                            modifier = Modifier.fillMaxSize(),
+                            showInitials = partner?.avatarUrl == null
+                        )
+                    }
+                }
+            }
+
+            // Small triangle pointing down
+            val surfaceColor = MaterialTheme.colorScheme.surface
+            Box(
+                modifier = Modifier
+                    .width(16.dp)
+                    .height(8.dp)
+                    .offset(y = (-1).dp)
+            ) {
+                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                    val path = Path().apply {
+                        moveTo(0f, 0f)
+                        lineTo(size.width, 0f)
+                        lineTo(size.width / 2, size.height)
+                        close()
+                    }
+                    drawPath(
+                        path = path,
+                        color = surfaceColor
+                    )
+                }
+            }
+            
+            // Location Name (Optional, similar to reference)
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 2.dp,
+                modifier = Modifier.offset(y = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(10.dp), tint = Color(0xFFFF4081))
+                    Text(
+                        text = "Together",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

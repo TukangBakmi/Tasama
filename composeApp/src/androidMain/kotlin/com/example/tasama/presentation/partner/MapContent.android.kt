@@ -67,6 +67,49 @@ import kotlin.math.*
 import com.example.tasama.R
 import kotlin.time.Clock
 
+val MapHeaderHeight = 88.dp
+val MapFabsHeight = 192.dp
+val MapFabsWidth = 56.dp
+
+/**
+ * Function to apply avoidance logic to a screen point (e.g. for an off-screen marker).
+ * Returns the final (x, y) coordinates clamped to edges and avoiding UI elements.
+ */
+fun applyUIAvoidance(
+    point: Offset,
+    width: Float,
+    height: Float,
+    avoidanceMarginPx: Float,
+    indicatorRadiusPx: Float,
+    headerHeightPx: Float,
+    fabsWidthPx: Float,
+    fabsHeightPx: Float
+): Offset {
+    var finalX = point.x
+    var finalY = point.y
+
+    // 1. Avoid Header (Full-width top area)
+    if (finalY < headerHeightPx + indicatorRadiusPx + avoidanceMarginPx) {
+        finalY = headerHeightPx + indicatorRadiusPx + avoidanceMarginPx
+    }
+
+    // 2. Avoid FABs (Bottom Right)
+    if (finalY > height - fabsHeightPx - indicatorRadiusPx - avoidanceMarginPx && 
+        finalX > width - fabsWidthPx - indicatorRadiusPx - avoidanceMarginPx) {
+        if (width - finalX < height - finalY) {
+            finalX = width - fabsWidthPx - indicatorRadiusPx - avoidanceMarginPx
+        } else {
+            finalY = height - fabsHeightPx - indicatorRadiusPx - avoidanceMarginPx
+        }
+    }
+
+    // 3. Final Screen Clamping
+    finalX = finalX.coerceIn(indicatorRadiusPx + avoidanceMarginPx, width - indicatorRadiusPx - avoidanceMarginPx)
+    finalY = finalY.coerceIn(indicatorRadiusPx + avoidanceMarginPx, height - indicatorRadiusPx - avoidanceMarginPx)
+
+    return Offset(finalX, finalY)
+}
+
 @Composable
 fun animateLatLngAsState(
     targetValue: LatLng,
@@ -128,8 +171,6 @@ actual fun MapContent(
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
-    val marginPx = with(density) { 8.dp.toPx() }
-    val radiusPx = indicatorSizePx / 2
 
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
@@ -318,21 +359,37 @@ actual fun MapContent(
             val pMe = if (currentMyLocation != null) projection.toScreenLocation(currentMyLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
             val pPartner = if (currentPartnerLocation != null) projection.toScreenLocation(currentPartnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
 
+            val headerHeightPx = with(density) { MapHeaderHeight.toPx() }
+            val fabsWidthPx = with(density) { MapFabsWidth.toPx() }
+            val fabsHeightPx = with(density) { MapFabsHeight.toPx() }
+            val indicatorRadius = with(density) { 28.dp.toPx() } // half of 56.dp
+            val edgeMargin = with(density) { 8.dp.toPx() }
+
             // Buffer to determine visibility and avoid edge flickering
             val buffer = 5f
 
-            // Check visibility using screen coordinates AND visible region (crucial for tilted maps)
-            val isMeVisible = currentMyLocation?.let {
-                pMe.x in buffer..width - buffer &&
-                        pMe.y in buffer..height - buffer &&
-                        projection.visibleRegion.latLngBounds.contains(it)
-            } ?: true
+            // Check visibility using screen coordinates AND visible region AND avoidance areas
+            fun isPointOffScreen(p: Offset, latLng: LatLng?): Boolean {
+                if (latLng == null) return false
+                
+                // 1. Physical Screen Bounds
+                if (p.x < buffer || p.x > width - buffer || p.y < buffer || p.y > height - buffer) return true
+                
+                // 2. Map Visibility Region (tilted maps)
+                if (!projection.visibleRegion.latLngBounds.contains(latLng)) return true
+                
+                // 3. UI Avoidance Logic - Header (Full-width top area)
+                if (p.y < headerHeightPx + indicatorRadius + edgeMargin) return true
+                
+                // 4. UI Avoidance Logic - FABs (Bottom Right)
+                if (p.y > height - fabsHeightPx - indicatorRadius - edgeMargin && 
+                    p.x > width - fabsWidthPx - indicatorRadius - edgeMargin) return true
+                    
+                return false
+            }
 
-            val isPartnerVisible = currentPartnerLocation?.let {
-                pPartner.x in buffer..width - buffer &&
-                        pPartner.y in buffer..height - buffer &&
-                        projection.visibleRegion.latLngBounds.contains(it)
-            } ?: true
+            val isMeVisible = !isPointOffScreen(pMe, currentMyLocation)
+            val isPartnerVisible = !isPointOffScreen(pPartner, currentPartnerLocation)
 
             var myEdge: Offset? = null
             var partnerEdge: Offset? = null
@@ -347,45 +404,55 @@ actual fun MapContent(
                     val (clippedMe, clippedPartner) = intersections
 
                     if (!isMeVisible) {
-                        myEdge = clippedMe
-                        // Calculate marker center (clamped to stay fully on screen)
-                        val finalX = clippedMe.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
-                        val finalY = clippedMe.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-                        polyStart = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                        val finalPos = applyUIAvoidance(clippedMe, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        myEdge = finalPos
+                        polyStart = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                     if (!isPartnerVisible) {
-                        partnerEdge = clippedPartner
-                        // Calculate marker center (clamped to stay fully on screen)
-                        val finalX = clippedPartner.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
-                        val finalY = clippedPartner.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-                        polyEnd = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                        val finalPos = applyUIAvoidance(clippedPartner, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        partnerEdge = finalPos
+                        polyEnd = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                 } else {
                     // Segment doesn't cross the screen. Place indicators using rays from center.
                     val center = Offset(width / 2, height / 2)
                     if (!isMeVisible) {
-                        myEdge = findRayIntersection(center, pMe, width, height)
-                        val finalX = myEdge.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
-                        val finalY = myEdge.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-                        polyStart = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                        val edge = findRayIntersection(center, pMe, width, height)
+                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        myEdge = finalPos
+                        polyStart = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                     if (!isPartnerVisible) {
-                        partnerEdge = findRayIntersection(center, pPartner, width, height)
-                        val finalX = partnerEdge.x.coerceIn(radiusPx + marginPx, width - radiusPx - marginPx)
-                        val finalY = partnerEdge.y.coerceIn(radiusPx + marginPx, height - radiusPx - marginPx)
-                        polyEnd = projection.fromScreenLocation(Point(finalX.toInt(), finalY.toInt()))
+                        val edge = findRayIntersection(center, pPartner, width, height)
+                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        partnerEdge = finalPos
+                        polyEnd = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                 }
             } else if (!showPolyline) {
                 // Handle single marker off-screen indicators
                 val center = Offset(width / 2, height / 2)
                 if (currentMyLocation != null && !isMeVisible) {
-                    myEdge = findRayIntersection(center, pMe, width, height)
+                    val edge = findRayIntersection(center, pMe, width, height)
+                    myEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
                 }
                 if (currentPartnerLocation != null && !isPartnerVisible) {
-                    partnerEdge = findRayIntersection(center, pPartner, width, height)
+                    val edge = findRayIntersection(center, pPartner, width, height)
+                    partnerEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
                 }
             }
+
+            val myAngle = if (myEdge != null) {
+                val dx = pMe.x - myEdge.x
+                val dy = pMe.y - myEdge.y
+                (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
+            } else 0f
+
+            val partnerAngle = if (partnerEdge != null) {
+                val dx = pPartner.x - partnerEdge.x
+                val dy = pPartner.y - partnerEdge.y
+                (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
+            } else 0f
 
             MarkerVisibilityData(
                 isMeVisible = isMeVisible,
@@ -394,6 +461,8 @@ actual fun MapContent(
                 partnerEffectiveLocation = polyEnd ?: LatLng(0.0, 0.0),
                 myEdgePoint = myEdge,
                 partnerEdgePoint = partnerEdge,
+                myAngle = myAngle,
+                partnerAngle = partnerAngle,
                 showPolyline = showPolyline,
                 partnerScreenPos = pPartner
             )
@@ -682,25 +751,23 @@ actual fun MapContent(
 
         // Off-screen markers
         markerData?.let { data ->
-            val isPartnerOffScreen = !data.isPartnerVisible && data.partnerEdgePoint != null && partnerLocation != null
-            val isMeOffScreen = !data.isMeVisible && data.myEdgePoint != null && myLocation != null
+            val isPartnerOffScreen = !data.isPartnerVisible && data.partnerEdgePoint != null && currentPartnerLocation != null
+            val isMeOffScreen = !data.isMeVisible && data.myEdgePoint != null && currentMyLocation != null
 
             AnimatedVisibility(
                 visible = isPartnerOffScreen,
                 enter = fadeIn() + scaleIn(initialScale = 0.8f),
                 exit = fadeOut() + scaleOut(targetScale = 0.8f)
             ) {
-                if (partnerLocation != null && data.partnerEdgePoint != null) {
+                if (currentPartnerLocation != null && data.partnerEdgePoint != null) {
                     OffScreenMarker(
-                        targetLocation = partnerLocation,
                         edgePoint = data.partnerEdgePoint,
+                        angle = data.partnerAngle,
                         user = partner,
-                        cameraPositionState = cameraPositionState,
-                        mapSize = mapSize,
                         showArrow = true,
                         onTap = {
                             scope.launch {
-                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(partnerLocation))
+                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(currentPartnerLocation))
                             }
                         }
                     )
@@ -712,17 +779,15 @@ actual fun MapContent(
                 enter = fadeIn() + scaleIn(initialScale = 0.8f),
                 exit = fadeOut() + scaleOut(targetScale = 0.8f)
             ) {
-                if (myLocation != null && data.myEdgePoint != null) {
+                if (currentMyLocation != null && data.myEdgePoint != null) {
                     OffScreenMarker(
-                        targetLocation = myLocation,
                         edgePoint = data.myEdgePoint,
+                        angle = data.myAngle,
                         user = currentUser,
-                        cameraPositionState = cameraPositionState,
-                        mapSize = mapSize,
                         showArrow = true,
                         onTap = {
                             scope.launch {
-                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
+                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(currentMyLocation))
                             }
                         }
                     )
@@ -1194,74 +1259,19 @@ fun TravelModeButton(
 
 @Composable
 fun OffScreenMarker(
-    targetLocation: LatLng,
-    edgePoint: Offset,
+    edgePoint: Offset, // Expected to be already avoided
+    angle: Float,
     user: User?,
-    cameraPositionState: CameraPositionState,
-    mapSize: IntSize,
     showArrow: Boolean = true,
     onTap: () -> Unit
 ) {
     val indicatorSize = 56.dp
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { indicatorSize.toPx() }
-
-    val width = mapSize.width.toFloat()
-    val height = mapSize.height.toFloat()
-
-    // Position clamped to edges to stay fully visible
     val half = indicatorSizePx / 2f
-    val marginPx = with(density) { 8.dp.toPx() }
 
-    var finalX = edgePoint.x.coerceIn(half + marginPx, width - half - marginPx)
-    var finalY = edgePoint.y.coerceIn(half + marginPx, height - half - marginPx)
-
-    // Avoidance logic for floating UI elements (header, buttons)
-    val headerHeight = with(density) { 88.dp.toPx() }
-    val fabsWidth = with(density) { 56.dp.toPx() }
-    val fabsHeight = with(density) { 192.dp.toPx() }
-
-    // 1. Avoid Header (Full-width top area)
-    if (finalY < headerHeight + half + marginPx) {
-        finalY = headerHeight + half + marginPx
-    }
-
-    // 2. Avoid FABs (Bottom Right)
-    if (finalY > height - fabsHeight - half - marginPx && finalX > width - fabsWidth - half - marginPx) {
-        if (width - finalX < height - finalY) {
-            finalX = width - fabsWidth - half - marginPx
-        } else {
-            finalY = height - fabsHeight - half - marginPx
-        }
-    }
-
-    // Smooth movement animations
-    val animatedX by animateFloatAsState(
-        targetValue = finalX,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
-        label = "markerX"
-    )
-    val animatedY by animateFloatAsState(
-        targetValue = finalY,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
-        label = "markerY"
-    )
-
-    val projection = cameraPositionState.projection
-    val targetAngle = remember(projection, targetLocation, animatedX, animatedY) {
-        val targetScreenPos = projection?.toScreenLocation(targetLocation)
-        if (targetScreenPos != null) {
-            val dx = targetScreenPos.x - animatedX
-            val dy = targetScreenPos.y - animatedY
-            (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
-        } else 0f
-    }
-
-    val animatedAngle by animateFloatAsState(
-        targetValue = targetAngle,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "markerAngle"
-    )
+    val finalX = edgePoint.x
+    val finalY = edgePoint.y
 
     // Breathing effect
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -1285,8 +1295,8 @@ fun OffScreenMarker(
         modifier = Modifier
             .offset {
                 IntOffset(
-                    (animatedX - half).toInt(),
-                    (animatedY - half).toInt()
+                    (finalX - half).toInt(),
+                    (finalY - half).toInt()
                 )
             }
             .size(indicatorSize)
@@ -1318,7 +1328,7 @@ fun OffScreenMarker(
                         close()
                     }
                     val matrix = android.graphics.Matrix()
-                    matrix.postRotate(animatedAngle, center.x, center.y)
+                    matrix.postRotate(angle, center.x, center.y)
                     pointerPath.transform(matrix)
                     addPath(pointerPath)
                 }
@@ -1358,6 +1368,8 @@ data class MarkerVisibilityData(
     val partnerEffectiveLocation: LatLng,
     val myEdgePoint: Offset?,
     val partnerEdgePoint: Offset?,
+    val myAngle: Float,
+    val partnerAngle: Float,
     val showPolyline: Boolean,
     val partnerScreenPos: Offset?
 )

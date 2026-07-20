@@ -56,12 +56,16 @@ class GeofenceMonitor(
             if (isInside && !wasInside) {
                 // Entered
                 currentState[place.id] = true
-                onTransition(user, place, true)
+                if (place.notifyOnEntry) {
+                    onTransition(user, place, true)
+                }
             } else if (!isInside && wasInside) {
                 // Left with jitter protection
                 if (distance > place.radius + 50) { // 50m buffer
                     currentState[place.id] = false
-                    onTransition(user, place, false)
+                    if (place.notifyOnExit) {
+                        onTransition(user, place, false)
+                    }
                 }
             }
         }

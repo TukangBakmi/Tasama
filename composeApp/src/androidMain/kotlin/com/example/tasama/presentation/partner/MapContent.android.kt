@@ -682,35 +682,51 @@ actual fun MapContent(
 
         // Off-screen markers
         markerData?.let { data ->
-            if (!data.isPartnerVisible && data.partnerEdgePoint != null && partnerLocation != null) {
-                OffScreenMarker(
-                    targetLocation = partnerLocation,
-                    edgePoint = data.partnerEdgePoint,
-                    user = partner,
-                    cameraPositionState = cameraPositionState,
-                    mapSize = mapSize,
-                    showArrow = true,
-                    onTap = {
-                        scope.launch {
-                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(partnerLocation))
+            val isPartnerOffScreen = !data.isPartnerVisible && data.partnerEdgePoint != null && partnerLocation != null
+            val isMeOffScreen = !data.isMeVisible && data.myEdgePoint != null && myLocation != null
+
+            AnimatedVisibility(
+                visible = isPartnerOffScreen,
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.8f)
+            ) {
+                if (partnerLocation != null && data.partnerEdgePoint != null) {
+                    OffScreenMarker(
+                        targetLocation = partnerLocation,
+                        edgePoint = data.partnerEdgePoint,
+                        user = partner,
+                        cameraPositionState = cameraPositionState,
+                        mapSize = mapSize,
+                        showArrow = true,
+                        onTap = {
+                            scope.launch {
+                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(partnerLocation))
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
-            if (!data.isMeVisible && data.myEdgePoint != null && myLocation != null) {
-                OffScreenMarker(
-                    targetLocation = myLocation,
-                    edgePoint = data.myEdgePoint,
-                    user = currentUser,
-                    cameraPositionState = cameraPositionState,
-                    mapSize = mapSize,
-                    showArrow = true,
-                    onTap = {
-                        scope.launch {
-                            cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
+
+            AnimatedVisibility(
+                visible = isMeOffScreen,
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.8f)
+            ) {
+                if (myLocation != null && data.myEdgePoint != null) {
+                    OffScreenMarker(
+                        targetLocation = myLocation,
+                        edgePoint = data.myEdgePoint,
+                        user = currentUser,
+                        cameraPositionState = cameraPositionState,
+                        mapSize = mapSize,
+                        showArrow = true,
+                        onTap = {
+                            scope.launch {
+                                cameraPositionState.animate(CameraUpdateFactory.newLatLng(myLocation))
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -1197,18 +1213,67 @@ fun OffScreenMarker(
     val half = indicatorSizePx / 2f
     val marginPx = with(density) { 8.dp.toPx() }
 
-    val finalX = edgePoint.x.coerceIn(half + marginPx, width - half - marginPx)
-    val finalY = edgePoint.y.coerceIn(half + marginPx, height - half - marginPx)
+    var finalX = edgePoint.x.coerceIn(half + marginPx, width - half - marginPx)
+    var finalY = edgePoint.y.coerceIn(half + marginPx, height - half - marginPx)
+
+    // Avoidance logic for floating UI elements (header, buttons)
+    val headerHeight = with(density) { 88.dp.toPx() }
+    val fabsWidth = with(density) { 56.dp.toPx() }
+    val fabsHeight = with(density) { 192.dp.toPx() }
+
+    // 1. Avoid Header (Full-width top area)
+    if (finalY < headerHeight + half + marginPx) {
+        finalY = headerHeight + half + marginPx
+    }
+
+    // 2. Avoid FABs (Bottom Right)
+    if (finalY > height - fabsHeight - half - marginPx && finalX > width - fabsWidth - half - marginPx) {
+        if (width - finalX < height - finalY) {
+            finalX = width - fabsWidth - half - marginPx
+        } else {
+            finalY = height - fabsHeight - half - marginPx
+        }
+    }
+
+    // Smooth movement animations
+    val animatedX by animateFloatAsState(
+        targetValue = finalX,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "markerX"
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = finalY,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "markerY"
+    )
 
     val projection = cameraPositionState.projection
-    val angle = remember(projection, targetLocation, finalX, finalY) {
+    val targetAngle = remember(projection, targetLocation, animatedX, animatedY) {
         val targetScreenPos = projection?.toScreenLocation(targetLocation)
         if (targetScreenPos != null) {
-            val dx = targetScreenPos.x - finalX
-            val dy = targetScreenPos.y - finalY
+            val dx = targetScreenPos.x - animatedX
+            val dy = targetScreenPos.y - animatedY
             (atan2(dy.toDouble(), dx.toDouble()) * 180 / PI).toFloat()
         } else 0f
     }
+
+    val animatedAngle by animateFloatAsState(
+        targetValue = targetAngle,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "markerAngle"
+    )
+
+    // Breathing effect
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
 
     val isDarkTheme = LocalIsDarkTheme.current
     val bubbleColor = MaterialTheme.colorScheme.surfaceVariant
@@ -1220,12 +1285,20 @@ fun OffScreenMarker(
         modifier = Modifier
             .offset {
                 IntOffset(
-                    (finalX - half).toInt(),
-                    (finalY - half).toInt()
+                    (animatedX - half).toInt(),
+                    (animatedY - half).toInt()
                 )
             }
             .size(indicatorSize)
-            .clickable(onClick = onTap),
+            .graphicsLayer {
+                scaleX = pulseScale
+                scaleY = pulseScale
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTap
+            ),
         contentAlignment = Alignment.Center
     ) {
         // The "Bubble" Shape (Theme-aware Background with Pointer)
@@ -1245,7 +1318,7 @@ fun OffScreenMarker(
                         close()
                     }
                     val matrix = android.graphics.Matrix()
-                    matrix.postRotate(angle, center.x, center.y)
+                    matrix.postRotate(animatedAngle, center.x, center.y)
                     pointerPath.transform(matrix)
                     addPath(pointerPath)
                 }

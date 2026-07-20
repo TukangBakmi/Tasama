@@ -47,8 +47,10 @@ class LocationService : Service() {
     private var isServiceStarted = false
 
     private val contentIntent by lazy {
-        val intent = Intent(this, MainActivity::class.java)
-        PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra("navigate_to", "partner")
+        }
+        PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     companion object {

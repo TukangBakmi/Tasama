@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.TravelMode
@@ -58,15 +59,22 @@ import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.*
 import android.location.Geocoder
+import android.util.LruCache
 import java.util.Locale
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.*
 import com.example.tasama.R
 import kotlin.time.Clock
+import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.core.PickerType
+import io.github.vinceglb.filekit.core.PlatformFile
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 val MapHeaderHeight = 88.dp
 val MapFabsHeight = 192.dp
@@ -156,6 +164,7 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
+    stories: List<Story>,
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
@@ -167,6 +176,9 @@ actual fun MapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
+    onAddStory: (Story, List<ByteArray>) -> Unit,
+    onDeleteStory: (Story) -> Unit,
+    onUpdateStory: (Story) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
@@ -174,9 +186,12 @@ actual fun MapContent(
     val indicatorSizePx = with(density) { 56.dp.toPx() }
 
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
+    var showDeleteStoryDialog by remember { mutableStateOf<Story?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
+    var showAddStorySheet by remember { mutableStateOf<LatLng?>(null) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
+    var editingStory by remember { mutableStateOf<Story?>(null) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
@@ -186,6 +201,15 @@ actual fun MapContent(
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
     val followZoom = 16.5f
+
+    // Shared ticker for status updates (Optimization 1)
+    var currentTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000)
+            currentTime = Clock.System.now().toEpochMilliseconds()
+        }
+    }
 
     val isDarkTheme = LocalIsDarkTheme.current
     val context = LocalContext.current
@@ -222,20 +246,29 @@ actual fun MapContent(
     val currentPartnerLocation = if (partnerLocation != null) animatedPartnerLocation else null
 
     // Navigation Route Logic
-    val routePoints = remember(etaInfo?.encodedPolyline) {
-        etaInfo?.encodedPolyline?.let { decodePolyline(it) } ?: emptyList()
-    }
-
-    // Connect the route points to the animated avatar positions for a seamless look
-    val connectedRoutePoints = remember(routePoints, currentMyLocation, currentPartnerLocation) {
-        if (routePoints.isEmpty() || currentMyLocation == null || currentPartnerLocation == null) {
-            routePoints
+    var decodedPoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+    LaunchedEffect(etaInfo?.encodedPolyline) {
+        val encoded = etaInfo?.encodedPolyline
+        if (encoded != null) {
+            decodedPoints = withContext(Dispatchers.Default) {
+                decodePolyline(encoded)
+            }
         } else {
-            val list = routePoints.toMutableList()
-            // The Directions API request is always Partner -> Me
-            list[0] = currentPartnerLocation
-            list[list.lastIndex] = currentMyLocation
-            list
+            decodedPoints = emptyList()
+        }
+    }
+    val routePoints = decodedPoints
+
+    // Connect the route points to the animated avatar positions for a seamless look (Optimization 5)
+    val connectedRoutePoints = remember(routePoints) {
+        routePoints.toMutableList()
+    }
+    
+    // Update endpoints in-place without reallocating the whole list
+    SideEffect {
+        if (connectedRoutePoints.isNotEmpty() && currentMyLocation != null && currentPartnerLocation != null) {
+            connectedRoutePoints[0] = currentPartnerLocation
+            connectedRoutePoints[connectedRoutePoints.lastIndex] = currentMyLocation
         }
     }
 
@@ -244,6 +277,16 @@ actual fun MapContent(
         animationSpec = tween(600),
         label = "routeAlpha"
     )
+
+    // Cache midpoint for performance (Optimization 2)
+    var routeMidpoint by remember { mutableStateOf<LatLng?>(null) }
+    LaunchedEffect(connectedRoutePoints) {
+        if (connectedRoutePoints.isNotEmpty()) {
+            routeMidpoint = withContext(Dispatchers.Default) {
+                getPolylineMidpoint(connectedRoutePoints)
+            }
+        }
+    }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(partnerLocation ?: LatLng(-6.2000, 106.8166), 12f)
@@ -346,12 +389,9 @@ actual fun MapContent(
         }
     }
 
-    // Derived states for real-time intersection and visibility
-    val markerData by remember(currentMyLocation, currentPartnerLocation, mapSize, cameraPositionState, density) {
+    // Derived states for real-time intersection and visibility (Optimization 3)
+    val markerData by remember(currentMyLocation, currentPartnerLocation, mapSize, cameraPositionState.isMoving, density) {
         derivedStateOf {
-            // Read state to trigger recomposition during camera movement
-            cameraPositionState.position
-            cameraPositionState.isMoving
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
             if (mapSize == IntSize.Zero || (currentMyLocation == null && currentPartnerLocation == null)) {
@@ -373,15 +413,12 @@ actual fun MapContent(
             // Buffer to determine visibility and avoid edge flickering
             val buffer = 5f
 
-            // Check visibility using screen coordinates AND visible region AND avoidance areas
+            // Check visibility using screen coordinates AND avoidance areas
             fun isPointOffScreen(p: Offset, latLng: LatLng?): Boolean {
                 if (latLng == null) return false
                 
                 // 1. Physical Screen Bounds
                 if (p.x < buffer || p.x > width - buffer || p.y < buffer || p.y > height - buffer) return true
-                
-                // 2. Map Visibility Region (tilted maps)
-                if (!projection.visibleRegion.latLngBounds.contains(latLng)) return true
                 
                 // 3. UI Avoidance Logic - Header (Full-width top area)
                 if (p.y < headerHeightPx + indicatorRadius + edgeMargin) return true
@@ -484,20 +521,37 @@ actual fun MapContent(
             onMapClick = { latLng ->
                 println("DEBUG: Map clicked at $latLng")
                 isPartnerInfoVisible = false
-                val clickedPlace = places.find { place ->
-                    val distanceValue = calculateDistance(latLng, LatLng(place.latitude, place.longitude))
-                    // Increase tolerance: hit if inside the circle OR within 50 meters of center
-                    distanceValue <= maxOf(place.radius, 50.0) 
+                
+                val clickedStory = stories.find { story ->
+                    calculateDistance(latLng, LatLng(story.latitude, story.longitude)) <= 50.0
                 }
-                if (clickedPlace != null) {
-                    println("DEBUG: Map click detected place: ${clickedPlace.name}")
-                    editingPlace = clickedPlace
-                    showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
+                
+                if (clickedStory != null) {
+                    editingStory = clickedStory
+                    showAddStorySheet = LatLng(clickedStory.latitude, clickedStory.longitude)
+                } else {
+                    val clickedPlace = places.find { place ->
+                        val distanceValue = calculateDistance(latLng, LatLng(place.latitude, place.longitude))
+                        distanceValue <= maxOf(place.radius, 50.0) 
+                    }
+                    if (clickedPlace != null) {
+                        println("DEBUG: Map click detected place: ${clickedPlace.name}")
+                        editingPlace = clickedPlace
+                        showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
+                    }
                 }
             },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
+                val existingStory = stories.find { story ->
+                    calculateDistance(latLng, LatLng(story.latitude, story.longitude)) <= 50.0
+                }
+                if (existingStory != null) {
+                    showDeleteStoryDialog = existingStory
+                    return@GoogleMap
+                }
+
                 val existingPlace = places.find { place ->
                     calculateDistance(latLng, LatLng(place.latitude, place.longitude)) <= place.radius
                 }
@@ -505,7 +559,10 @@ actual fun MapContent(
                     showDeletePlaceDialog = existingPlace
                 } else {
                     editingPlace = null
-                    showAddPlaceSheet = latLng
+                    editingStory = null
+                    // Default to showing a selection dialog or the story sheet?
+                    // Let's modify the flow to show a selection sheet.
+                    showAddStorySheet = latLng
                 }
             }
         ) {
@@ -515,8 +572,8 @@ actual fun MapContent(
                     (currentMyLocation.latitude + currentPartnerLocation.latitude) / 2,
                     (currentMyLocation.longitude + currentPartnerLocation.longitude) / 2
                 )
-                val statusMe = rememberPartnerStatus(currentUser)
-                val statusPartner = rememberPartnerStatus(partner)
+                val statusMe = rememberPartnerStatus(currentUser, currentTime)
+                val statusPartner = rememberPartnerStatus(partner, currentTime)
                 
                 MarkerComposable(
                     keys = arrayOf<Any>(currentUser?.id ?: "me", partner?.id ?: "partner", isTogether),
@@ -536,7 +593,7 @@ actual fun MapContent(
 
             currentMyLocation?.let { location ->
                 val markerState = rememberUpdatedMarkerState(position = location)
-                val status = rememberPartnerStatus(currentUser)
+                val status = rememberPartnerStatus(currentUser, currentTime)
                 MarkerComposable(
                     keys = arrayOf<Any>(
                         currentUser?.avatarUrl ?: "",
@@ -556,7 +613,7 @@ actual fun MapContent(
             }
 
             currentPartnerLocation?.let { location ->
-                val status = rememberPartnerStatus(partner)
+                val status = rememberPartnerStatus(partner, currentTime)
                 val markerState = rememberUpdatedMarkerState(position = location)
                 MarkerComposable(
                     keys = arrayOf<Any>(
@@ -640,6 +697,24 @@ actual fun MapContent(
                 }
             }
 
+            stories.forEach { story ->
+                val storyLatLng = LatLng(story.latitude, story.longitude)
+                val markerState = rememberUpdatedMarkerState(position = storyLatLng)
+                MarkerComposable(
+                    keys = arrayOf<Any>(story.id, story.title, story.latitude, story.longitude, story.photoUrls.firstOrNull() ?: ""),
+                    state = markerState,
+                    anchor = Offset(0.5f, 0.5f),
+                    title = story.title,
+                    onClick = {
+                        editingStory = story
+                        showAddStorySheet = storyLatLng
+                        true
+                    }
+                ) {
+                    StoryMarker(story = story)
+                }
+            }
+
             markerData?.let { data ->
                 if (data.showPolyline) {
                     // 1. Dynamic Route (Google Directions) - Only visible when partner info is shown
@@ -679,12 +754,9 @@ actual fun MapContent(
                         )
                     }
 
-                    // Distance label - follows the route if visible, otherwise midpoint
-                    val labelPosition = if (routeAlpha.value > 0.5f && connectedRoutePoints.isNotEmpty()) {
-                        getPolylineMidpoint(connectedRoutePoints) ?: LatLng(
-                            (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
-                            (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
-                        )
+                    // Distance label - follows the route if visible, otherwise midpoint (Optimization 2)
+                    val labelPosition = if (routeAlpha.value > 0.5f && routeMidpoint != null) {
+                        routeMidpoint!!
                     } else {
                         LatLng(
                             (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
@@ -776,6 +848,46 @@ actual fun MapContent(
                     onCancel = { 
                         showAddPlaceSheet = null
                         editingPlace = null
+                    }
+                )
+            }
+        }
+
+        if (showAddStorySheet != null) {
+            ModalBottomSheet(
+                onDismissRequest = { 
+                    showAddStorySheet = null
+                    editingStory = null
+                },
+                sheetState = bottomSheetState
+            ) {
+                AddStorySheetContent(
+                    location = showAddStorySheet!!,
+                    initialStory = editingStory,
+                    onAddStory = { story, bytes ->
+                        onAddStory(story, bytes)
+                        showAddStorySheet = null
+                        editingStory = null
+                    },
+                    onUpdateStory = { story ->
+                        onUpdateStory(story)
+                        showAddStorySheet = null
+                        editingStory = null
+                    },
+                    onCancel = { 
+                        showAddStorySheet = null
+                        editingStory = null
+                    },
+                    onCreatePlace = { loc, prefillName, prefillAddr ->
+                        showAddStorySheet = null
+                        editingStory = null
+                        editingPlace = Place(
+                            name = prefillName,
+                            address = prefillAddr,
+                            latitude = loc.latitude,
+                            longitude = loc.longitude
+                        )
+                        showAddPlaceSheet = loc
                     }
                 )
             }
@@ -877,6 +989,8 @@ actual fun MapContent(
                 ) {
                     PartnerStatusCard(
                         user = partner,
+                        status = rememberPartnerStatus(partner, currentTime),
+                        currentTime = currentTime,
                         etaInfo = etaInfo,
                         isPartnerComingToMe = isPartnerComingToMe,
                         isEtaLoading = isEtaLoading,
@@ -891,6 +1005,7 @@ actual fun MapContent(
                 .align(Alignment.TopCenter)
                 .padding(top = 14.dp),
             anniversaryDate = anniversaryDate,
+            currentTime = currentTime,
             onEditAnniversary = onEditAnniversary
         )
 
@@ -1012,6 +1127,30 @@ actual fun MapContent(
                 }
             )
         }
+
+        if (showDeleteStoryDialog != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteStoryDialog = null },
+                title = { Text("Delete Story") },
+                text = { Text("Are you sure you want to delete \"${showDeleteStoryDialog?.title}\"? This memory will be removed for both you and your partner.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteStoryDialog?.let { onDeleteStory(it) }
+                            showDeleteStoryDialog = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteStoryDialog = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -1056,6 +1195,8 @@ fun AddPlaceSheetContent(
 
     LaunchedEffect(location, initialPlace) {
         if (initialPlace != null) return@LaunchedEffect
+        
+        delay(500) // Debounce rapid location changes during interaction (Optimization 4)
         
         withContext(Dispatchers.IO) {
             try {
@@ -1411,17 +1552,8 @@ enum class ConnectionStatus {
 }
 
 @Composable
-fun rememberPartnerStatus(user: User?): ConnectionStatus {
+fun rememberPartnerStatus(user: User?, now: Long): ConnectionStatus {
     if (user == null) return ConnectionStatus.OFFLINE
-    
-    var now by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
-    
-    LaunchedEffect(user.lastLocationUpdate) {
-        while (true) {
-            now = Clock.System.now().toEpochMilliseconds()
-            delay(5000)
-        }
-    }
     
     return remember(user.lastLocationUpdate, user.accuracy, now) {
         val lastUpdate = user.lastLocationUpdate ?: 0L
@@ -1460,9 +1592,8 @@ fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifie
     }
 }
 
-fun formatLastUpdated(lastUpdate: Long?): String {
+fun formatLastUpdated(lastUpdate: Long?, now: Long): String {
     if (lastUpdate == null) return "never"
-    val now = Clock.System.now().toEpochMilliseconds()
     val diffSec = (now - lastUpdate) / 1000
     return when {
         diffSec < 60 -> "just now"
@@ -1727,14 +1858,325 @@ fun CombinedUserMarker(
 }
 
 @Composable
+fun StoryMarker(story: Story) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(Color.White, CircleShape)
+            .border(2.dp, Color(0xFFFF4081), CircleShape)
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (story.photoUrls.isNotEmpty()) {
+            coil3.compose.AsyncImage(
+                model = story.photoUrls.first(),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = Color(0xFFFF4081),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        
+        // Date badge
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 4.dp, y = 4.dp)
+                .background(Color(0xFFFF4081), CircleShape)
+                .border(1.dp, Color.White, CircleShape)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            val dateStr = remember(story.date) {
+                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(story.date)
+                val dateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+                "${dateTime.dayOfMonth}/${dateTime.monthNumber}"
+            }
+            Text(
+                text = dateStr,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddStorySheetContent(
+    location: LatLng,
+    initialStory: Story? = null,
+    onAddStory: (Story, List<ByteArray>) -> Unit,
+    onUpdateStory: (Story) -> Unit,
+    onCancel: () -> Unit,
+    onCreatePlace: (LatLng, String, String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf(initialStory?.title ?: "") }
+    var description by remember { mutableStateOf(initialStory?.description ?: "") }
+    var dateMillis by remember { mutableLongStateOf(initialStory?.date ?: Clock.System.now().toEpochMilliseconds()) }
+    var category by remember { mutableStateOf(initialStory?.category ?: "Memory") }
+    var address by remember { mutableStateOf(initialStory?.address ?: "Fetching address...") }
+    val photoUrls = remember { mutableStateListOf<String>().apply { initialStory?.photoUrls?.let { addAll(it) } } }
+    val newPhotos = remember { mutableStateListOf<Pair<String, ByteArray>>() }
+    
+    val context = LocalContext.current
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(location, initialStory) {
+        if (initialStory != null) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        address = addresses[0].getAddressLine(0) ?: "Dropped Pin"
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    address = "Unknown Location"
+                }
+            }
+        }
+    }
+
+    val pickerLauncher = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        onResult = { file: PlatformFile? ->
+            file?.let { platformFile ->
+                scope.launch {
+                    val bytes = platformFile.readBytes()
+                    // Temporary preview URL using file path if available, 
+                    // otherwise we'd need a way to show ByteArray as image.
+                    val previewUrl = platformFile.path ?: "temp_${Clock.System.now().toEpochMilliseconds()}"
+                    newPhotos.add(previewUrl to bytes)
+                    photoUrls.add(previewUrl)
+                }
+            }
+        }
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = if (initialStory == null) "New Story" else "Edit Story",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Title") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("Description") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showDatePicker = true }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.DateRange, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(12.dp))
+            val dateStr = remember(dateMillis) {
+                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(dateMillis)
+                val dateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+                "${dateTime.dayOfMonth} ${dateTime.month.name}, ${dateTime.year}"
+            }
+            Text(text = dateStr, style = MaterialTheme.typography.bodyLarge)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Photos", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            
+            if (photoUrls.isNotEmpty()) {
+                val pagerState = rememberPagerState(pageCount = { photoUrls.size })
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        pageSpacing = 8.dp
+                    ) { page ->
+                        val url = photoUrls[page]
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            coil3.compose.AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                            IconButton(
+                                onClick = { 
+                                    photoUrls.remove(url)
+                                    newPhotos.removeAll { it.first == url }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(28.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    
+                    if (photoUrls.size > 1) {
+                        Row(
+                            Modifier
+                                .height(32.dp)
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            repeat(photoUrls.size) { iteration ->
+                                val color = if (pagerState.currentPage == iteration) Color.White else Color.White.copy(alpha = 0.5f)
+                                Box(
+                                    modifier = Modifier
+                                        .padding(2.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .size(6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = { pickerLauncher.launch() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.AddAPhoto, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add Photo")
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    val story = Story(
+                        id = initialStory?.id ?: "",
+                        title = title,
+                        description = description,
+                        date = dateMillis,
+                        category = category,
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        address = address,
+                        photoUrls = photoUrls.filter { !it.startsWith("temp_") && !it.startsWith("/") }
+                    )
+                    if (initialStory == null) {
+                        onAddStory(story, newPhotos.map { it.second })
+                    } else {
+                        onUpdateStory(story)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = title.isNotBlank(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Save Story")
+            }
+
+            if (initialStory == null) {
+                OutlinedButton(
+                    onClick = { onCreatePlace(location, title, address) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Make it a Place")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { dateMillis = it }
+                    showDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@Composable
 fun PartnerStatusCard(
-    user: User, 
+    user: User,
+    status: ConnectionStatus,
+    currentTime: Long,
     etaInfo: EtaInfo? = null, 
     isPartnerComingToMe: Boolean = false,
     isEtaLoading: Boolean = false,
     etaError: String? = null
 ) {
-    val status = rememberPartnerStatus(user)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1781,7 +2223,7 @@ fun PartnerStatusCard(
 
                 if (status == ConnectionStatus.OFFLINE) {
                     Text(
-                        text = "Last updated ${formatLastUpdated(user.lastLocationUpdate)}",
+                        text = "Last updated ${formatLastUpdated(user.lastLocationUpdate, currentTime)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontWeight = FontWeight.Medium
@@ -1926,6 +2368,7 @@ fun PartnerStatusCard(
 fun PartnerDashboard(
     modifier: Modifier = Modifier,
     anniversaryDate: Long?,
+    currentTime: Long,
     onEditAnniversary: () -> Unit
 ) {
     Surface(
@@ -1943,7 +2386,7 @@ fun PartnerDashboard(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (anniversaryDate != null) {
-                val days = (Clock.System.now().toEpochMilliseconds() - anniversaryDate) / (1000 * 60 * 60 * 24)
+                val days = (currentTime - anniversaryDate) / (1000 * 60 * 60 * 24)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.Favorite,
@@ -1975,10 +2418,14 @@ fun calculateDistance(p1: LatLng, p2: LatLng): Double {
 
 fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
+private val polylineCache = LruCache<String, List<LatLng>>(50)
+
 /**
  * Decodes an encoded polyline string into a list of LatLng points.
  */
 fun decodePolyline(encoded: String): List<LatLng> {
+    polylineCache.get(encoded)?.let { return it }
+    
     val poly = ArrayList<LatLng>()
     var index = 0
     val len = encoded.length
@@ -2011,6 +2458,7 @@ fun decodePolyline(encoded: String): List<LatLng> {
         poly.add(p)
     }
 
+    polylineCache.put(encoded, poly)
     return poly
 }
 

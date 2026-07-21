@@ -3,12 +3,15 @@ package com.example.tasama.presentation.partner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.StoryRepository
 import com.example.tasama.domain.repository.WeatherRepository
+import com.example.tasama.util.compressImage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,6 +22,7 @@ data class PartnerUiState(
     val currentUser: User? = null,
     val partner: User? = null,
     val places: List<Place> = emptyList(),
+    val stories: List<Story> = emptyList(),
     val pendingRequestFrom: User? = null,
     val pendingRequestTo: User? = null,
     val isLoading: Boolean = false,
@@ -41,6 +45,7 @@ data class PartnerUiState(
 class PartnerViewModel(
     private val authRepository: AuthRepository,
     private val placeRepository: PlaceRepository,
+    private val storyRepository: StoryRepository,
     private val directionsRepository: DirectionsRepository,
     private val weatherRepository: WeatherRepository
 ) : ViewModel() {
@@ -49,6 +54,7 @@ class PartnerViewModel(
 
     private var partnerObservationJob: Job? = null
     private var placesObservationJob: Job? = null
+    private var storiesObservationJob: Job? = null
     private var currentUserJob: Job? = null
     private var etaJob: Job? = null
     private var weatherJob: Job? = null
@@ -56,6 +62,8 @@ class PartnerViewModel(
     private var currentPartnerId: String? = null
     private var currentPlacesUserId: String? = null
     private var currentPlacesPartnerId: String? = null
+    private var currentStoriesUserId: String? = null
+    private var currentStoriesPartnerId: String? = null
 
     private var lastEtaRequestLocationMe: Pair<Double, Double>? = null
     private var lastEtaRequestLocationPartner: Pair<Double, Double>? = null
@@ -82,6 +90,7 @@ class PartnerViewModel(
                         if (user != null) {
                             handlePartnerAndRequests(user)
                             observePlaces(user.id, user.partnerId)
+                            observeStories(user.id, user.partnerId)
                             checkAndFetchEta()
                         }
                     }
@@ -281,6 +290,73 @@ class PartnerViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             placeRepository.deletePlace(uid, placeId)
+        }
+    }
+
+    private fun observeStories(userId: String, partnerId: String?) {
+        if (storiesObservationJob?.isActive == true && currentStoriesUserId == userId && currentStoriesPartnerId == partnerId) return
+        currentStoriesUserId = userId
+        currentStoriesPartnerId = partnerId
+
+        storiesObservationJob?.cancel()
+        storiesObservationJob = viewModelScope.launch {
+            val myStoriesFlow = storyRepository.getStories(userId)
+            val partnerStoriesFlow = partnerId?.let { storyRepository.getStories(it) } ?: flowOf(emptyList())
+
+            combine(myStoriesFlow, partnerStoriesFlow) { myStories, pStories ->
+                (myStories + pStories).distinctBy { it.id }
+            }.collect { allStories ->
+                _uiState.update { it.copy(stories = allStories) }
+            }
+        }
+    }
+
+    fun addStory(story: Story, photoBytes: List<ByteArray> = emptyList()) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                // Image compression before upload
+                val compressedPhotos = photoBytes.map { bytes ->
+                    compressImage(bytes, 80)
+                }
+                
+                val photoUrls = compressedPhotos.map { bytes ->
+                    storyRepository.uploadStoryPhoto(uid, bytes)
+                }
+                val storyWithPhotos = story.copy(photoUrls = story.photoUrls + photoUrls)
+                storyRepository.addStory(uid, storyWithPhotos)
+                _uiState.update { it.copy(isLoading = false, successMessage = "Story added successfully!") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to add story") }
+            }
+        }
+    }
+
+    private fun compressImage(bytes: ByteArray): ByteArray {
+        // Simple size-based check (placeholder for actual compression)
+        // In a real app, use a platform-specific image library or a KMP-friendly one.
+        // For now, we'll keep it as-is or implement a simple check.
+        return bytes
+    }
+
+    fun deleteStory(story: Story) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                storyRepository.deleteStory(uid, story)
+                _uiState.update { it.copy(isLoading = false, successMessage = "Story deleted successfully") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to delete story") }
+            }
+        }
+    }
+
+    fun updateStory(story: Story) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            storyRepository.updateStory(uid, story)
         }
     }
 

@@ -10,24 +10,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.tasama.domain.model.User
 
+import com.example.tasama.domain.model.Story
+import com.example.tasama.domain.repository.TravelMode
+import com.example.tasama.domain.repository.EtaInfo
+
 @Composable
 actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
     partner: User?,
     places: List<com.example.tasama.domain.model.Place>,
+    stories: List<Story>,
     anniversaryDate: Long?,
-    etaInfo: com.example.tasama.domain.repository.EtaInfo?,
+    etaInfo: EtaInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
-    travelMode: com.example.tasama.domain.repository.TravelMode,
+    travelMode: TravelMode,
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
     etaError: String?,
     onEditAnniversary: () -> Unit,
-    onAddPlace: (String, Double, Double, Double) -> Unit,
+    onAddPlace: (com.example.tasama.domain.model.Place) -> Unit,
     onDeletePlace: (String) -> Unit,
-    onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
+    onAddStory: (Story, List<ByteArray>) -> Unit,
+    onDeleteStory: (Story) -> Unit,
+    onUpdateStory: (Story) -> Unit,
+    onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
     Box(

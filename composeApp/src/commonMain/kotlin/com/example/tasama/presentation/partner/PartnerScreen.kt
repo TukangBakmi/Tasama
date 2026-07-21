@@ -86,6 +86,7 @@ fun PartnerScreen(
                     currentUser = uiState.currentUser,
                     partner = uiState.partner,
                     places = uiState.places,
+                    stories = uiState.stories,
                     anniversaryDate = uiState.currentUser?.anniversaryDate,
                     etaInfo = uiState.etaInfo,
                     weatherInfo = uiState.weatherInfo,
@@ -97,6 +98,9 @@ fun PartnerScreen(
                     onEditAnniversary = { showDatePicker = true },
                     onAddPlace = { viewModel.addPlace(it) },
                     onDeletePlace = viewModel::deletePlace,
+                    onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
+                    onDeleteStory = { story -> viewModel.deleteStory(story) },
+                    onUpdateStory = viewModel::updateStory,
                     onSetTravelMode = viewModel::setTravelMode,
                     onUnlink = viewModel::unlinkPartner
                 )
@@ -281,6 +285,7 @@ fun PartnerMapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
+    stories: List<com.example.tasama.domain.model.Story> = emptyList(),
     anniversaryDate: Long?,
     etaInfo: EtaInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
@@ -292,6 +297,9 @@ fun PartnerMapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
+    onAddStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
+    onDeleteStory: (com.example.tasama.domain.model.Story) -> Unit,
+    onUpdateStory: (com.example.tasama.domain.model.Story) -> Unit,
     onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit
 ) {
@@ -301,6 +309,7 @@ fun PartnerMapContent(
             currentUser = currentUser,
             partner = partner,
             places = places,
+            stories = stories,
             anniversaryDate = anniversaryDate,
             etaInfo = etaInfo,
             weatherInfo = weatherInfo,
@@ -312,6 +321,9 @@ fun PartnerMapContent(
             onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,
+            onAddStory = onAddStory,
+            onDeleteStory = onDeleteStory,
+            onUpdateStory = onUpdateStory,
             onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink
         )

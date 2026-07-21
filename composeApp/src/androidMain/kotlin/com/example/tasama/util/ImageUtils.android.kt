@@ -16,6 +16,13 @@ actual fun decodeImageBitmap(bytes: ByteArray): ImageBitmap? {
     return bitmap?.asImageBitmap()
 }
 
+actual fun compressImage(bytes: ByteArray, quality: Int): ByteArray {
+    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+    val outStream = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outStream)
+    return outStream.toByteArray()
+}
+
 actual fun cropImage(
     originalBytes: ByteArray,
     scale: Float,

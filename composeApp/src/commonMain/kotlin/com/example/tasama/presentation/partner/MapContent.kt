@@ -3,6 +3,7 @@ package com.example.tasama.presentation.partner
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.TravelMode
@@ -13,6 +14,7 @@ expect fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place> = emptyList(),
+    stories: List<Story> = emptyList(),
     anniversaryDate: Long? = null,
     etaInfo: EtaInfo? = null,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
@@ -24,6 +26,9 @@ expect fun MapContent(
     onEditAnniversary: () -> Unit = {},
     onAddPlace: (Place) -> Unit = {},
     onDeletePlace: (String) -> Unit = {},
+    onAddStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
+    onDeleteStory: (Story) -> Unit = {},
+    onUpdateStory: (Story) -> Unit = {},
     onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {}
 )

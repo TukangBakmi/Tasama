@@ -1,5 +1,6 @@
 package com.example.tasama.domain.repository
 
+import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +24,7 @@ interface AuthRepository {
     suspend fun updateProfilePicture(uid: String, url: String?)
     suspend fun updateDisplayName(uid: String, name: String)
     suspend fun updateLocation(uid: String, lat: Double, lon: Double, speed: Float? = null, accuracy: Float? = null)
+    suspend fun getRouteForDay(uid: String, dateStart: Long, dateEnd: Long): List<RoutePoint>
     suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean)
     suspend fun updateConnectionType(uid: String, type: String)
     suspend fun updateLastActive(uid: String, timestamp: Long? = null)

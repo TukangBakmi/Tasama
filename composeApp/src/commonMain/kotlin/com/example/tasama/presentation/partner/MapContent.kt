@@ -32,5 +32,9 @@ expect fun MapContent(
     onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {},
     selectedStoryForMap: Story? = null,
-    onClearSelectedStory: () -> Unit = {}
+    onClearSelectedStory: () -> Unit = {},
+    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit = { _, _, _, _ -> },
+    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint> = emptyList(),
+    isRouteLoading: Boolean = false,
+    fetchTodayRoute: () -> Unit = {}
 )

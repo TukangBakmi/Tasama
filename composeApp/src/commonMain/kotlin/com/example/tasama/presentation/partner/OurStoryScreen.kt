@@ -15,7 +15,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +37,8 @@ import coil3.compose.AsyncImage
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.Instant
+import kotlin.math.pow
+import kotlin.math.round
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -315,6 +320,39 @@ fun StoryDetailSheet(
                     style = MaterialTheme.typography.bodyLarge,
                     lineHeight = 24.sp
                 )
+
+                if (story.route.isNotEmpty()) {
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        text = "Journey Summary",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        JourneyStat(
+                            icon = Icons.Default.Route,
+                            label = "Distance",
+                            value = story.totalDistance?.let { 
+                                if (it > 1000) "${(it / 1000).format(1)} km" else "${it.toInt()} m"
+                            } ?: "---"
+                        )
+                        JourneyStat(
+                            icon = Icons.Default.Timer,
+                            label = "Duration",
+                            value = story.totalDuration?.let { formatDuration(it) } ?: "---"
+                        )
+                        JourneyStat(
+                            icon = Icons.Default.History,
+                            label = "Points",
+                            value = "${story.route.size}"
+                        )
+                    }
+                }
                 
                 Spacer(Modifier.height(32.dp))
                 
@@ -332,5 +370,40 @@ fun StoryDetailSheet(
             }
         }
     }
+}
+
+@Composable
+fun JourneyStat(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun formatDuration(millis: Long): String {
+    val seconds = millis / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes % 60}m"
+        minutes > 0 -> "${minutes}m"
+        else -> "${seconds}s"
+    }
+}
+
+private fun Double.format(digits: Int): String {
+    val factor = 10.0.pow(digits.toDouble())
+    return (round(this * factor) / factor).toString()
 }
 

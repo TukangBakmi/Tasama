@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
         askPermissions()
         startBatteryMonitoring()
+        com.example.tasama.util.initGeocoding(this)
 
         initialChannelId = intent.getStringExtra("channelId")
         navigateToTab = intent.getStringExtra("navigate_to")

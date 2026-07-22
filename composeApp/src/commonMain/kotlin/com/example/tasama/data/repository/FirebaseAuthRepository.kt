@@ -1,5 +1,6 @@
 package com.example.tasama.data.repository
 
+import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import dev.gitlive.firebase.Firebase
@@ -203,15 +204,39 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateLocation(uid: String, lat: Double, lon: Double, speed: Float?, accuracy: Float?) {
         try {
+            val timestamp = Clock.System.now().toEpochMilliseconds()
             firestore.collection("users").document(uid).updateFields {
                 "latitude" to lat
                 "longitude" to lon
                 "speed" to speed
                 "accuracy" to accuracy
-                "lastLocationUpdate" to Clock.System.now().toEpochMilliseconds()
+                "lastLocationUpdate" to timestamp
             }
+            
+            // Log location history
+            val point = RoutePoint(lat, lon, timestamp)
+            firestore.collection("users").document(uid)
+                .collection("locationHistory")
+                .add(point)
+                
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    override suspend fun getRouteForDay(uid: String, dateStart: Long, dateEnd: Long): List<RoutePoint> {
+        return try {
+            firestore.collection("users").document(uid)
+                .collection("locationHistory")
+                .where { "timestamp" greaterThanOrEqualTo dateStart }
+                .where { "timestamp" lessThanOrEqualTo dateEnd }
+                .get()
+                .documents
+                .map { it.data<RoutePoint>() }
+                .sortedBy { it.timestamp }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 

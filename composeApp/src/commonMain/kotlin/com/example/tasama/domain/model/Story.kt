@@ -13,5 +13,9 @@ data class Story(
     val longitude: Double = 0.0,
     val photoUrls: List<String> = emptyList(),
     val address: String = "",
-    val createdBy: String = ""
+    val createdBy: String = "",
+    val route: List<RoutePoint> = emptyList(),
+    val totalDistance: Double? = null,
+    val totalDuration: Long? = null,
+    val visitedPlaces: List<String> = emptyList()
 )

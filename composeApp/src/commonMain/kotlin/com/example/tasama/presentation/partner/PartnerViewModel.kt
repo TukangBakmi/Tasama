@@ -3,6 +3,7 @@ package com.example.tasama.presentation.partner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
@@ -40,7 +41,9 @@ data class PartnerUiState(
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
-    val selectedStoryForMap: Story? = null
+    val selectedStoryForMap: Story? = null,
+    val currentDayRoute: List<RoutePoint> = emptyList(),
+    val isRouteLoading: Boolean = false
 )
 
 class PartnerViewModel(
@@ -475,6 +478,67 @@ class PartnerViewModel(
 
     fun selectStoryForMap(story: Story?) {
         _uiState.update { it.copy(selectedStoryForMap = story) }
+    }
+
+    fun fetchTodayRoute() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRouteLoading = true) }
+            val now = Clock.System.now().toEpochMilliseconds()
+            // Start of day (00:00:00)
+            val startOfDay = now - (now % (24 * 60 * 60 * 1000))
+            
+            val route = authRepository.getRouteForDay(uid, startOfDay, now)
+            _uiState.update { it.copy(currentDayRoute = route, isRouteLoading = false) }
+        }
+    }
+
+    fun saveJourneyAsStory(title: String, description: String, category: String, photoBytes: List<ByteArray>) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val route = _uiState.value.currentDayRoute
+        if (route.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val distance = calculateTotalRouteDistance(route)
+                val duration = if (route.size > 1) route.last().timestamp - route.first().timestamp else 0L
+                
+                // Compress and upload photos
+                val compressedPhotos = photoBytes.map { bytes -> compressImage(bytes, 80) }
+                val photoUrls = compressedPhotos.map { bytes -> storyRepository.uploadStoryPhoto(uid, bytes) }
+
+                val story = Story(
+                    title = title,
+                    description = description,
+                    category = category,
+                    date = Clock.System.now().toEpochMilliseconds(),
+                    latitude = route.first().latitude,
+                    longitude = route.first().longitude,
+                    photoUrls = photoUrls,
+                    route = route,
+                    totalDistance = distance,
+                    totalDuration = duration,
+                    createdBy = uid
+                )
+                
+                storyRepository.addStory(uid, story)
+                _uiState.update { it.copy(isLoading = false, successMessage = "Journey saved as story!") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to save journey") }
+            }
+        }
+    }
+
+    private fun calculateTotalRouteDistance(route: List<RoutePoint>): Double {
+        var total = 0.0
+        for (i in 0 until route.size - 1) {
+            total += calculateDistance(
+                route[i].latitude, route[i].longitude,
+                route[i + 1].latitude, route[i + 1].longitude
+            )
+        }
+        return total
     }
 
     fun onIdCopied() {

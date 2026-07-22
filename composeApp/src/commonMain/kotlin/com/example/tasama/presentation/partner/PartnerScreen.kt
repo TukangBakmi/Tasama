@@ -106,7 +106,10 @@ fun PartnerScreen(
                     onSelectStory = viewModel::selectStoryForMap,
                     selectedStoryForMap = uiState.selectedStoryForMap,
                     onClearSelectedStory = { viewModel.selectStoryForMap(null) },
-                    onNavigateToOurStory = { /* Will be handled by state */ }
+                    onSaveJourney = viewModel::saveJourneyAsStory,
+                    currentDayRoute = uiState.currentDayRoute,
+                    isRouteLoading = uiState.isRouteLoading,
+                    fetchTodayRoute = viewModel::fetchTodayRoute
                 )
                 else -> LinkingContent(
                     uiState = uiState,
@@ -309,7 +312,10 @@ fun PartnerMapContent(
     onSelectStory: (com.example.tasama.domain.model.Story?) -> Unit,
     selectedStoryForMap: com.example.tasama.domain.model.Story? = null,
     onClearSelectedStory: () -> Unit = {},
-    onNavigateToOurStory: () -> Unit = {}
+    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
+    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
+    isRouteLoading: Boolean,
+    fetchTodayRoute: () -> Unit
 ) {
     var showOurStory by remember { mutableStateOf(false) }
 
@@ -337,7 +343,11 @@ fun PartnerMapContent(
             onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink,
             selectedStoryForMap = selectedStoryForMap,
-            onClearSelectedStory = onClearSelectedStory
+            onClearSelectedStory = onClearSelectedStory,
+            onSaveJourney = onSaveJourney,
+            currentDayRoute = currentDayRoute,
+            isRouteLoading = isRouteLoading,
+            fetchTodayRoute = fetchTodayRoute
         )
 
         // Our Story Button

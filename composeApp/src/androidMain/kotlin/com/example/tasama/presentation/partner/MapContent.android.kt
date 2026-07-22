@@ -180,7 +180,9 @@ actual fun MapContent(
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
-    onUnlink: () -> Unit
+    onUnlink: () -> Unit,
+    selectedStoryForMap: Story?,
+    onClearSelectedStory: () -> Unit
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
@@ -386,6 +388,22 @@ actual fun MapContent(
             // Using move() instead of animate() to keep the camera perfectly 
             // locked to the animated avatar position without any extra lag.
             cameraPositionState.move(CameraUpdateFactory.newLatLng(currentPartnerLocation))
+        }
+    }
+
+    // Story Selection Logic
+    LaunchedEffect(selectedStoryForMap) {
+        selectedStoryForMap?.let { story ->
+            isFollowModeEnabled = false
+            val storyLatLng = LatLng(story.latitude, story.longitude)
+            scope.launch {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngZoom(storyLatLng, 15f),
+                    1000
+                )
+                delay(1500)
+                onClearSelectedStory()
+            }
         }
     }
 

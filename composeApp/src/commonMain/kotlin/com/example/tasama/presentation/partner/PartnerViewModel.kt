@@ -39,7 +39,8 @@ data class PartnerUiState(
     val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING,
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
-    val weatherError: String? = null
+    val weatherError: String? = null,
+    val selectedStoryForMap: Story? = null
 )
 
 class PartnerViewModel(
@@ -470,6 +471,10 @@ class PartnerViewModel(
         viewModelScope.launch {
             authRepository.signOut()
         }
+    }
+
+    fun selectStoryForMap(story: Story?) {
+        _uiState.update { it.copy(selectedStoryForMap = story) }
     }
 
     fun onIdCopied() {

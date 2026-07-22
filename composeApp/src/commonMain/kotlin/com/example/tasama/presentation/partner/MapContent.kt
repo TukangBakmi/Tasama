@@ -30,5 +30,7 @@ expect fun MapContent(
     onDeleteStory: (Story) -> Unit = {},
     onUpdateStory: (Story) -> Unit = {},
     onSetTravelMode: (TravelMode) -> Unit = {},
-    onUnlink: () -> Unit = {}
+    onUnlink: () -> Unit = {},
+    selectedStoryForMap: Story? = null,
+    onClearSelectedStory: () -> Unit = {}
 )

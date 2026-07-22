@@ -37,7 +37,9 @@ actual fun MapContent(
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
-    onUnlink: () -> Unit
+    onUnlink: () -> Unit,
+    selectedStoryForMap: Story?,
+    onClearSelectedStory: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

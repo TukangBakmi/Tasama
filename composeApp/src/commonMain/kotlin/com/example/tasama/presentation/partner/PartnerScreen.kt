@@ -102,7 +102,11 @@ fun PartnerScreen(
                     onDeleteStory = { story -> viewModel.deleteStory(story) },
                     onUpdateStory = viewModel::updateStory,
                     onSetTravelMode = viewModel::setTravelMode,
-                    onUnlink = viewModel::unlinkPartner
+                    onUnlink = viewModel::unlinkPartner,
+                    onSelectStory = viewModel::selectStoryForMap,
+                    selectedStoryForMap = uiState.selectedStoryForMap,
+                    onClearSelectedStory = { viewModel.selectStoryForMap(null) },
+                    onNavigateToOurStory = { /* Will be handled by state */ }
                 )
                 else -> LinkingContent(
                     uiState = uiState,
@@ -301,8 +305,14 @@ fun PartnerMapContent(
     onDeleteStory: (com.example.tasama.domain.model.Story) -> Unit,
     onUpdateStory: (com.example.tasama.domain.model.Story) -> Unit,
     onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
-    onUnlink: () -> Unit
+    onUnlink: () -> Unit,
+    onSelectStory: (com.example.tasama.domain.model.Story?) -> Unit,
+    selectedStoryForMap: com.example.tasama.domain.model.Story? = null,
+    onClearSelectedStory: () -> Unit = {},
+    onNavigateToOurStory: () -> Unit = {}
 ) {
+    var showOurStory by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(
             modifier = Modifier.fillMaxSize(),
@@ -325,7 +335,33 @@ fun PartnerMapContent(
             onDeleteStory = onDeleteStory,
             onUpdateStory = onUpdateStory,
             onSetTravelMode = onSetTravelMode,
-            onUnlink = onUnlink
+            onUnlink = onUnlink,
+            selectedStoryForMap = selectedStoryForMap,
+            onClearSelectedStory = onClearSelectedStory
+        )
+
+        // Our Story Button
+        FloatingActionButton(
+            onClick = { showOurStory = true },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(bottom = 16.dp, start = 16.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+            contentColor = MaterialTheme.colorScheme.primary,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Favorite, contentDescription = "Our Story")
+        }
+    }
+
+    if (showOurStory) {
+        OurStoryScreen(
+            stories = stories,
+            onDismiss = { showOurStory = false },
+            onStoryClick = { story ->
+                showOurStory = false
+                onSelectStory(story)
+            }
         )
     }
 }

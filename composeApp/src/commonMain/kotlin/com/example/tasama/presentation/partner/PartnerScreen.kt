@@ -411,16 +411,6 @@ fun PartnerMapContent(
             ) {
                 Icon(Icons.Default.Favorite, contentDescription = "Our Story")
             }
-
-            // Settings Button
-            FloatingActionButton(
-                onClick = { showSettings = true },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Map Settings")
-            }
         }
     }
 

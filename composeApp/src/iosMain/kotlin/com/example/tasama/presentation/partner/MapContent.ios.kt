@@ -529,26 +529,51 @@ actual fun MapContent(
             )
         }
 
-        if (settings.partnerMapEnabled && settings.dashboardEnabled) {
-            PartnerDashboard(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 14.dp),
-                anniversaryDate = anniversaryDate,
-                currentTime = currentTime,
-                onEditAnniversary = onEditAnniversary
-            )
-        }
+        // New Header Layout: Weather(Left), Dashboard(Center), Settings(Right)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 14.dp)
+        ) {
+            if (settings.partnerMapEnabled && settings.weatherWidgetEnabled) {
+                WeatherWidget(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    weatherInfo = weatherInfo,
+                    isLoading = isWeatherLoading
+                )
+            }
 
-        if (settings.partnerMapEnabled && settings.weatherWidgetEnabled) {
-            WeatherWidget(
+            if (settings.partnerMapEnabled && settings.dashboardEnabled) {
+                PartnerDashboard(
+                    modifier = Modifier.align(Alignment.Center),
+                    anniversaryDate = anniversaryDate,
+                    currentTime = currentTime,
+                    onEditAnniversary = onEditAnniversary
+                )
+            }
+
+            // Map Settings Button (Top Right, standalone circular button)
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(top = 14.dp, end = 16.dp),
-                weatherInfo = weatherInfo,
-                isLoading = isWeatherLoading
-            )
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+                    .size(40.dp)
+                    .clickable { onOpenSettings() },
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                shape = CircleShape,
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
 
         AnimatedVisibility(
@@ -606,15 +631,6 @@ actual fun MapContent(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
-            }
-
-            SmallFloatingActionButton(
-                onClick = { onOpenSettings() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
 
             if (settings.partnerMapEnabled) {
@@ -1072,6 +1088,94 @@ fun OffScreenMarker(edgePoint: Offset, angle: Float, user: User?, onTap: () -> U
         }
         Surface(modifier = Modifier.size(36.dp), shape = CircleShape, border = BorderStroke(2.dp, Color(0xFFFF4081)), shadowElevation = 4.dp) {
             UserAvatar(user = user, modifier = Modifier.fillMaxSize(), showInitials = user?.avatarUrl == null)
+        }
+    }
+}
+
+@Composable
+fun PartnerDashboard(
+    modifier: Modifier = Modifier,
+    anniversaryDate: Long?,
+    currentTime: Long,
+    onEditAnniversary: () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clickable { onEditAnniversary() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (anniversaryDate != null) {
+                val days = (currentTime - anniversaryDate) / (1000 * 60 * 60 * 24)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Favorite,
+                        null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Red
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Together for $days days",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeatherWidget(
+    modifier: Modifier = Modifier,
+    weatherInfo: WeatherInfo?,
+    isLoading: Boolean
+) {
+    AnimatedVisibility(
+        visible = weatherInfo != null || isLoading,
+        enter = fadeIn() + slideInHorizontally { -it },
+        exit = fadeOut() + slideOutHorizontally { -it },
+        modifier = modifier
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+            shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isLoading && weatherInfo == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else if (weatherInfo != null) {
+                    Text(
+                        text = weatherInfo.iconCode,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${weatherInfo.temperature.toInt()}°C",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

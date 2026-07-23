@@ -1071,26 +1071,53 @@ actual fun MapContent(
             }
         }
 
-        if (settings.dashboardEnabled) {
-            PartnerDashboard(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 14.dp),
-                anniversaryDate = anniversaryDate,
-                currentTime = currentTime,
-                onEditAnniversary = onEditAnniversary
-            )
-        }
+        // New Header Layout: Weather(Left), Dashboard(Center), Settings(Right)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 14.dp)
+        ) {
+            if (settings.weatherWidgetEnabled) {
+                WeatherWidget(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    weatherInfo = weatherInfo,
+                    isLoading = isWeatherLoading
+                )
+            }
 
-        if (settings.weatherWidgetEnabled) {
-            WeatherWidget(
+            if (settings.dashboardEnabled) {
+                PartnerDashboard(
+                    modifier = Modifier.align(Alignment.Center),
+                    anniversaryDate = anniversaryDate,
+                    currentTime = currentTime,
+                    onEditAnniversary = onEditAnniversary
+                )
+            }
+
+            // Map Settings Button (Top Right, standalone circular button)
+            Surface(
+                onClick = { onOpenSettings() },
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(top = 14.dp, end = 16.dp),
-                weatherInfo = weatherInfo,
-                isLoading = isWeatherLoading
-            )
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                shape = CircleShape,
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
 
         // Journey Save Overlay
@@ -1180,16 +1207,6 @@ actual fun MapContent(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
-            }
-
-            // Settings Button
-            SmallFloatingActionButton(
-                onClick = { onOpenSettings() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
 
             // Route Toggle Button
@@ -1901,14 +1918,14 @@ fun StoryMarker(story: Story, isSelected: Boolean = false) {
         label = "markerElevation"
     )
 
-    var hasAppeared by remember { mutableStateOf(false) }
+    var hasAppeared by remember { mutableStateOf(true) }
     val appearanceScale by animateFloatAsState(
         targetValue = if (hasAppeared) 1f else 0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "appearanceScale"
     )
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(story.id) {
         hasAppeared = true
     }
 
@@ -1916,8 +1933,9 @@ fun StoryMarker(story: Story, isSelected: Boolean = false) {
         modifier = Modifier
             .size(48.dp)
             .graphicsLayer {
-                scaleX = scale * appearanceScale
-                scaleY = scale * appearanceScale
+                val finalScale = scale * appearanceScale
+                scaleX = finalScale
+                scaleY = finalScale
                 shadowElevation = elevation.toPx()
                 shape = CircleShape
                 clip = false
@@ -2613,7 +2631,7 @@ fun PartnerDashboard(
     onEditAnniversary: () -> Unit
 ) {
     Surface(
-        modifier = modifier.statusBarsPadding(),
+        modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 4.dp,
@@ -2657,19 +2675,19 @@ fun WeatherWidget(
 ) {
     AnimatedVisibility(
         visible = weatherInfo != null || isLoading,
-        enter = fadeIn() + expandHorizontally(),
-        exit = fadeOut() + shrinkHorizontally(),
+        enter = fadeIn() + slideInHorizontally { -it },
+        exit = fadeOut() + slideOutHorizontally { -it },
         modifier = modifier
     ) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp),
             tonalElevation = 4.dp,
             shadowElevation = 8.dp
         ) {
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {

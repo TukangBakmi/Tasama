@@ -36,7 +36,15 @@ actual fun MapContent(
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
-    onUnlink: () -> Unit
+    onUnlink: () -> Unit,
+    selectedStoryForMap: Story?,
+    onClearSelectedStory: () -> Unit,
+    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
+    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
+    isRouteLoading: Boolean,
+    fetchTodayRoute: () -> Unit,
+    settings: com.example.tasama.domain.model.AppSettings,
+    onOpenSettings: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

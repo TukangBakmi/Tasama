@@ -36,5 +36,7 @@ expect fun MapContent(
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit = { _, _, _, _ -> },
     currentDayRoute: List<com.example.tasama.domain.model.RoutePoint> = emptyList(),
     isRouteLoading: Boolean = false,
-    fetchTodayRoute: () -> Unit = {}
+    fetchTodayRoute: () -> Unit = {},
+    settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
+    onOpenSettings: () -> Unit = {}
 )

@@ -2,6 +2,9 @@ package com.example.tasama.presentation.partner
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.AppSettings
+import com.example.tasama.domain.model.BatteryMode
+import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.Story
@@ -10,6 +13,7 @@ import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.StoryRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
@@ -43,7 +47,8 @@ data class PartnerUiState(
     val weatherError: String? = null,
     val selectedStoryForMap: Story? = null,
     val currentDayRoute: List<RoutePoint> = emptyList(),
-    val isRouteLoading: Boolean = false
+    val isRouteLoading: Boolean = false,
+    val settings: AppSettings = AppSettings()
 )
 
 class PartnerViewModel(
@@ -51,11 +56,13 @@ class PartnerViewModel(
     private val placeRepository: PlaceRepository,
     private val storyRepository: StoryRepository,
     private val directionsRepository: DirectionsRepository,
-    private val weatherRepository: WeatherRepository
+    private val weatherRepository: WeatherRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var settingsJob: Job? = null
     private var partnerObservationJob: Job? = null
     private var placesObservationJob: Job? = null
     private var storiesObservationJob: Job? = null
@@ -78,10 +85,56 @@ class PartnerViewModel(
     private var lastWeatherTimestamp: Long = 0
 
     init {
+        observeSettings()
         refresh()
     }
 
+    private fun observeSettings() {
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                val previousSettings = _uiState.value.settings
+                _uiState.update { it.copy(settings = settings) }
+
+                if (!settings.partnerMapEnabled) {
+                    stopAllActivities()
+                } else if (!previousSettings.partnerMapEnabled) {
+                    refresh()
+                }
+
+                // If travel mode changed in settings, update UI and fetch ETA
+                val newTravelMode = when (settings.defaultRouteType) {
+                    DefaultRouteType.CAR -> com.example.tasama.domain.repository.TravelMode.DRIVING
+                    DefaultRouteType.MOTORCYCLE -> com.example.tasama.domain.repository.TravelMode.MOTORCYCLE
+                    DefaultRouteType.WALKING -> com.example.tasama.domain.repository.TravelMode.WALKING
+                }
+                if (_uiState.value.travelMode != newTravelMode) {
+                    setTravelMode(newTravelMode)
+                }
+            }
+        }
+    }
+
+    private fun stopAllActivities() {
+        partnerObservationJob?.cancel()
+        placesObservationJob?.cancel()
+        storiesObservationJob?.cancel()
+        etaJob?.cancel()
+        weatherJob?.cancel()
+        _uiState.update {
+            it.copy(
+                partner = null,
+                places = emptyList(),
+                stories = emptyList(),
+                etaInfo = null,
+                weatherInfo = null
+            )
+        }
+    }
+
     fun refresh() {
+        if (!_uiState.value.settings.partnerMapEnabled) return
+
         currentUserJob?.cancel()
         currentUserJob = viewModelScope.launch {
             authRepository.userId.collectLatest { uid ->
@@ -129,6 +182,7 @@ class PartnerViewModel(
     }
 
     private fun observePartner(partnerId: String) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
         if (partnerObservationJob?.isActive == true && currentPartnerId == partnerId) return
         currentPartnerId = partnerId
         
@@ -153,6 +207,7 @@ class PartnerViewModel(
     }
 
     private fun checkAndFetchEta(force: Boolean = false) {
+        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.liveEtaEnabled) return
         if (uiState.value.isEtaLoading) return
         
         val me = uiState.value.currentUser ?: return
@@ -208,6 +263,7 @@ class PartnerViewModel(
     }
 
     private fun checkAndFetchWeather(lat: Double, lon: Double) {
+        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.weatherWidgetEnabled) return
         val now = Clock.System.now().toEpochMilliseconds()
         val lastLoc = lastWeatherRequestLocation
         val distance = if (lastLoc != null) {
@@ -266,6 +322,10 @@ class PartnerViewModel(
     }
 
     private fun observePlaces(userId: String, partnerId: String?) {
+        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.placesEnabled) {
+            _uiState.update { it.copy(places = emptyList()) }
+            return
+        }
         if (placesObservationJob?.isActive == true && currentPlacesUserId == userId && currentPlacesPartnerId == partnerId) return
         currentPlacesUserId = userId
         currentPlacesPartnerId = partnerId
@@ -298,6 +358,10 @@ class PartnerViewModel(
     }
 
     private fun observeStories(userId: String, partnerId: String?) {
+        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.storyMarkersEnabled) {
+            _uiState.update { it.copy(stories = emptyList()) }
+            return
+        }
         if (storiesObservationJob?.isActive == true && currentStoriesUserId == userId && currentStoriesPartnerId == partnerId) return
         currentStoriesUserId = userId
         currentStoriesPartnerId = partnerId
@@ -457,6 +521,7 @@ class PartnerViewModel(
     }
 
     fun updateLocation(lat: Double, lon: Double, speed: Float? = null) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             authRepository.updateLocation(uid, lat, lon, speed)
@@ -464,6 +529,7 @@ class PartnerViewModel(
     }
 
     fun updateBatteryLevel(level: Float, isCharging: Boolean) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             authRepository.updateBatteryLevel(uid, level, isCharging)
@@ -551,5 +617,58 @@ class PartnerViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null, successMessage = null) }
+    }
+
+    // Settings update methods
+    fun updatePartnerMapEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updatePartnerMapEnabled(enabled) }
+    }
+
+    fun updateBatteryMode(mode: BatteryMode) {
+        viewModelScope.launch { settingsRepository.updateBatteryMode(mode) }
+    }
+
+    fun updateSmartFollowEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateSmartFollowEnabled(enabled) }
+    }
+
+    fun updateLiveEtaEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateLiveEtaEnabled(enabled) }
+    }
+
+    fun updateWeatherWidgetEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateWeatherWidgetEnabled(enabled) }
+    }
+
+    fun updateDashboardEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateDashboardEnabled(enabled) }
+    }
+
+    fun updatePlacesEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updatePlacesEnabled(enabled) }
+    }
+
+    fun updateReminderNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateReminderNotificationsEnabled(enabled) }
+    }
+
+    fun updateStoryMarkersEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateStoryMarkersEnabled(enabled) }
+    }
+
+    fun updateReminderMarkersEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateReminderMarkersEnabled(enabled) }
+    }
+
+    fun updateTrafficLayerEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateTrafficLayerEnabled(enabled) }
+    }
+
+    fun updateMapDarkThemeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateMapDarkThemeEnabled(enabled) }
+    }
+
+    fun updateDefaultRouteType(type: DefaultRouteType) {
+        viewModelScope.launch { settingsRepository.updateDefaultRouteType(type) }
     }
 }

@@ -155,7 +155,9 @@ actual fun MapContent(
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
     currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
     isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit
+    fetchTodayRoute: () -> Unit,
+    settings: com.example.tasama.domain.model.AppSettings,
+    onOpenSettings: () -> Unit
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
@@ -191,11 +193,12 @@ actual fun MapContent(
 
     val isDarkTheme = LocalIsDarkTheme.current
     val context = LocalContext.current
-    val mapProperties = remember(isDarkTheme) {
+    val mapProperties = remember(isDarkTheme, settings.trafficLayerEnabled) {
         MapProperties(
             mapStyleOptions = if (isDarkTheme) {
                 MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark)
-            } else null
+            } else null,
+            isTrafficEnabled = settings.trafficLayerEnabled
         )
     }
 
@@ -651,77 +654,84 @@ actual fun MapContent(
                 }
             }
 
-            places.forEach { place ->
-                val placeLatLng = LatLng(place.latitude, place.longitude)
-                val placeColor = place.color?.let { Color(it.toInt()) } ?: MaterialTheme.colorScheme.primary
-                
-                Circle(
-                    center = placeLatLng,
-                    radius = place.radius,
-                    fillColor = placeColor.copy(alpha = 0.2f),
-                    strokeColor = placeColor,
-                    strokeWidth = 2f
-                )
-                val markerState = rememberUpdatedMarkerState(position = placeLatLng)
-                MarkerComposable(
-                    keys = arrayOf<Any>(place.id, place.name, place.latitude, place.longitude, place.color ?: 0L, place.iconName ?: ""),
-                    state = markerState,
-                    anchor = Offset(0.5f, 0.5f),
-                    title = place.name,
-                    onClick = {
-                        println("DEBUG: Marker content clicked for place: ${place.name}")
-                        editingPlace = place
-                        showAddPlaceSheet = placeLatLng
-                        true
-                    },
-                    onInfoWindowLongClick = {
-                        showDeletePlaceDialog = place
-                    }
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
-                            .border(2.dp, placeColor, CircleShape)
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val icon = when (place.iconName) {
-                            "Home" -> Icons.Default.Home
-                            "Work" -> Icons.Default.Work
-                            "School" -> Icons.Default.School
-                            "Shopping" -> Icons.Default.ShoppingCart
-                            "Restaurant" -> Icons.Default.Restaurant
-                            "Gym" -> Icons.Default.FitnessCenter
-                            "Hospital" -> Icons.Default.LocalHospital
-                            "Park" -> Icons.Default.Park
-                            else -> Icons.Default.LocationOn
+            if (settings.placesEnabled) {
+                places.forEach { place ->
+                    val placeLatLng = LatLng(place.latitude, place.longitude)
+                    val placeColor = place.color?.let { Color(it.toInt()) } ?: MaterialTheme.colorScheme.primary
+                    
+                    Circle(
+                        center = placeLatLng,
+                        radius = place.radius,
+                        fillColor = placeColor.copy(alpha = 0.2f),
+                        strokeColor = placeColor,
+                        strokeWidth = 2f
+                    )
+                    val markerState = rememberUpdatedMarkerState(position = placeLatLng)
+                    MarkerComposable(
+                        keys = arrayOf<Any>(place.id, place.name, place.latitude, place.longitude, place.color ?: 0L, place.iconName ?: ""),
+                        state = markerState,
+                        anchor = Offset(0.5f, 0.5f),
+                        title = place.name,
+                        onClick = {
+                            println("DEBUG: Marker content clicked for place: ${place.name}")
+                            editingPlace = place
+                            showAddPlaceSheet = placeLatLng
+                            true
+                        },
+                        onInfoWindowLongClick = {
+                            showDeletePlaceDialog = place
                         }
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = placeColor,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                .border(2.dp, placeColor, CircleShape)
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val icon = when (place.iconName) {
+                                "Home" -> Icons.Default.Home
+                                "Work" -> Icons.Default.Work
+                                "School" -> Icons.Default.School
+                                "Shopping" -> Icons.Default.ShoppingCart
+                                "Restaurant" -> Icons.Default.Restaurant
+                                "Gym" -> Icons.Default.FitnessCenter
+                                "Hospital" -> Icons.Default.LocalHospital
+                                "Park" -> Icons.Default.Park
+                                else -> Icons.Default.LocationOn
+                            }
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = placeColor,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
             }
 
-            stories.forEach { story ->
-                val storyLatLng = LatLng(story.latitude, story.longitude)
-                val markerState = rememberUpdatedMarkerState(position = storyLatLng)
-                MarkerComposable(
-                    keys = arrayOf<Any>(story.id, story.title, story.latitude, story.longitude, story.photoUrls.firstOrNull() ?: ""),
-                    state = markerState,
-                    anchor = Offset(0.5f, 0.5f),
-                    title = story.title,
-                    onClick = {
-                        editingStory = story
-                        showAddStorySheet = storyLatLng
-                        true
+            if (settings.storyMarkersEnabled) {
+                stories.forEach { story ->
+                    val storyLatLng = LatLng(story.latitude, story.longitude)
+                    val markerState = rememberUpdatedMarkerState(position = storyLatLng)
+                    val isSelected = selectedStoryForMap?.id == story.id
+                    
+                    MarkerComposable(
+                        keys = arrayOf<Any>(story.id, story.title, story.latitude, story.longitude, story.photoUrls.firstOrNull() ?: "", isSelected),
+                        state = markerState,
+                        anchor = Offset(0.5f, 0.5f),
+                        title = story.title,
+                        zIndex = if (isSelected) 3f else 1f,
+                        onClick = {
+                            editingStory = story
+                            showAddStorySheet = storyLatLng
+                            true
+                        }
+                    ) {
+                        StoryMarker(story = story, isSelected = isSelected)
                     }
-                ) {
-                    StoryMarker(story = story)
                 }
             }
 
@@ -1061,23 +1071,27 @@ actual fun MapContent(
             }
         }
 
-        PartnerDashboard(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 14.dp),
-            anniversaryDate = anniversaryDate,
-            currentTime = currentTime,
-            onEditAnniversary = onEditAnniversary
-        )
+        if (settings.dashboardEnabled) {
+            PartnerDashboard(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 14.dp),
+                anniversaryDate = anniversaryDate,
+                currentTime = currentTime,
+                onEditAnniversary = onEditAnniversary
+            )
+        }
 
-        WeatherWidget(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 14.dp, end = 16.dp),
-            weatherInfo = weatherInfo,
-            isLoading = isWeatherLoading
-        )
+        if (settings.weatherWidgetEnabled) {
+            WeatherWidget(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 14.dp, end = 16.dp),
+                weatherInfo = weatherInfo,
+                isLoading = isWeatherLoading
+            )
+        }
 
         // Journey Save Overlay
         AnimatedVisibility(
@@ -1166,6 +1180,16 @@ actual fun MapContent(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+            }
+
+            // Settings Button
+            SmallFloatingActionButton(
+                onClick = { onOpenSettings() },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
 
             // Route Toggle Button
@@ -1633,27 +1657,6 @@ data class MarkerVisibilityData(
     val partnerScreenPos: Offset?
 )
 
-enum class ConnectionStatus {
-    LIVE, WEAK, OFFLINE
-}
-
-@Composable
-fun rememberPartnerStatus(user: User?, now: Long): ConnectionStatus {
-    if (user == null) return ConnectionStatus.OFFLINE
-    
-    return remember(user.lastLocationUpdate, user.accuracy, now) {
-        val lastUpdate = user.lastLocationUpdate ?: 0L
-        val delayMs = now - lastUpdate
-        val accuracy = user.accuracy ?: 0f
-        
-        when {
-            lastUpdate == 0L || delayMs > 30_000 -> ConnectionStatus.OFFLINE
-            delayMs > 10_000 || accuracy > 50f -> ConnectionStatus.WEAK
-            else -> ConnectionStatus.LIVE
-        }
-    }
-}
-
 @Composable
 fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifier) {
     val (text, color) = when (status) {
@@ -1675,17 +1678,6 @@ fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifie
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
-    }
-}
-
-fun formatLastUpdated(lastUpdate: Long?, now: Long): String {
-    if (lastUpdate == null) return "never"
-    val diffSec = (now - lastUpdate) / 1000
-    return when {
-        diffSec < 60 -> "just now"
-        diffSec < 3600 -> "${diffSec / 60}m ago"
-        diffSec < 86400 -> "${diffSec / 3600}h ago"
-        else -> "${diffSec / 86400}d ago"
     }
 }
 
@@ -1897,12 +1889,45 @@ fun CombinedUserMarker(
 }
 
 @Composable
-fun StoryMarker(story: Story) {
+fun StoryMarker(story: Story, isSelected: Boolean = false) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.25f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "markerScale"
+    )
+
+    val elevation by animateDpAsState(
+        targetValue = if (isSelected) 12.dp else 4.dp,
+        label = "markerElevation"
+    )
+
+    var hasAppeared by remember { mutableStateOf(false) }
+    val appearanceScale by animateFloatAsState(
+        targetValue = if (hasAppeared) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "appearanceScale"
+    )
+
+    LaunchedEffect(Unit) {
+        hasAppeared = true
+    }
+
     Box(
         modifier = Modifier
             .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale * appearanceScale
+                scaleY = scale * appearanceScale
+                shadowElevation = elevation.toPx()
+                shape = CircleShape
+                clip = false
+            }
             .background(Color.White, CircleShape)
-            .border(2.dp, Color(0xFFFF4081), CircleShape)
+            .border(
+                width = if (isSelected) 3.dp else 2.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081),
+                shape = CircleShape
+            )
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -1929,7 +1954,7 @@ fun StoryMarker(story: Story) {
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .offset(x = 4.dp, y = 4.dp)
-                .background(Color(0xFFFF4081), CircleShape)
+                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081), CircleShape)
                 .border(1.dp, Color.White, CircleShape)
                 .padding(horizontal = 4.dp, vertical = 2.dp)
         ) {

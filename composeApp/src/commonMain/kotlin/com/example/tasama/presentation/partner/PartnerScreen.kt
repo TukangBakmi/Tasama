@@ -10,7 +10,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.tasama.domain.model.AppSettings
+import com.example.tasama.domain.model.BatteryMode
+import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.EtaInfo
@@ -82,35 +87,58 @@ fun PartnerScreen(
             when {
                 uiState.isGuest -> GuestPartnerContent(onLogin = viewModel::logout)
                 uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                uiState.isLinked -> PartnerMapContent(
-                    currentUser = uiState.currentUser,
-                    partner = uiState.partner,
-                    places = uiState.places,
-                    stories = uiState.stories,
-                    anniversaryDate = uiState.currentUser?.anniversaryDate,
-                    etaInfo = uiState.etaInfo,
-                    weatherInfo = uiState.weatherInfo,
-                    isWeatherLoading = uiState.isWeatherLoading,
-                    travelMode = uiState.travelMode,
-                    isPartnerComingToMe = uiState.isPartnerComingToMe,
-                    isEtaLoading = uiState.isEtaLoading,
-                    etaError = uiState.etaError,
-                    onEditAnniversary = { showDatePicker = true },
-                    onAddPlace = { viewModel.addPlace(it) },
-                    onDeletePlace = viewModel::deletePlace,
-                    onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
-                    onDeleteStory = { story -> viewModel.deleteStory(story) },
-                    onUpdateStory = viewModel::updateStory,
-                    onSetTravelMode = viewModel::setTravelMode,
-                    onUnlink = viewModel::unlinkPartner,
-                    onSelectStory = viewModel::selectStoryForMap,
-                    selectedStoryForMap = uiState.selectedStoryForMap,
-                    onClearSelectedStory = { viewModel.selectStoryForMap(null) },
-                    onSaveJourney = viewModel::saveJourneyAsStory,
-                    currentDayRoute = uiState.currentDayRoute,
-                    isRouteLoading = uiState.isRouteLoading,
-                    fetchTodayRoute = viewModel::fetchTodayRoute
-                )
+                uiState.isLinked -> {
+                    if (uiState.settings.partnerMapEnabled) {
+                        PartnerMapContent(
+                            currentUser = uiState.currentUser,
+                            partner = uiState.partner,
+                            places = uiState.places,
+                            stories = uiState.stories,
+                            anniversaryDate = uiState.currentUser?.anniversaryDate,
+                            etaInfo = uiState.etaInfo,
+                            weatherInfo = uiState.weatherInfo,
+                            isWeatherLoading = uiState.isWeatherLoading,
+                            travelMode = uiState.travelMode,
+                            isPartnerComingToMe = uiState.isPartnerComingToMe,
+                            isEtaLoading = uiState.isEtaLoading,
+                            etaError = uiState.etaError,
+                            settings = uiState.settings,
+                            onEditAnniversary = { showDatePicker = true },
+                            onAddPlace = { viewModel.addPlace(it) },
+                            onDeletePlace = viewModel::deletePlace,
+                            onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
+                            onDeleteStory = { story -> viewModel.deleteStory(story) },
+                            onUpdateStory = viewModel::updateStory,
+                            onSetTravelMode = viewModel::setTravelMode,
+                            onUnlink = viewModel::unlinkPartner,
+                            onSelectStory = viewModel::selectStoryForMap,
+                            selectedStoryForMap = uiState.selectedStoryForMap,
+                            onClearSelectedStory = { viewModel.selectStoryForMap(null) },
+                            onSaveJourney = viewModel::saveJourneyAsStory,
+                            currentDayRoute = uiState.currentDayRoute,
+                            isRouteLoading = uiState.isRouteLoading,
+                            fetchTodayRoute = viewModel::fetchTodayRoute,
+                            onUpdatePartnerMapEnabled = viewModel::updatePartnerMapEnabled,
+                            onUpdateBatteryMode = viewModel::updateBatteryMode,
+                            onUpdateSmartFollowEnabled = viewModel::updateSmartFollowEnabled,
+                            onUpdateLiveEtaEnabled = viewModel::updateLiveEtaEnabled,
+                            onUpdateWeatherWidgetEnabled = viewModel::updateWeatherWidgetEnabled,
+                            onUpdateDashboardEnabled = viewModel::updateDashboardEnabled,
+                            onUpdatePlacesEnabled = viewModel::updatePlacesEnabled,
+                            onUpdateReminderNotificationsEnabled = viewModel::updateReminderNotificationsEnabled,
+                            onUpdateStoryMarkersEnabled = viewModel::updateStoryMarkersEnabled,
+                            onUpdateReminderMarkersEnabled = viewModel::updateReminderMarkersEnabled,
+                            onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
+                            onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
+                            onUpdateDefaultRouteType = viewModel::updateDefaultRouteType
+                        )
+                    } else {
+                        DisabledPartnerMapContent(
+                            settings = uiState.settings,
+                            onUpdatePartnerMapEnabled = viewModel::updatePartnerMapEnabled
+                        )
+                    }
+                }
                 else -> LinkingContent(
                     uiState = uiState,
                     onShortIdChange = viewModel::onPartnerShortIdChange,
@@ -301,6 +329,7 @@ fun PartnerMapContent(
     isPartnerComingToMe: Boolean,
     isEtaLoading: Boolean,
     etaError: String?,
+    settings: AppSettings,
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
@@ -315,9 +344,23 @@ fun PartnerMapContent(
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
     currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
     isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit
+    fetchTodayRoute: () -> Unit,
+    onUpdatePartnerMapEnabled: (Boolean) -> Unit,
+    onUpdateBatteryMode: (BatteryMode) -> Unit,
+    onUpdateSmartFollowEnabled: (Boolean) -> Unit,
+    onUpdateLiveEtaEnabled: (Boolean) -> Unit,
+    onUpdateWeatherWidgetEnabled: (Boolean) -> Unit,
+    onUpdateDashboardEnabled: (Boolean) -> Unit,
+    onUpdatePlacesEnabled: (Boolean) -> Unit,
+    onUpdateReminderNotificationsEnabled: (Boolean) -> Unit,
+    onUpdateStoryMarkersEnabled: (Boolean) -> Unit,
+    onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
+    onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
+    onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
+    onUpdateDefaultRouteType: (DefaultRouteType) -> Unit
 ) {
     var showOurStory by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         MapContent(
@@ -347,20 +390,37 @@ fun PartnerMapContent(
             onSaveJourney = onSaveJourney,
             currentDayRoute = currentDayRoute,
             isRouteLoading = isRouteLoading,
-            fetchTodayRoute = fetchTodayRoute
+            fetchTodayRoute = fetchTodayRoute,
+            settings = settings,
+            onOpenSettings = { showSettings = true }
         )
 
-        // Our Story Button
-        FloatingActionButton(
-            onClick = { showOurStory = true },
+        // Bottom Left FABs
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(bottom = 16.dp, start = 16.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.primary,
-            shape = CircleShape
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(Icons.Default.Favorite, contentDescription = "Our Story")
+            // Our Story Button
+            FloatingActionButton(
+                onClick = { showOurStory = true },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Favorite, contentDescription = "Our Story")
+            }
+
+            // Settings Button
+            FloatingActionButton(
+                onClick = { showSettings = true },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = "Map Settings")
+            }
         }
     }
 
@@ -373,6 +433,64 @@ fun PartnerMapContent(
                 onSelectStory(story)
             }
         )
+    }
+
+    if (showSettings) {
+        PartnerSettingsSheet(
+            settings = settings,
+            onUpdatePartnerMapEnabled = onUpdatePartnerMapEnabled,
+            onUpdateBatteryMode = onUpdateBatteryMode,
+            onUpdateSmartFollowEnabled = onUpdateSmartFollowEnabled,
+            onUpdateLiveEtaEnabled = onUpdateLiveEtaEnabled,
+            onUpdateWeatherWidgetEnabled = onUpdateWeatherWidgetEnabled,
+            onUpdateDashboardEnabled = onUpdateDashboardEnabled,
+            onUpdatePlacesEnabled = onUpdatePlacesEnabled,
+            onUpdateReminderNotificationsEnabled = onUpdateReminderNotificationsEnabled,
+            onUpdateStoryMarkersEnabled = onUpdateStoryMarkersEnabled,
+            onUpdateReminderMarkersEnabled = onUpdateReminderMarkersEnabled,
+            onUpdateTrafficLayerEnabled = onUpdateTrafficLayerEnabled,
+            onUpdateMapDarkThemeEnabled = onUpdateMapDarkThemeEnabled,
+            onUpdateDefaultRouteType = onUpdateDefaultRouteType,
+            onDismiss = { showSettings = false }
+        )
+    }
+}
+
+@Composable
+fun DisabledPartnerMapContent(
+    settings: AppSettings,
+    onUpdatePartnerMapEnabled: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.Map,
+            contentDescription = null,
+            modifier = Modifier.size(100.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            "Partner Map is Disabled",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Background activity, location updates, and map features are currently paused to save battery.",
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = { onUpdatePartnerMapEnabled(true) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Enable Partner Map")
+        }
     }
 }
 

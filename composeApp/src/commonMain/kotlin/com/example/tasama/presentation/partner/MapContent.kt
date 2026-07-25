@@ -5,7 +5,7 @@ import androidx.compose.ui.Modifier
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
-import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.DistanceInfo
 import com.example.tasama.domain.repository.TravelMode
 
 @Composable
@@ -16,21 +16,23 @@ expect fun MapContent(
     places: List<Place> = emptyList(),
     stories: List<Story> = emptyList(),
     anniversaryDate: Long? = null,
-    etaInfo: EtaInfo? = null,
+    distanceInfo: DistanceInfo? = null,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     isWeatherLoading: Boolean = false,
     travelMode: TravelMode = TravelMode.DRIVING,
+    routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
     isPartnerComingToMe: Boolean = false,
-    isEtaLoading: Boolean = false,
-    etaError: String? = null,
+    isDistanceLoading: Boolean = false,
+    distanceError: String? = null,
     onEditAnniversary: () -> Unit = {},
     onAddPlace: (Place) -> Unit = {},
     onDeletePlace: (String) -> Unit = {},
     onAddStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
     onDeleteStory: (Story) -> Unit = {},
-    onUpdateStory: (Story) -> Unit = {},
+    onUpdateStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
     onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {},
+    onSelectStory: (Story?) -> Unit = {},
     selectedStoryForMap: Story? = null,
     onClearSelectedStory: () -> Unit = {},
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit = { _, _, _, _ -> },
@@ -38,5 +40,6 @@ expect fun MapContent(
     isRouteLoading: Boolean = false,
     fetchTodayRoute: () -> Unit = {},
     settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenNavigation: () -> Unit = {}
 )

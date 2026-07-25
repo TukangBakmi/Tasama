@@ -12,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.IBinder
+import android.os.Looper
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.bumptech.glide.Glide
@@ -19,9 +20,11 @@ import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import com.example.tasama.MainActivity
 import com.example.tasama.R
+import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.service.GeofenceMonitor
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
@@ -33,12 +36,15 @@ class LocationService : Service() {
 
     private val authRepository: AuthRepository by inject()
     private val placeRepository: PlaceRepository by inject()
+    private val settingsRepository: SettingsRepository by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private var geofenceMonitor: GeofenceMonitor? = null
     private var partnerObservationJob: Job? = null
+    private var settingsObservationJob: Job? = null
     private var lastPartnerData: User? = null
+    private var currentBatteryMode: BatteryMode = BatteryMode.BALANCED
     private var partnerAvatarBitmap: Bitmap? = null
     private var lastAddress: String? = null
     private var lastAddressLocation: Pair<Double, Double>? = null
@@ -107,8 +113,26 @@ class LocationService : Service() {
         startForeground(NOTIFICATION_ID, notification)
         
         requestLocationUpdates()
+        observeSettings()
         observePartner()
         monitorLocalStatus()
+    }
+
+    private fun observeSettings() {
+        settingsObservationJob?.cancel()
+        settingsObservationJob = serviceScope.launch {
+            settingsRepository.settings.collectLatest { settings ->
+                if (!settings.partnerMapEnabled) {
+                    stopLocationService()
+                    return@collectLatest
+                }
+                
+                if (currentBatteryMode != settings.batteryMode) {
+                    currentBatteryMode = settings.batteryMode
+                    requestLocationUpdates() // Re-request with new intervals
+                }
+            }
+        }
     }
 
     private fun observePartner() {
@@ -386,15 +410,22 @@ class LocationService : Service() {
     }
 
     private fun requestLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
-            .setMinUpdateIntervalMillis(2000)
+        val (interval, minInterval, priority) = when (currentBatteryMode) {
+            BatteryMode.PERFORMANCE -> Triple(3000L, 1000L, Priority.PRIORITY_HIGH_ACCURACY)
+            BatteryMode.BALANCED -> Triple(10000L, 5000L, Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+            BatteryMode.BATTERY_SAVER -> Triple(30000L, 15000L, Priority.PRIORITY_LOW_POWER)
+        }
+
+        val locationRequest = LocationRequest.Builder(priority, interval)
+            .setMinUpdateIntervalMillis(minInterval)
             .build()
 
         try {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
                 locationCallback,
-                null
+                Looper.getMainLooper()
             )
         } catch (_: SecurityException) {
             stopSelf()

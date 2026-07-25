@@ -29,7 +29,7 @@ import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
-import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.DistanceInfo
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -95,20 +95,21 @@ fun PartnerScreen(
                             places = uiState.places,
                             stories = uiState.stories,
                             anniversaryDate = uiState.currentUser?.anniversaryDate,
-                            etaInfo = uiState.etaInfo,
+                            distanceInfo = uiState.distanceInfo,
                             weatherInfo = uiState.weatherInfo,
                             isWeatherLoading = uiState.isWeatherLoading,
                             travelMode = uiState.travelMode,
+                            routeInfo = uiState.routeInfo,
                             isPartnerComingToMe = uiState.isPartnerComingToMe,
-                            isEtaLoading = uiState.isEtaLoading,
-                            etaError = uiState.etaError,
+                            isDistanceLoading = uiState.isDistanceLoading,
+                            distanceError = uiState.distanceError,
                             settings = uiState.settings,
                             onEditAnniversary = { showDatePicker = true },
                             onAddPlace = { viewModel.addPlace(it) },
                             onDeletePlace = viewModel::deletePlace,
                             onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
                             onDeleteStory = { story -> viewModel.deleteStory(story) },
-                            onUpdateStory = viewModel::updateStory,
+                            onUpdateStory = { story, bytes -> viewModel.updateStory(story, bytes) },
                             onSetTravelMode = viewModel::setTravelMode,
                             onUnlink = viewModel::unlinkPartner,
                             onSelectStory = viewModel::selectStoryForMap,
@@ -130,7 +131,8 @@ fun PartnerScreen(
                             onUpdateReminderMarkersEnabled = viewModel::updateReminderMarkersEnabled,
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
                             onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
-                            onUpdateDefaultRouteType = viewModel::updateDefaultRouteType
+                            onUpdateDefaultRouteType = viewModel::updateDefaultRouteType,
+                            onOpenNavigation = viewModel::openNavigation
                         )
                     } else {
                         DisabledPartnerMapContent(
@@ -322,20 +324,21 @@ fun PartnerMapContent(
     places: List<Place>,
     stories: List<com.example.tasama.domain.model.Story> = emptyList(),
     anniversaryDate: Long?,
-    etaInfo: EtaInfo?,
+    distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
     travelMode: com.example.tasama.domain.repository.TravelMode,
+    routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
     isPartnerComingToMe: Boolean,
-    isEtaLoading: Boolean,
-    etaError: String?,
+    isDistanceLoading: Boolean,
+    distanceError: String?,
     settings: AppSettings,
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onAddStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
     onDeleteStory: (com.example.tasama.domain.model.Story) -> Unit,
-    onUpdateStory: (com.example.tasama.domain.model.Story) -> Unit,
+    onUpdateStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
     onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit,
     onSelectStory: (com.example.tasama.domain.model.Story?) -> Unit,
@@ -357,7 +360,8 @@ fun PartnerMapContent(
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
-    onUpdateDefaultRouteType: (DefaultRouteType) -> Unit
+    onUpdateDefaultRouteType: (DefaultRouteType) -> Unit,
+    onOpenNavigation: () -> Unit
 ) {
     var showOurStory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -370,13 +374,14 @@ fun PartnerMapContent(
             places = places,
             stories = stories,
             anniversaryDate = anniversaryDate,
-            etaInfo = etaInfo,
+            distanceInfo = distanceInfo,
             weatherInfo = weatherInfo,
             isWeatherLoading = isWeatherLoading,
             travelMode = travelMode,
+            routeInfo = routeInfo,
             isPartnerComingToMe = isPartnerComingToMe,
-            isEtaLoading = isEtaLoading,
-            etaError = etaError,
+            isDistanceLoading = isDistanceLoading,
+            distanceError = distanceError,
             onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,
@@ -385,6 +390,7 @@ fun PartnerMapContent(
             onUpdateStory = onUpdateStory,
             onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink,
+            onSelectStory = onSelectStory,
             selectedStoryForMap = selectedStoryForMap,
             onClearSelectedStory = onClearSelectedStory,
             onSaveJourney = onSaveJourney,
@@ -392,7 +398,8 @@ fun PartnerMapContent(
             isRouteLoading = isRouteLoading,
             fetchTodayRoute = fetchTodayRoute,
             settings = settings,
-            onOpenSettings = { showSettings = true }
+            onOpenSettings = { showSettings = true },
+            onOpenNavigation = onOpenNavigation
         )
 
         // Bottom Left FABs

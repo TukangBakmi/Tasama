@@ -51,7 +51,7 @@ import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.model.RoutePoint
-import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.DistanceInfo
 import com.example.tasama.domain.repository.TravelMode
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
@@ -69,6 +69,14 @@ import com.example.tasama.util.clipSegmentToRect
 import com.example.tasama.util.findRayIntersection
 import com.example.tasama.util.applyUIAvoidance
 import com.example.tasama.util.MapMarkerVisibilityData
+import com.example.tasama.util.disableHardwareBitmaps
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -85,8 +93,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 val MapHeaderHeight = 88.dp
-val MapFabsHeight = 192.dp
-val MapFabsWidth = 56.dp
 
 @Composable
 fun animateLatLngAsState(
@@ -135,21 +141,23 @@ actual fun MapContent(
     places: List<Place>,
     stories: List<Story>,
     anniversaryDate: Long?,
-    etaInfo: EtaInfo?,
+    distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
     travelMode: TravelMode,
+    routeInfo: com.example.tasama.domain.repository.RouteInfo?,
     isPartnerComingToMe: Boolean,
-    isEtaLoading: Boolean,
-    etaError: String?,
+    isDistanceLoading: Boolean,
+    distanceError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story) -> Unit,
+    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
+    onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
@@ -157,7 +165,8 @@ actual fun MapContent(
     isRouteLoading: Boolean,
     fetchTodayRoute: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenNavigation: () -> Unit
 ) {
     val density = LocalDensity.current
     val indicatorSizePx = with(density) { 56.dp.toPx() }
@@ -227,20 +236,12 @@ actual fun MapContent(
     val currentPartnerLocation = if (partnerLocation != null) animatedPartnerLocation else null
 
     // Navigation Route Logic
-    var decodedPoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
-    LaunchedEffect(etaInfo?.encodedPolyline) {
-        val encoded = etaInfo?.encodedPolyline
-        if (encoded != null) {
-            decodedPoints = withContext(Dispatchers.Default) {
-                decodePolyline(encoded).map { LatLng(it.latitude, it.longitude) }
-            }
-        } else {
-            decodedPoints = emptyList()
-        }
+    val routePoints = remember(routeInfo) {
+        routeInfo?.polylinePoints?.map { LatLng(it.latitude, it.longitude) } ?: emptyList()
     }
-    val routePoints = decodedPoints
 
     // Connect the route points to the animated avatar positions for a seamless look (Optimization 5)
+
     val connectedRoutePoints = remember(routePoints) {
         routePoints.toMutableList()
     }
@@ -284,10 +285,14 @@ actual fun MapContent(
         )
     }
 
-    val distance by remember(currentMyLocation, currentPartnerLocation, etaInfo, isRouteEnabled) {
+    val distance by remember(currentMyLocation, currentPartnerLocation, distanceInfo, routeInfo, isRouteEnabled) {
         derivedStateOf {
-            if (isRouteEnabled && etaInfo != null) {
-                etaInfo.distanceMeters.toDouble()
+            if (isRouteEnabled) {
+                when {
+                    routeInfo != null -> routeInfo.distanceMeters.toDouble()
+                    distanceInfo != null -> distanceInfo.distanceMeters.toDouble()
+                    else -> null
+                }
             } else if (currentMyLocation != null && currentPartnerLocation != null &&
                 currentMyLocation.latitude != 0.0 && currentPartnerLocation.latitude != 0.0) {
                 calculateDistance(Location(currentMyLocation.latitude, currentMyLocation.longitude), Location(currentPartnerLocation.latitude, currentPartnerLocation.longitude))
@@ -416,8 +421,6 @@ actual fun MapContent(
             val pPartner = if (currentPartnerLocation != null) projection.toScreenLocation(currentPartnerLocation).let { Offset(it.x.toFloat(), it.y.toFloat()) } else Offset.Zero
 
             val headerHeightPx = with(density) { MapHeaderHeight.toPx() }
-            val fabsWidthPx = with(density) { MapFabsWidth.toPx() }
-            val fabsHeightPx = with(density) { MapFabsHeight.toPx() }
             val indicatorRadius = with(density) { 28.dp.toPx() } // half of 56.dp
             val edgeMargin = with(density) { 8.dp.toPx() }
 
@@ -434,9 +437,9 @@ actual fun MapContent(
                 // 3. UI Avoidance Logic - Header (Full-width top area)
                 if (p.y < headerHeightPx + indicatorRadius + edgeMargin) return true
                 
-                // 4. UI Avoidance Logic - FABs (Bottom Right)
-                if (p.y > height - fabsHeightPx - indicatorRadius - edgeMargin && 
-                    p.x > width - fabsWidthPx - indicatorRadius - edgeMargin) return true
+                // 4. UI Avoidance Logic - Bottom Right (Previously FAB area)
+                if (p.y > height - 256f - indicatorRadius - edgeMargin && 
+                    p.x > width - 56f - indicatorRadius - edgeMargin) return true
                     
                 return false
             }
@@ -457,12 +460,12 @@ actual fun MapContent(
                     val (clippedMe, clippedPartner) = intersections
 
                     if (!isMeVisible) {
-                        val finalPos = applyUIAvoidance(clippedMe, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        val finalPos = applyUIAvoidance(clippedMe, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                         myEdge = finalPos
                         polyStart = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                     if (!isPartnerVisible) {
-                        val finalPos = applyUIAvoidance(clippedPartner, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        val finalPos = applyUIAvoidance(clippedPartner, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                         partnerEdge = finalPos
                         polyEnd = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
@@ -471,13 +474,13 @@ actual fun MapContent(
                     val center = Offset(width / 2, height / 2)
                     if (!isMeVisible) {
                         val edge = findRayIntersection(center, pMe, width, height)
-                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                         myEdge = finalPos
                         polyStart = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
                     if (!isPartnerVisible) {
                         val edge = findRayIntersection(center, pPartner, width, height)
-                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                        val finalPos = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                         partnerEdge = finalPos
                         polyEnd = projection.fromScreenLocation(Point(finalPos.x.toInt(), finalPos.y.toInt()))
                     }
@@ -487,11 +490,11 @@ actual fun MapContent(
                 val center = Offset(width / 2, height / 2)
                 if (currentMyLocation != null && !isMeVisible) {
                     val edge = findRayIntersection(center, pMe, width, height)
-                    myEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                    myEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                 }
                 if (currentPartnerLocation != null && !isPartnerVisible) {
                     val edge = findRayIntersection(center, pPartner, width, height)
-                    partnerEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, fabsWidthPx, fabsHeightPx)
+                    partnerEdge = applyUIAvoidance(edge, width, height, edgeMargin, indicatorRadius, headerHeightPx, 56f, 256f)
                 }
             }
 
@@ -718,8 +721,18 @@ actual fun MapContent(
                     val markerState = rememberUpdatedMarkerState(position = storyLatLng)
                     val isSelected = selectedStoryForMap?.id == story.id
                     
+                    var isLoaded by remember(story.id) { mutableStateOf(false) }
+                    
                     MarkerComposable(
-                        keys = arrayOf<Any>(story.id, story.title, story.latitude, story.longitude, story.photoUrls.firstOrNull() ?: "", isSelected),
+                        keys = arrayOf<Any>(
+                            story.id, 
+                            story.title, 
+                            story.latitude, 
+                            story.longitude, 
+                            story.photoUrls.firstOrNull() ?: "", 
+                            isSelected,
+                            isLoaded
+                        ),
                         state = markerState,
                         anchor = Offset(0.5f, 0.5f),
                         title = story.title,
@@ -730,7 +743,11 @@ actual fun MapContent(
                             true
                         }
                     ) {
-                        StoryMarker(story = story, isSelected = isSelected)
+                        StoryMarker(
+                            story = story, 
+                            isSelected = isSelected,
+                            onImageLoaded = { isLoaded = it }
+                        )
                     }
                 }
             }
@@ -771,7 +788,7 @@ actual fun MapContent(
 
             markerData?.let { data ->
                 if (data.showPolyline) {
-                    // 1. Dynamic Route (Google Directions) - Only visible when partner info is shown
+                    // 1. Dynamic Route (OSRM-based) - Only visible when partner info is shown
                     if (routeAlpha.value > 0f && connectedRoutePoints.isNotEmpty()) {
                         val isWalking = travelMode == TravelMode.WALKING
                         
@@ -819,7 +836,7 @@ actual fun MapContent(
                     }
 
                     MarkerComposable(
-                        keys = arrayOf<Any>(distance ?: 0.0, etaInfo ?: 0, labelPosition, routeAlpha.value),
+                        keys = arrayOf<Any>(distance ?: 0.0, distanceInfo ?: 0, labelPosition, routeAlpha.value),
                         state = rememberUpdatedMarkerState(position = labelPosition),
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
@@ -862,11 +879,7 @@ actual fun MapContent(
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 val distanceText = if ((distance ?: 0.0) < 1000) "${distance?.toInt() ?: 0}m" else "${((distance ?: 0.0) / 1000).format(1)}km"
-                                val labelText = if (routeAlpha.value > 0.5f && etaInfo != null) {
-                                    "${etaInfo.durationText} ($distanceText)"
-                                } else {
-                                    distanceText
-                                }
+                                val labelText = distanceText
 
                                 Text(
                                     text = labelText,
@@ -923,8 +936,8 @@ actual fun MapContent(
                         showAddStorySheet = null
                         editingStory = null
                     },
-                    onUpdateStory = { story ->
-                        onUpdateStory(story)
+                    onUpdateStory = { story, bytes ->
+                        onUpdateStory(story, bytes)
                         showAddStorySheet = null
                         editingStory = null
                     },
@@ -1062,10 +1075,11 @@ actual fun MapContent(
                         user = partner,
                         status = rememberPartnerStatus(partner, currentTime),
                         currentTime = currentTime,
-                        etaInfo = etaInfo,
+                        distanceInfo = distanceInfo,
                         isPartnerComingToMe = isPartnerComingToMe,
-                        isEtaLoading = isEtaLoading,
-                        etaError = etaError
+                        isDistanceLoading = isDistanceLoading,
+                        distanceError = distanceError,
+                        onOpenNavigation = onOpenNavigation
                     )
                 }
             }
@@ -1906,7 +1920,11 @@ fun CombinedUserMarker(
 }
 
 @Composable
-fun StoryMarker(story: Story, isSelected: Boolean = false) {
+fun StoryMarker(
+    story: Story, 
+    isSelected: Boolean = false,
+    onImageLoaded: (Boolean) -> Unit = {}
+) {
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.25f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -1929,6 +1947,31 @@ fun StoryMarker(story: Story, isSelected: Boolean = false) {
         hasAppeared = true
     }
 
+    // Image loading state for MarkerComposable re-rendering
+    val imageUrl = story.photoUrls.firstOrNull()
+    val context = LocalPlatformContext.current
+    
+    val painter = if (!imageUrl.isNullOrEmpty()) {
+        val request = remember(imageUrl, context) {
+            ImageRequest.Builder(context)
+                .data(imageUrl)
+                .disableHardwareBitmaps()
+                .crossfade(false)
+                .build()
+        }
+        rememberAsyncImagePainter(
+            model = request,
+            contentScale = ContentScale.Crop
+        )
+    } else null
+
+    val imageState = painter?.state?.collectAsState()?.value
+    val isLoaded = imageState is AsyncImagePainter.State.Success
+    
+    LaunchedEffect(isLoaded) {
+        onImageLoaded(isLoaded)
+    }
+
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -1940,7 +1983,7 @@ fun StoryMarker(story: Story, isSelected: Boolean = false) {
                 shape = CircleShape
                 clip = false
             }
-            .background(Color.White, CircleShape)
+            .background(MaterialTheme.colorScheme.surface, CircleShape)
             .border(
                 width = if (isSelected) 3.dp else 2.dp,
                 color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081),
@@ -1949,15 +1992,34 @@ fun StoryMarker(story: Story, isSelected: Boolean = false) {
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
-        if (story.photoUrls.isNotEmpty()) {
-            coil3.compose.AsyncImage(
-                model = story.photoUrls.first(),
+        if (painter != null) {
+            Image(
+                painter = painter,
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                contentScale = ContentScale.Crop
             )
+            
+            // Re-composition trigger when image is loaded
+            // This ensures that MarkerComposable takes a new snapshot
+            if (!isLoaded) {
+                // Background/Placeholder while loading
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         } else {
             Icon(
                 imageVector = Icons.Default.Favorite,
@@ -1997,7 +2059,7 @@ fun AddStorySheetContent(
     location: LatLng,
     initialStory: Story? = null,
     onAddStory: (Story, List<ByteArray>) -> Unit,
-    onUpdateStory: (Story) -> Unit,
+    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onCancel: () -> Unit,
     onCreatePlace: (LatLng, String, String) -> Unit
 ) {
@@ -2027,11 +2089,10 @@ fun AddStorySheetContent(
             file?.let { platformFile ->
                 scope.launch {
                     val bytes = platformFile.readBytes()
-                    // Temporary preview URL using file path if available, 
-                    // otherwise we'd need a way to show ByteArray as image.
-                    val previewUrl = platformFile.path ?: "temp_${Clock.System.now().toEpochMilliseconds()}"
-                    newPhotos.add(previewUrl to bytes)
-                    photoUrls.add(previewUrl)
+                    // Use a unique ID instead of potentially null path
+                    val tempId = "temp_${Clock.System.now().toEpochMilliseconds()}"
+                    newPhotos.add(tempId to bytes)
+                    photoUrls.add(tempId)
                 }
             }
         }
@@ -2114,8 +2175,15 @@ fun AddStorySheetContent(
                     ) { page ->
                         val url = photoUrls[page]
                         Box(modifier = Modifier.fillMaxSize()) {
+                            val model = remember(url) {
+                                if (url.startsWith("temp_")) {
+                                    newPhotos.find { it.first == url }?.second
+                                } else {
+                                    url
+                                }
+                            }
                             coil3.compose.AsyncImage(
-                                model = url,
+                                model = model,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -2191,7 +2259,7 @@ fun AddStorySheetContent(
                     if (initialStory == null) {
                         onAddStory(story, newPhotos.map { it.second })
                     } else {
-                        onUpdateStory(story)
+                        onUpdateStory(story, newPhotos.map { it.second })
                     }
                 },
                 modifier = Modifier.weight(1f),
@@ -2257,9 +2325,9 @@ fun SaveJourneySheetContent(
             file?.let { platformFile ->
                 scope.launch {
                     val bytes = platformFile.readBytes()
-                    val previewUrl = platformFile.path ?: "temp_${Clock.System.now().toEpochMilliseconds()}"
-                    newPhotos.add(previewUrl to bytes)
-                    photoUrls.add(previewUrl)
+                    val tempId = "temp_${Clock.System.now().toEpochMilliseconds()}"
+                    newPhotos.add(tempId to bytes)
+                    photoUrls.add(tempId)
                 }
             }
         }
@@ -2363,8 +2431,15 @@ fun SaveJourneySheetContent(
                     ) { page ->
                         val url = photoUrls[page]
                         Box(modifier = Modifier.fillMaxSize()) {
+                            val model = remember(url) {
+                                if (url.startsWith("temp_")) {
+                                    newPhotos.find { it.first == url }?.second
+                                } else {
+                                    url
+                                }
+                            }
                             coil3.compose.AsyncImage(
-                                model = url,
+                                model = model,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -2431,10 +2506,11 @@ fun PartnerStatusCard(
     user: User,
     status: ConnectionStatus,
     currentTime: Long,
-    etaInfo: EtaInfo? = null, 
+    distanceInfo: DistanceInfo? = null,
     isPartnerComingToMe: Boolean = false,
-    isEtaLoading: Boolean = false,
-    etaError: String? = null
+    isDistanceLoading: Boolean = false,
+    distanceError: String? = null,
+    onOpenNavigation: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -2493,28 +2569,50 @@ fun PartnerStatusCard(
                 val isMoving = speed > 0.3f
 
                 if (isMoving) {
-                    if (etaInfo != null) {
-                        val etaStatus = if (isPartnerComingToMe) {
-                            "Coming to you • ETA ${etaInfo.durationText}"
+                    if (distanceInfo != null) {
+                        val distanceM = distanceInfo.distanceMeters.toDouble()
+                        val distanceText = if (distanceM < 1000) {
+                            "${distanceM.toInt()}m"
                         } else {
-                            "${etaInfo.durationText} away"
+                            "${(distanceM / 1000).format(1)}km"
                         }
+                        val distanceStatus = if (isPartnerComingToMe) {
+                            "Coming to you • $distanceText away"
+                        } else {
+                            "$distanceText away"
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = distanceStatus,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            IconButton(
+                                onClick = onOpenNavigation,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Navigation,
+                                    contentDescription = "Open Navigation",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    } else if (isDistanceLoading) {
                         Text(
-                            text = etaStatus,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (isEtaLoading) {
-                        Text(
-                            text = "Calculating ETA...",
+                            text = "Calculating distance...",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                             fontWeight = FontWeight.Medium
                         )
-                    } else if (etaError != null) {
+                    } else if (distanceError != null) {
                         Text(
-                            text = "ETA Unavailable",
+                            text = "Distance Unavailable",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Medium

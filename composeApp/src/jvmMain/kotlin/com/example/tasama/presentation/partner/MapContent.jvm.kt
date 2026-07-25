@@ -12,7 +12,7 @@ import com.example.tasama.domain.model.User
 
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.repository.TravelMode
-import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.DistanceInfo
 
 @Composable
 actual fun MapContent(
@@ -22,21 +22,22 @@ actual fun MapContent(
     places: List<com.example.tasama.domain.model.Place>,
     stories: List<Story>,
     anniversaryDate: Long?,
-    etaInfo: EtaInfo?,
+    distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
     travelMode: TravelMode,
     isPartnerComingToMe: Boolean,
-    isEtaLoading: Boolean,
-    etaError: String?,
+    isDistanceLoading: Boolean,
+    distanceError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (com.example.tasama.domain.model.Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story) -> Unit,
+    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
+    onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
@@ -44,7 +45,8 @@ actual fun MapContent(
     isRouteLoading: Boolean,
     fetchTodayRoute: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenNavigation: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

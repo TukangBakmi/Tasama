@@ -11,7 +11,6 @@ import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
-import com.example.tasama.domain.repository.EtaInfo
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.StoryRepository
@@ -37,11 +36,14 @@ data class PartnerUiState(
     val isGuest: Boolean = false,
     val partnerShortIdInput: String = "",
     val isOperationSuccess: Boolean = false,
-    val etaInfo: EtaInfo? = null,
+    val distanceInfo: com.example.tasama.domain.repository.DistanceInfo? = null,
     val isPartnerComingToMe: Boolean = false,
-    val isEtaLoading: Boolean = false,
-    val etaError: String? = null,
+    val isDistanceLoading: Boolean = false,
+    val distanceError: String? = null,
     val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING,
+    val routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
+    val isRouteToPartnerLoading: Boolean = false,
+    val routeToPartnerError: String? = null,
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
@@ -67,7 +69,8 @@ class PartnerViewModel(
     private var placesObservationJob: Job? = null
     private var storiesObservationJob: Job? = null
     private var currentUserJob: Job? = null
-    private var etaJob: Job? = null
+    private var distanceJob: Job? = null
+    private var routeToPartnerJob: Job? = null
     private var weatherJob: Job? = null
 
     private var currentPartnerId: String? = null
@@ -76,9 +79,9 @@ class PartnerViewModel(
     private var currentStoriesUserId: String? = null
     private var currentStoriesPartnerId: String? = null
 
-    private var lastEtaRequestLocationMe: Pair<Double, Double>? = null
-    private var lastEtaRequestLocationPartner: Pair<Double, Double>? = null
-    private var lastEtaTimestamp: Long = 0
+    private var lastDistanceRequestLocationMe: Pair<Double, Double>? = null
+    private var lastDistanceRequestLocationPartner: Pair<Double, Double>? = null
+    private var lastDistanceTimestamp: Long = 0
     private var lastDistanceMeters: Int? = null
 
     private var lastWeatherRequestLocation: Pair<Double, Double>? = null
@@ -119,14 +122,14 @@ class PartnerViewModel(
         partnerObservationJob?.cancel()
         placesObservationJob?.cancel()
         storiesObservationJob?.cancel()
-        etaJob?.cancel()
+        distanceJob?.cancel()
         weatherJob?.cancel()
         _uiState.update {
             it.copy(
                 partner = null,
                 places = emptyList(),
                 stories = emptyList(),
-                etaInfo = null,
+                distanceInfo = null,
                 weatherInfo = null
             )
         }
@@ -148,7 +151,7 @@ class PartnerViewModel(
                             handlePartnerAndRequests(user)
                             observePlaces(user.id, user.partnerId)
                             observeStories(user.id, user.partnerId)
-                            checkAndFetchEta()
+                            checkAndFetchDistance()
                         }
                     }
                 } else {
@@ -188,27 +191,35 @@ class PartnerViewModel(
         
         partnerObservationJob?.cancel()
         partnerObservationJob = viewModelScope.launch {
-            authRepository.getUserFlow(partnerId).collect { partner ->
-                val oldPartner = _uiState.value.partner
-                _uiState.update { it.copy(partner = partner) }
-                
-                if (partner != null) {
-                    // Fetch weather for partner
-                    if (partner.latitude != null && partner.longitude != null) {
-                        checkAndFetchWeather(partner.latitude, partner.longitude)
-                    }
-
-                    // Trigger ETA if partner just started moving or moved significantly
-                    val justStartedMoving = (partner.speed ?: 0f) > 0.3f && (oldPartner?.speed ?: 0f) <= 0.3f
-                    checkAndFetchEta(force = justStartedMoving)
+            authRepository.getUserFlow(partnerId)
+                .distinctUntilChanged { old, new ->
+                    // Throttling: Only update UI if significant fields changed
+                    if (old == null || new == null) return@distinctUntilChanged false
+                    
+                    val posChanged = (old.latitude != new.latitude || old.longitude != new.longitude)
+                    val batteryChanged = abs((old.batteryLevel ?: 0f) - (new.batteryLevel ?: 0f)) > 0.05f || old.isCharging != new.isCharging
+                    val statusChanged = old.connectionType != new.connectionType || old.name != new.name
+                    
+                    !posChanged && !batteryChanged && !statusChanged
                 }
-            }
+                .collect { partner ->
+                    _uiState.update { it.copy(partner = partner) }
+                    
+                    if (partner != null) {
+                        // Fetch weather for partner
+                        if (partner.latitude != null && partner.longitude != null) {
+                            checkAndFetchWeather(partner.latitude, partner.longitude)
+                        }
+
+                        // Trigger distance update if partner moved
+                        checkAndFetchDistance()
+                    }
+                }
         }
     }
 
-    private fun checkAndFetchEta(force: Boolean = false) {
-        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.liveEtaEnabled) return
-        if (uiState.value.isEtaLoading) return
+    private fun checkAndFetchDistance(force: Boolean = false) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
         
         val me = uiState.value.currentUser ?: return
         val partner = uiState.value.partner ?: return
@@ -219,52 +230,87 @@ class PartnerViewModel(
         val pLon = partner.longitude ?: return
 
         val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
-        val locationChangedSignificantly = lastEtaRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > 30 } ?: true ||
-                lastEtaRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > 30 } ?: true
         
-        val timePassed = now - lastEtaTimestamp > 30_000 // 30 seconds
+        // Define thresholds based on battery mode
+        val (distThreshold, timeThreshold) = when (_uiState.value.settings.batteryMode) {
+            BatteryMode.PERFORMANCE -> 5.0 to 5_000L // 5m, 5s
+            BatteryMode.BALANCED -> 15.0 to 15_000L // 15m, 15s
+            BatteryMode.BATTERY_SAVER -> 50.0 to 60_000L // 50m, 60s
+        }
+
+        val locationChangedSignificantly = lastDistanceRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > distThreshold } ?: true ||
+                lastDistanceRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > distThreshold } ?: true
+        
+        val timePassed = now - lastDistanceTimestamp > timeThreshold
 
         if (force || locationChangedSignificantly || timePassed) {
-            fetchEta(myLat, myLon, pLat, pLon, uiState.value.travelMode)
+            updateDistance(myLat, myLon, pLat, pLon)
+            if (_uiState.value.settings.liveEtaEnabled) {
+                fetchRouteToPartner(myLat, myLon, pLat, pLon)
+            }
         }
     }
 
-    private fun fetchEta(myLat: Double, myLon: Double, pLat: Double, pLon: Double, mode: com.example.tasama.domain.repository.TravelMode) {
-        etaJob?.cancel()
-        lastEtaTimestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
-        // Update these even before the request to avoid immediate retries on failure
-        lastEtaRequestLocationMe = myLat to myLon
-        lastEtaRequestLocationPartner = pLat to pLon
-        
-        etaJob = viewModelScope.launch {
-            _uiState.update { it.copy(isEtaLoading = true, etaError = null) }
-            val result = directionsRepository.getEta(pLat, pLon, myLat, myLon, mode)
-            result.onSuccess { etaInfo ->
-                val isComing = lastDistanceMeters?.let { it > etaInfo.distanceMeters + 50 } ?: false
-                _uiState.update { 
-                    it.copy(
-                        etaInfo = etaInfo, 
-                        isPartnerComingToMe = isComing,
-                        isEtaLoading = false,
-                        etaError = null
-                    ) 
+    private fun fetchRouteToPartner(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
+        routeToPartnerJob?.cancel()
+        routeToPartnerJob = viewModelScope.launch {
+            _uiState.update { it.copy(isRouteToPartnerLoading = true, routeToPartnerError = null) }
+            directionsRepository.getRoute(myLat, myLon, pLat, pLon, _uiState.value.travelMode)
+                .onSuccess { routeInfo ->
+                    _uiState.update {
+                        it.copy(
+                            routeInfo = routeInfo,
+                            isRouteToPartnerLoading = false,
+                            routeToPartnerError = null
+                        )
+                    }
                 }
-                lastDistanceMeters = etaInfo.distanceMeters
-            }.onFailure { error ->
-                _uiState.update { 
-                    it.copy(
-                        isEtaLoading = false,
-                        etaError = error.message ?: "Failed to fetch ETA",
-                        etaInfo = null
-                    ) 
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isRouteToPartnerLoading = false,
+                            routeToPartnerError = error.message ?: "Failed to fetch route"
+                        )
+                    }
                 }
-            }
         }
+    }
+
+    private fun updateDistance(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
+        lastDistanceTimestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        lastDistanceRequestLocationMe = myLat to myLon
+        lastDistanceRequestLocationPartner = pLat to pLon
+        
+        val distanceInfo = directionsRepository.getDistance(pLat, pLon, myLat, myLon)
+        
+        // Filter out tiny jitter to prevent unnecessary UI updates
+        if (lastDistanceMeters != null && abs(lastDistanceMeters!! - distanceInfo.distanceMeters) < 2 && !(_uiState.value.isDistanceLoading)) {
+             return
+        }
+
+        val isComing = lastDistanceMeters?.let { it > distanceInfo.distanceMeters + 2 } ?: false
+        
+        _uiState.update { 
+            it.copy(
+                distanceInfo = distanceInfo, 
+                isPartnerComingToMe = isComing,
+                isDistanceLoading = false,
+                distanceError = null
+            ) 
+        }
+        lastDistanceMeters = distanceInfo.distanceMeters
     }
 
     private fun checkAndFetchWeather(lat: Double, lon: Double) {
         if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.weatherWidgetEnabled) return
         val now = Clock.System.now().toEpochMilliseconds()
+        
+        val (distThreshold, timeThreshold) = when (_uiState.value.settings.batteryMode) {
+            BatteryMode.PERFORMANCE -> 500.0 to 10 * 60 * 1000L // 500m, 10m
+            BatteryMode.BALANCED -> 1000.0 to 20 * 60 * 1000L // 1km, 20m
+            BatteryMode.BATTERY_SAVER -> 3000.0 to 60 * 60 * 1000L // 3km, 1h
+        }
+
         val lastLoc = lastWeatherRequestLocation
         val distance = if (lastLoc != null) {
             calculateDistance(lat, lon, lastLoc.first, lastLoc.second)
@@ -272,8 +318,7 @@ class PartnerViewModel(
             Double.MAX_VALUE
         }
 
-        // Fetch if it's the first time, if they moved more than 500m, or if 15 minutes have passed
-        if (lastWeatherRequestLocation == null || distance > 500 || (now - lastWeatherTimestamp) > 15 * 60 * 1000) {
+        if (lastWeatherRequestLocation == null || distance > distThreshold || (now - lastWeatherTimestamp) > timeThreshold) {
             fetchWeather(lat, lon)
         }
     }
@@ -309,7 +354,14 @@ class PartnerViewModel(
     fun setTravelMode(mode: com.example.tasama.domain.repository.TravelMode) {
         if (_uiState.value.travelMode == mode) return
         _uiState.update { it.copy(travelMode = mode) }
-        checkAndFetchEta(force = true)
+        checkAndFetchDistance(force = true)
+    }
+
+    fun openNavigation() {
+        val partner = _uiState.value.partner ?: return
+        val lat = partner.latitude ?: return
+        val lon = partner.longitude ?: return
+        directionsRepository.openExternalNavigation(lat, lon, _uiState.value.travelMode)
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -324,6 +376,9 @@ class PartnerViewModel(
     private fun observePlaces(userId: String, partnerId: String?) {
         if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.placesEnabled) {
             _uiState.update { it.copy(places = emptyList()) }
+            currentPlacesUserId = null
+            currentPlacesPartnerId = null
+            placesObservationJob?.cancel()
             return
         }
         if (placesObservationJob?.isActive == true && currentPlacesUserId == userId && currentPlacesPartnerId == partnerId) return
@@ -360,6 +415,9 @@ class PartnerViewModel(
     private fun observeStories(userId: String, partnerId: String?) {
         if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.storyMarkersEnabled) {
             _uiState.update { it.copy(stories = emptyList()) }
+            currentStoriesUserId = null
+            currentStoriesPartnerId = null
+            storiesObservationJob?.cancel()
             return
         }
         if (storiesObservationJob?.isActive == true && currentStoriesUserId == userId && currentStoriesPartnerId == partnerId) return
@@ -401,13 +459,6 @@ class PartnerViewModel(
         }
     }
 
-    private fun compressImage(bytes: ByteArray): ByteArray {
-        // Simple size-based check (placeholder for actual compression)
-        // In a real app, use a platform-specific image library or a KMP-friendly one.
-        // For now, we'll keep it as-is or implement a simple check.
-        return bytes
-    }
-
     fun deleteStory(story: Story) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
@@ -421,10 +472,26 @@ class PartnerViewModel(
         }
     }
 
-    fun updateStory(story: Story) {
+    fun updateStory(story: Story, photoBytes: List<ByteArray> = emptyList()) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            storyRepository.updateStory(uid, story)
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                // Compress and upload new photos
+                val compressedPhotos = photoBytes.map { bytes ->
+                    compressImage(bytes, 80)
+                }
+                
+                val newPhotoUrls = compressedPhotos.map { bytes ->
+                    storyRepository.uploadStoryPhoto(uid, bytes)
+                }
+                
+                val storyWithPhotos = story.copy(photoUrls = story.photoUrls + newPhotoUrls)
+                storyRepository.updateStory(uid, storyWithPhotos)
+                _uiState.update { it.copy(isLoading = false, successMessage = "Story updated successfully!") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to update story") }
+            }
         }
     }
 

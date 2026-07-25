@@ -474,7 +474,7 @@ fun AvatarSelectionDialog(
         title = { Text("Choose Avatar") },
         text = {
             Column {
-                Text("Select an avatar from the gallery or pick from your phone.")
+                Text("Select an avatar or pick from your phone.")
                 Spacer(modifier = Modifier.height(16.dp))
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                     columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),

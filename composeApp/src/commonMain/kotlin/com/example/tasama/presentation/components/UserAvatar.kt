@@ -36,7 +36,7 @@ fun UserAvatar(
     val name = user?.name ?: fallbackName ?: "?"
     
     val avatarRes = remember(avatarUrl) {
-        val resName = avatarUrl?.replace(".png", "")?.lowercase()
+        val resName = avatarUrl?.removePrefix("/")?.replace(".png", "")?.lowercase()
         when (resName) {
             "avatar_1", "avatar1" -> Res.drawable.Avatar1
             "avatar_2", "avatar2" -> Res.drawable.Avatar2

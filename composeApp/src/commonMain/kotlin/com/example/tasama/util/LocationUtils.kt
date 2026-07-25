@@ -159,7 +159,7 @@ fun applyUIAvoidance(
     }
 
     // 2. Avoid FABs (Bottom Right)
-    if (finalY > height - fabsHeightPx - indicatorRadiusPx - avoidanceMarginPx && 
+    if (finalY > height - fabsHeightPx - indicatorRadiusPx - avoidanceMarginPx &&
         finalX > width - fabsWidthPx - indicatorRadiusPx - avoidanceMarginPx) {
         if (width - finalX < height - finalY) {
             finalX = width - fabsWidthPx - indicatorRadiusPx - avoidanceMarginPx

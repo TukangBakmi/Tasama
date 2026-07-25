@@ -44,7 +44,7 @@ import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.model.WeatherInfo
-import com.example.tasama.domain.repository.EtaInfo
+import com.example.tasama.domain.repository.DistanceInfo
 import com.example.tasama.domain.repository.TravelMode
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
@@ -78,8 +78,6 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import coil3.compose.AsyncImage
 
 val MapHeaderHeight = 88.dp
-val MapFabsHeight = 192.dp
-val MapFabsWidth = 56.dp
 
 @OptIn(ExperimentalForeignApi::class)
 class MapCoordinator(
@@ -119,6 +117,10 @@ class MapCoordinator(
                             strokeColor = UIColor.systemBlueColor
                             lineWidth = 4.0
                             lineDashPattern = listOf(10, 10)
+                        }
+                        style == "OSRM_Route" -> {
+                            strokeColor = UIColor.systemBlueColor
+                            lineWidth = 6.0
                         }
                         else -> {
                             strokeColor = UIColor.systemBlueColor
@@ -164,21 +166,23 @@ actual fun MapContent(
     places: List<Place>,
     stories: List<Story>,
     anniversaryDate: Long?,
-    etaInfo: EtaInfo?,
+    distanceInfo: DistanceInfo?,
     weatherInfo: WeatherInfo?,
     isWeatherLoading: Boolean,
     travelMode: TravelMode,
+    routeInfo: com.example.tasama.domain.repository.RouteInfo?,
     isPartnerComingToMe: Boolean,
-    isEtaLoading: Boolean,
-    etaError: String?,
+    isDistanceLoading: Boolean,
+    distanceError: String?,
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story) -> Unit,
+    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
+    onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
     onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
@@ -186,7 +190,8 @@ actual fun MapContent(
     isRouteLoading: Boolean,
     fetchTodayRoute: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenNavigation: () -> Unit
 ) {
     var mapViewInstance by remember { mutableStateOf<MKMapView?>(null) }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
@@ -343,6 +348,19 @@ actual fun MapContent(
                 mapView.removeOverlays(mapView.overlays)
                 mapView.showsTraffic = settings.trafficLayerEnabled
                 
+                if (settings.partnerMapEnabled && routeInfo != null && routeInfo.polylinePoints.isNotEmpty()) {
+                    memScoped {
+                        val coords = allocArray<CLLocationCoordinate2D>(routeInfo.polylinePoints.size)
+                        routeInfo.polylinePoints.forEachIndexed { index, pt ->
+                            coords[index].latitude = pt.latitude
+                            coords[index].longitude = pt.longitude
+                        }
+                        val polyline = MKPolyline.polylineWithCoordinates(coords, routeInfo.polylinePoints.size.toULong())
+                        polyline.setTitle("OSRM_Route")
+                        mapView.addOverlay(polyline)
+                    }
+                }
+
                 if (settings.partnerMapEnabled && isPreviewingJourney && currentDayRoute.isNotEmpty()) {
                     memScoped {
                         val coords = allocArray<CLLocationCoordinate2D>(currentDayRoute.size)
@@ -522,10 +540,11 @@ actual fun MapContent(
                 user = partner,
                 status = status,
                 currentTime = currentTime,
-                etaInfo = etaInfo,
+                distanceInfo = distanceInfo,
                 isPartnerComingToMe = isPartnerComingToMe,
-                isEtaLoading = isEtaLoading,
-                etaError = etaError
+                isDistanceLoading = isDistanceLoading,
+                distanceError = distanceError,
+                onOpenNavigation = onOpenNavigation
             )
         }
 
@@ -884,10 +903,11 @@ fun PartnerStatusCard(
     user: User,
     status: ConnectionStatus,
     currentTime: Long,
-    etaInfo: EtaInfo? = null,
+    distanceInfo: DistanceInfo? = null,
     isPartnerComingToMe: Boolean = false,
-    isEtaLoading: Boolean = false,
-    etaError: String? = null
+    isDistanceLoading: Boolean = false,
+    distanceError: String? = null,
+    onOpenNavigation: () -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -944,21 +964,37 @@ fun PartnerStatusCard(
                 }
 
                 if (user.speed ?: 0f > 0.3f) {
-                    if (etaInfo != null) {
-                        val etaStatus = if (isPartnerComingToMe) {
-                            "Coming to you • ETA ${etaInfo.durationText}"
+                    if (distanceInfo != null) {
+                        val distanceStatus = if (isPartnerComingToMe) {
+                            "Coming to you • ${distanceInfo.distanceText} away"
                         } else {
-                            "${etaInfo.durationText} away"
+                            "${distanceInfo.distanceText} away"
                         }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = distanceStatus,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            IconButton(
+                                onClick = onOpenNavigation,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Navigation,
+                                    contentDescription = "Open Navigation",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    } else if (isDistanceLoading) {
                         Text(
-                            text = etaStatus,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (isEtaLoading) {
-                        Text(
-                            text = "Calculating ETA...",
+                            text = "Calculating distance...",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                             fontWeight = FontWeight.Medium

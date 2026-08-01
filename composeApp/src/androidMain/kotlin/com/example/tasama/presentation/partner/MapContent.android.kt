@@ -222,7 +222,7 @@ actual fun MapContent(
         )
     }
 
-    val distance by remember(currentMyLocation, currentPartnerLocation, distanceInfo) {
+    val distance by remember(currentMyLocation, currentPartnerLocation) {
         derivedStateOf {
             if (currentMyLocation != null && currentPartnerLocation != null &&
                 currentMyLocation.latitude != 0.0 && currentPartnerLocation.latitude != 0.0) {
@@ -232,7 +232,7 @@ actual fun MapContent(
     }
 
     val isTogether by remember(distance) {
-        derivedStateOf { (distance ?: Double.MAX_VALUE) < 25.0 }
+        derivedStateOf { (distance ?: Double.MAX_VALUE) < 150.0 }
     }
 
     val fitPaddingPx = with(density) { 100.dp.toPx().toInt() }
@@ -499,10 +499,15 @@ actual fun MapContent(
                 )
                 
                 MarkerComposable(
-                    keys = arrayOf<Any>(currentUser?.id ?: "me", partner?.id ?: "partner"),
+                    keys = arrayOf<Any>(
+                        currentUser?.id ?: "me", 
+                        partner?.id ?: "partner",
+                        currentUser?.avatarUrl ?: "",
+                        partner?.avatarUrl ?: ""
+                    ),
                     state = rememberUpdatedMarkerState(position = midpoint),
                     anchor = Offset(0.5f, 0.5f),
-                    visible = (markerData?.isMeVisible ?: true),
+                    visible = (markerData?.isMeVisible ?: true || markerData?.isPartnerVisible ?: true),
                     zIndex = 2f
                 ) {
                     CombinedUserMarker(

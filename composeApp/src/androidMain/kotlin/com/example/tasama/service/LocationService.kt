@@ -412,7 +412,7 @@ class LocationService : Service() {
     private fun requestLocationUpdates() {
         val (interval, minInterval, priority) = when (currentBatteryMode) {
             BatteryMode.PERFORMANCE -> Triple(3000L, 1000L, Priority.PRIORITY_HIGH_ACCURACY)
-            BatteryMode.BALANCED -> Triple(10000L, 5000L, Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+            BatteryMode.BALANCED -> Triple(10000L, 5000L, Priority.PRIORITY_HIGH_ACCURACY) // Use HIGH_ACCURACY for emulators/reliability
             BatteryMode.BATTERY_SAVER -> Triple(30000L, 15000L, Priority.PRIORITY_LOW_POWER)
         }
 

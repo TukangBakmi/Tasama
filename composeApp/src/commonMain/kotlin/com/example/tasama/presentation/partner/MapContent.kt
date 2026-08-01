@@ -6,7 +6,6 @@ import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
-import com.example.tasama.domain.repository.TravelMode
 
 @Composable
 expect fun MapContent(
@@ -19,8 +18,6 @@ expect fun MapContent(
     distanceInfo: DistanceInfo? = null,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     isWeatherLoading: Boolean = false,
-    travelMode: TravelMode = TravelMode.DRIVING,
-    routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
     isPartnerComingToMe: Boolean = false,
     isDistanceLoading: Boolean = false,
     distanceError: String? = null,
@@ -30,16 +27,10 @@ expect fun MapContent(
     onAddStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
     onDeleteStory: (Story) -> Unit = {},
     onUpdateStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
-    onSetTravelMode: (TravelMode) -> Unit = {},
     onUnlink: () -> Unit = {},
     onSelectStory: (Story?) -> Unit = {},
     selectedStoryForMap: Story? = null,
     onClearSelectedStory: () -> Unit = {},
-    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit = { _, _, _, _ -> },
-    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint> = emptyList(),
-    isRouteLoading: Boolean = false,
-    fetchTodayRoute: () -> Unit = {},
     settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
-    onOpenSettings: () -> Unit = {},
-    onOpenNavigation: () -> Unit = {}
+    onOpenSettings: () -> Unit = {}
 )

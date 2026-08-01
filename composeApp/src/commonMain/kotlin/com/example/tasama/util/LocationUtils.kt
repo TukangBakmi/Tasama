@@ -1,7 +1,6 @@
 package com.example.tasama.util
 
 import androidx.compose.ui.geometry.Offset
-import com.example.tasama.domain.model.RoutePoint
 import kotlin.math.*
 
 data class Location(val latitude: Double, val longitude: Double)
@@ -24,69 +23,6 @@ fun calculateDistance(p1: Location, p2: Location): Double {
 fun Double.format(digits: Int): String {
     val factor = 10.0.pow(digits)
     return (round(this * factor) / factor).toString()
-}
-
-/**
- * Decodes an encoded polyline string into a list of Location points.
- */
-fun decodePolyline(encoded: String): List<Location> {
-    val poly = ArrayList<Location>()
-    var index = 0
-    val len = encoded.length
-    var lat = 0
-    var lng = 0
-
-    while (index < len) {
-        var b: Int
-        var shift = 0
-        var result = 0
-        do {
-            b = encoded[index++].code - 63
-            result = result or (b and 0x1f shl shift)
-            shift += 5
-        } while (b >= 0x20)
-        val dlat = if (result and 1 != 0) (result shr 1).inv() else result shr 1
-        lat += dlat
-
-        shift = 0
-        result = 0
-        do {
-            b = encoded[index++].code - 63
-            result = result or (b and 0x1f shl shift)
-            shift += 5
-        } while (b >= 0x20)
-        val dlng = if (result and 1 != 0) (result shr 1).inv() else result shr 1
-        lng += dlng
-
-        val p = Location(lat.toDouble() / 1E5, lng.toDouble() / 1E5)
-        poly.add(p)
-    }
-
-    return poly
-}
-
-fun getPolylineMidpoint(points: List<Location>): Location? {
-    if (points.isEmpty()) return null
-    if (points.size == 1) return points[0]
-
-    var totalDistance = 0.0
-    for (i in 0 until points.size - 1) {
-        totalDistance += calculateDistance(points[i], points[i+1])
-    }
-
-    val midDistance = totalDistance / 2.0
-    var currentDistance = 0.0
-    for (i in 0 until points.size - 1) {
-        val segmentDist = calculateDistance(points[i], points[i+1])
-        if (currentDistance + segmentDist >= midDistance) {
-            val ratio = if (segmentDist > 0) (midDistance - currentDistance) / segmentDist else 0.0
-            val lat = points[i].latitude + (points[i+1].latitude - points[i].latitude) * ratio
-            val lng = points[i].longitude + (points[i+1].longitude - points[i].longitude) * ratio
-            return Location(lat, lng)
-        }
-        currentDistance += segmentDist
-    }
-    return points.last()
 }
 
 /**

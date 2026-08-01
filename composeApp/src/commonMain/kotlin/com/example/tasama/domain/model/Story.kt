@@ -14,8 +14,5 @@ data class Story(
     val photoUrls: List<String> = emptyList(),
     val address: String = "",
     val createdBy: String = "",
-    val route: List<RoutePoint> = emptyList(),
-    val totalDistance: Double? = null,
-    val totalDuration: Long? = null,
     val visitedPlaces: List<String> = emptyList()
 )

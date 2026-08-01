@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
-import com.example.tasama.domain.model.DefaultRouteType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,7 +24,6 @@ fun PartnerSettingsSheet(
     onUpdatePartnerMapEnabled: (Boolean) -> Unit,
     onUpdateBatteryMode: (BatteryMode) -> Unit,
     onUpdateSmartFollowEnabled: (Boolean) -> Unit,
-    onUpdateLiveEtaEnabled: (Boolean) -> Unit,
     onUpdateWeatherWidgetEnabled: (Boolean) -> Unit,
     onUpdateDashboardEnabled: (Boolean) -> Unit,
     onUpdatePlacesEnabled: (Boolean) -> Unit,
@@ -34,7 +32,6 @@ fun PartnerSettingsSheet(
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
-    onUpdateDefaultRouteType: (DefaultRouteType) -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -92,29 +89,7 @@ fun PartnerSettingsSheet(
                     )
                 }
 
-                SettingsSection(title = "Navigation & Widgets") {
-                    SettingsSegmentedControl(
-                        title = "Default Travel Mode",
-                        options = DefaultRouteType.entries,
-                        selectedOption = settings.defaultRouteType,
-                        onOptionSelected = onUpdateDefaultRouteType,
-                        labelProvider = {
-                            when (it) {
-                                DefaultRouteType.CAR -> "Car"
-                                DefaultRouteType.MOTORCYCLE -> "Motorbike"
-                                DefaultRouteType.WALKING -> "Walk"
-                            }
-                        }
-                    )
-
-                    SettingsToggleItem(
-                        title = "Live ETA",
-                        subtitle = "Show estimated arrival time when moving",
-                        icon = Icons.Default.Timer,
-                        checked = settings.liveEtaEnabled,
-                        onCheckedChange = onUpdateLiveEtaEnabled
-                    )
-
+                SettingsSection(title = "Widgets") {
                     SettingsToggleItem(
                         title = "Weather Widget",
                         subtitle = "Show partner's local weather",

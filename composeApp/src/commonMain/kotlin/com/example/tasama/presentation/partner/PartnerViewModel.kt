@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
-import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.model.Place
-import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
@@ -40,16 +38,10 @@ data class PartnerUiState(
     val isPartnerComingToMe: Boolean = false,
     val isDistanceLoading: Boolean = false,
     val distanceError: String? = null,
-    val travelMode: com.example.tasama.domain.repository.TravelMode = com.example.tasama.domain.repository.TravelMode.DRIVING,
-    val routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
-    val isRouteToPartnerLoading: Boolean = false,
-    val routeToPartnerError: String? = null,
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
     val selectedStoryForMap: Story? = null,
-    val currentDayRoute: List<RoutePoint> = emptyList(),
-    val isRouteLoading: Boolean = false,
     val settings: AppSettings = AppSettings()
 )
 
@@ -70,7 +62,6 @@ class PartnerViewModel(
     private var storiesObservationJob: Job? = null
     private var currentUserJob: Job? = null
     private var distanceJob: Job? = null
-    private var routeToPartnerJob: Job? = null
     private var weatherJob: Job? = null
 
     private var currentPartnerId: String? = null
@@ -103,16 +94,6 @@ class PartnerViewModel(
                     stopAllActivities()
                 } else if (!previousSettings.partnerMapEnabled) {
                     refresh()
-                }
-
-                // If travel mode changed in settings, update UI and fetch ETA
-                val newTravelMode = when (settings.defaultRouteType) {
-                    DefaultRouteType.CAR -> com.example.tasama.domain.repository.TravelMode.DRIVING
-                    DefaultRouteType.MOTORCYCLE -> com.example.tasama.domain.repository.TravelMode.MOTORCYCLE
-                    DefaultRouteType.WALKING -> com.example.tasama.domain.repository.TravelMode.WALKING
-                }
-                if (_uiState.value.travelMode != newTravelMode) {
-                    setTravelMode(newTravelMode)
                 }
             }
         }
@@ -200,7 +181,11 @@ class PartnerViewModel(
                     val batteryChanged = abs((old.batteryLevel ?: 0f) - (new.batteryLevel ?: 0f)) > 0.05f || old.isCharging != new.isCharging
                     val statusChanged = old.connectionType != new.connectionType || old.name != new.name
                     
-                    !posChanged && !batteryChanged && !statusChanged
+                    // Include timestamp and accuracy to keep connection status "Live" when stationary
+                    val timeUpdated = old.lastLocationUpdate != new.lastLocationUpdate
+                    val accuracyChanged = abs((old.accuracy ?: 0f) - (new.accuracy ?: 0f)) > 10f
+                    
+                    !posChanged && !batteryChanged && !statusChanged && !timeUpdated && !accuracyChanged
                 }
                 .collect { partner ->
                     _uiState.update { it.copy(partner = partner) }
@@ -245,34 +230,6 @@ class PartnerViewModel(
 
         if (force || locationChangedSignificantly || timePassed) {
             updateDistance(myLat, myLon, pLat, pLon)
-            if (_uiState.value.settings.liveEtaEnabled) {
-                fetchRouteToPartner(myLat, myLon, pLat, pLon)
-            }
-        }
-    }
-
-    private fun fetchRouteToPartner(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
-        routeToPartnerJob?.cancel()
-        routeToPartnerJob = viewModelScope.launch {
-            _uiState.update { it.copy(isRouteToPartnerLoading = true, routeToPartnerError = null) }
-            directionsRepository.getRoute(myLat, myLon, pLat, pLon, _uiState.value.travelMode)
-                .onSuccess { routeInfo ->
-                    _uiState.update {
-                        it.copy(
-                            routeInfo = routeInfo,
-                            isRouteToPartnerLoading = false,
-                            routeToPartnerError = null
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            isRouteToPartnerLoading = false,
-                            routeToPartnerError = error.message ?: "Failed to fetch route"
-                        )
-                    }
-                }
         }
     }
 
@@ -351,18 +308,6 @@ class PartnerViewModel(
         }
     }
 
-    fun setTravelMode(mode: com.example.tasama.domain.repository.TravelMode) {
-        if (_uiState.value.travelMode == mode) return
-        _uiState.update { it.copy(travelMode = mode) }
-        checkAndFetchDistance(force = true)
-    }
-
-    fun openNavigation() {
-        val partner = _uiState.value.partner ?: return
-        val lat = partner.latitude ?: return
-        val lon = partner.longitude ?: return
-        directionsRepository.openExternalNavigation(lat, lon, _uiState.value.travelMode)
-    }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val r = 6371e3
@@ -587,11 +532,11 @@ class PartnerViewModel(
         }
     }
 
-    fun updateLocation(lat: Double, lon: Double, speed: Float? = null) {
+    fun updateLocation(lat: Double, lon: Double, speed: Float? = null, accuracy: Float? = null) {
         if (!_uiState.value.settings.partnerMapEnabled) return
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            authRepository.updateLocation(uid, lat, lon, speed)
+            authRepository.updateLocation(uid, lat, lon, speed, accuracy)
         }
     }
 
@@ -611,67 +556,6 @@ class PartnerViewModel(
 
     fun selectStoryForMap(story: Story?) {
         _uiState.update { it.copy(selectedStoryForMap = story) }
-    }
-
-    fun fetchTodayRoute() {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRouteLoading = true) }
-            val now = Clock.System.now().toEpochMilliseconds()
-            // Start of day (00:00:00)
-            val startOfDay = now - (now % (24 * 60 * 60 * 1000))
-            
-            val route = authRepository.getRouteForDay(uid, startOfDay, now)
-            _uiState.update { it.copy(currentDayRoute = route, isRouteLoading = false) }
-        }
-    }
-
-    fun saveJourneyAsStory(title: String, description: String, category: String, photoBytes: List<ByteArray>) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        val route = _uiState.value.currentDayRoute
-        if (route.isEmpty()) return
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                val distance = calculateTotalRouteDistance(route)
-                val duration = if (route.size > 1) route.last().timestamp - route.first().timestamp else 0L
-                
-                // Compress and upload photos
-                val compressedPhotos = photoBytes.map { bytes -> compressImage(bytes, 80) }
-                val photoUrls = compressedPhotos.map { bytes -> storyRepository.uploadStoryPhoto(uid, bytes) }
-
-                val story = Story(
-                    title = title,
-                    description = description,
-                    category = category,
-                    date = Clock.System.now().toEpochMilliseconds(),
-                    latitude = route.first().latitude,
-                    longitude = route.first().longitude,
-                    photoUrls = photoUrls,
-                    route = route,
-                    totalDistance = distance,
-                    totalDuration = duration,
-                    createdBy = uid
-                )
-                
-                storyRepository.addStory(uid, story)
-                _uiState.update { it.copy(isLoading = false, successMessage = "Journey saved as story!") }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to save journey") }
-            }
-        }
-    }
-
-    private fun calculateTotalRouteDistance(route: List<RoutePoint>): Double {
-        var total = 0.0
-        for (i in 0 until route.size - 1) {
-            total += calculateDistance(
-                route[i].latitude, route[i].longitude,
-                route[i + 1].latitude, route[i + 1].longitude
-            )
-        }
-        return total
     }
 
     fun onIdCopied() {
@@ -697,10 +581,6 @@ class PartnerViewModel(
 
     fun updateSmartFollowEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.updateSmartFollowEnabled(enabled) }
-    }
-
-    fun updateLiveEtaEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.updateLiveEtaEnabled(enabled) }
     }
 
     fun updateWeatherWidgetEnabled(enabled: Boolean) {
@@ -733,9 +613,5 @@ class PartnerViewModel(
 
     fun updateMapDarkThemeEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.updateMapDarkThemeEnabled(enabled) }
-    }
-
-    fun updateDefaultRouteType(type: DefaultRouteType) {
-        viewModelScope.launch { settingsRepository.updateDefaultRouteType(type) }
     }
 }

@@ -1,6 +1,5 @@
 package com.example.tasama.data.repository
 
-import com.example.tasama.domain.model.RoutePoint
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import dev.gitlive.firebase.Firebase
@@ -211,40 +210,22 @@ class FirebaseAuthRepository : AuthRepository {
                 "speed" to speed
                 "accuracy" to accuracy
                 "lastLocationUpdate" to timestamp
+                "lastActive" to timestamp
             }
-            
-            // Log location history
-            val point = RoutePoint(lat, lon, timestamp)
-            firestore.collection("users").document(uid)
-                .collection("locationHistory")
-                .add(point)
-                
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    override suspend fun getRouteForDay(uid: String, dateStart: Long, dateEnd: Long): List<RoutePoint> {
-        return try {
-            firestore.collection("users").document(uid)
-                .collection("locationHistory")
-                .where { "timestamp" greaterThanOrEqualTo dateStart }
-                .where { "timestamp" lessThanOrEqualTo dateEnd }
-                .get()
-                .documents
-                .map { it.data<RoutePoint>() }
-                .sortedBy { it.timestamp }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
-    }
+
 
     override suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean) {
         try {
+            val timestamp = Clock.System.now().toEpochMilliseconds()
             firestore.collection("users").document(uid).updateFields {
                 "batteryLevel" to level
                 "isCharging" to isCharging
+                "lastActive" to timestamp
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -253,8 +234,10 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateConnectionType(uid: String, type: String) {
         try {
+            val timestamp = Clock.System.now().toEpochMilliseconds()
             firestore.collection("users").document(uid).updateFields {
                 "connectionType" to type
+                "lastActive" to timestamp
             }
         } catch (e: Exception) {
             e.printStackTrace()

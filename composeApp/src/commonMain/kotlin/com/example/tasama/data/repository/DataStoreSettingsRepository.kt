@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.*
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.AppTheme
 import com.example.tasama.domain.model.BatteryMode
-import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,7 +21,6 @@ class DataStoreSettingsRepository(
         val PARTNER_MAP_ENABLED = booleanPreferencesKey("partner_map_enabled")
         val BATTERY_MODE = stringPreferencesKey("battery_mode")
         val SMART_FOLLOW_ENABLED = booleanPreferencesKey("smart_follow_enabled")
-        val LIVE_ETA_ENABLED = booleanPreferencesKey("live_eta_enabled")
         val WEATHER_WIDGET_ENABLED = booleanPreferencesKey("weather_widget_enabled")
         val DASHBOARD_ENABLED = booleanPreferencesKey("dashboard_enabled")
         val PLACES_ENABLED = booleanPreferencesKey("places_enabled")
@@ -31,7 +29,6 @@ class DataStoreSettingsRepository(
         val REMINDER_MARKERS_ENABLED = booleanPreferencesKey("reminder_markers_enabled")
         val TRAFFIC_LAYER_ENABLED = booleanPreferencesKey("traffic_layer_enabled")
         val MAP_DARK_THEME_ENABLED = booleanPreferencesKey("map_dark_theme_enabled")
-        val DEFAULT_ROUTE_TYPE = stringPreferencesKey("default_route_type")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
@@ -42,7 +39,6 @@ class DataStoreSettingsRepository(
             partnerMapEnabled = preferences[PreferencesKeys.PARTNER_MAP_ENABLED] ?: true,
             batteryMode = BatteryMode.valueOf(preferences[PreferencesKeys.BATTERY_MODE] ?: BatteryMode.BALANCED.name),
             smartFollowEnabled = preferences[PreferencesKeys.SMART_FOLLOW_ENABLED] ?: true,
-            liveEtaEnabled = preferences[PreferencesKeys.LIVE_ETA_ENABLED] ?: true,
             weatherWidgetEnabled = preferences[PreferencesKeys.WEATHER_WIDGET_ENABLED] ?: true,
             dashboardEnabled = preferences[PreferencesKeys.DASHBOARD_ENABLED] ?: true,
             placesEnabled = preferences[PreferencesKeys.PLACES_ENABLED] ?: true,
@@ -50,8 +46,7 @@ class DataStoreSettingsRepository(
             storyMarkersEnabled = preferences[PreferencesKeys.STORY_MARKERS_ENABLED] ?: true,
             reminderMarkersEnabled = preferences[PreferencesKeys.REMINDER_MARKERS_ENABLED] ?: true,
             trafficLayerEnabled = preferences[PreferencesKeys.TRAFFIC_LAYER_ENABLED] ?: false,
-            mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false,
-            defaultRouteType = DefaultRouteType.valueOf(preferences[PreferencesKeys.DEFAULT_ROUTE_TYPE] ?: DefaultRouteType.CAR.name)
+            mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false
         )
     }
 
@@ -85,10 +80,6 @@ class DataStoreSettingsRepository(
         dataStore.edit { preferences -> preferences[PreferencesKeys.SMART_FOLLOW_ENABLED] = enabled }
     }
 
-    override suspend fun updateLiveEtaEnabled(enabled: Boolean) {
-        dataStore.edit { preferences -> preferences[PreferencesKeys.LIVE_ETA_ENABLED] = enabled }
-    }
-
     override suspend fun updateWeatherWidgetEnabled(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.WEATHER_WIDGET_ENABLED] = enabled }
     }
@@ -119,9 +110,5 @@ class DataStoreSettingsRepository(
 
     override suspend fun updateMapDarkThemeEnabled(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] = enabled }
-    }
-
-    override suspend fun updateDefaultRouteType(type: DefaultRouteType) {
-        dataStore.edit { preferences -> preferences[PreferencesKeys.DEFAULT_ROUTE_TYPE] = type.name }
     }
 }

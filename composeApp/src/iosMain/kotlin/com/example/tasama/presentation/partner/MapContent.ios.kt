@@ -45,7 +45,7 @@ import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.model.WeatherInfo
 import com.example.tasama.domain.repository.DistanceInfo
-import com.example.tasama.domain.repository.TravelMode
+
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.example.tasama.util.*
@@ -105,10 +105,6 @@ class MapCoordinator(
                 MKPolylineRenderer(overlay).apply {
                     val style = overlay.title
                     when {
-                        style == "Journey" -> {
-                            strokeColor = UIColor.systemPinkColor
-                            lineWidth = 6.0
-                        }
                         style == "Story" -> {
                             strokeColor = UIColor.systemPinkColor
                             lineWidth = 8.0
@@ -117,10 +113,6 @@ class MapCoordinator(
                             strokeColor = UIColor.systemBlueColor
                             lineWidth = 4.0
                             lineDashPattern = listOf(10, 10)
-                        }
-                        style == "OSRM_Route" -> {
-                            strokeColor = UIColor.systemBlueColor
-                            lineWidth = 6.0
                         }
                         else -> {
                             strokeColor = UIColor.systemBlueColor
@@ -169,8 +161,6 @@ actual fun MapContent(
     distanceInfo: DistanceInfo?,
     weatherInfo: WeatherInfo?,
     isWeatherLoading: Boolean,
-    travelMode: TravelMode,
-    routeInfo: com.example.tasama.domain.repository.RouteInfo?,
     isPartnerComingToMe: Boolean,
     isDistanceLoading: Boolean,
     distanceError: String?,
@@ -180,18 +170,12 @@ actual fun MapContent(
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story, List<ByteArray>) -> Unit,
-    onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
     onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
-    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
-    currentDayRoute: List<RoutePoint>,
-    isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit,
-    onOpenNavigation: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     var mapViewInstance by remember { mutableStateOf<MKMapView?>(null) }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }
@@ -199,11 +183,7 @@ actual fun MapContent(
     val scope = rememberCoroutineScope()
     
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
-    var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     
-    var isPreviewingJourney by rememberSaveable { mutableStateOf(false) }
-    var showSaveJourneySheet by remember { mutableStateOf(false) }
-
     var currentTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -220,7 +200,6 @@ actual fun MapContent(
             onMapClick = { lat, lon ->
                 isPartnerInfoVisible = false
                 onClearSelectedStory()
-                isPreviewingJourney = false
                 
                 val clickedStory = stories.find { story ->
                     calculateDistance(Location(lat, lon), Location(story.latitude, story.longitude)) <= 50.0
@@ -348,32 +327,6 @@ actual fun MapContent(
                 mapView.removeOverlays(mapView.overlays)
                 mapView.showsTraffic = settings.trafficLayerEnabled
                 
-                if (settings.partnerMapEnabled && routeInfo != null && routeInfo.polylinePoints.isNotEmpty()) {
-                    memScoped {
-                        val coords = allocArray<CLLocationCoordinate2D>(routeInfo.polylinePoints.size)
-                        routeInfo.polylinePoints.forEachIndexed { index, pt ->
-                            coords[index].latitude = pt.latitude
-                            coords[index].longitude = pt.longitude
-                        }
-                        val polyline = MKPolyline.polylineWithCoordinates(coords, routeInfo.polylinePoints.size.toULong())
-                        polyline.setTitle("OSRM_Route")
-                        mapView.addOverlay(polyline)
-                    }
-                }
-
-                if (settings.partnerMapEnabled && isPreviewingJourney && currentDayRoute.isNotEmpty()) {
-                    memScoped {
-                        val coords = allocArray<CLLocationCoordinate2D>(currentDayRoute.size)
-                        currentDayRoute.forEachIndexed { index, pt ->
-                            coords[index].latitude = pt.latitude
-                            coords[index].longitude = pt.longitude
-                        }
-                        val polyline = MKPolyline.polylineWithCoordinates(coords, currentDayRoute.size.toULong())
-                        polyline.setTitle("Journey")
-                        mapView.addOverlay(polyline)
-                    }
-                }
-
                 selectedStoryForMap?.let { story ->
                     if (settings.partnerMapEnabled && settings.storyMarkersEnabled && story.route.isNotEmpty()) {
                         memScoped {
@@ -543,8 +496,7 @@ actual fun MapContent(
                 distanceInfo = distanceInfo,
                 isPartnerComingToMe = isPartnerComingToMe,
                 isDistanceLoading = isDistanceLoading,
-                distanceError = distanceError,
-                onOpenNavigation = onOpenNavigation
+                distanceError = distanceError
             )
         }
 
@@ -595,24 +547,6 @@ actual fun MapContent(
             }
         }
 
-        AnimatedVisibility(
-            visible = isPreviewingJourney && currentDayRoute.isNotEmpty(),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
-        ) {
-            Button(
-                onClick = { showSaveJourneySheet = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                elevation = ButtonDefaults.buttonElevation(8.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.AutoAwesome, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Save Journey as Story")
-            }
-        }
-
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -620,29 +554,6 @@ actual fun MapContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.End
         ) {
-            if (settings.partnerMapEnabled) {
-                SmallFloatingActionButton(
-                    onClick = {
-                        if (!isPreviewingJourney) {
-                            fetchTodayRoute()
-                            isPreviewingJourney = true
-                        } else {
-                            isPreviewingJourney = false
-                            onClearSelectedStory()
-                        }
-                    },
-                    containerColor = if (isPreviewingJourney) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    contentColor = if (isPreviewingJourney) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary,
-                    shape = CircleShape
-                ) {
-                    if (isRouteLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(imageVector = if (isPreviewingJourney) Icons.Default.Close else Icons.Default.History, contentDescription = null)
-                    }
-                }
-            }
-
             SmallFloatingActionButton(
                 onClick = { fitAllMarkers() },
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
@@ -650,17 +561,6 @@ actual fun MapContent(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
-            }
-
-            if (settings.partnerMapEnabled) {
-                SmallFloatingActionButton(
-                    onClick = { isRouteEnabled = !isRouteEnabled },
-                    containerColor = if (isRouteEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    contentColor = if (isRouteEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
-                ) {
-                    Icon(imageVector = Icons.Default.Directions, contentDescription = "Route")
-                }
             }
         }
     }
@@ -906,8 +806,7 @@ fun PartnerStatusCard(
     distanceInfo: DistanceInfo? = null,
     isPartnerComingToMe: Boolean = false,
     isDistanceLoading: Boolean = false,
-    distanceError: String? = null,
-    onOpenNavigation: () -> Unit = {}
+    distanceError: String? = null
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -980,17 +879,6 @@ fun PartnerStatusCard(
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
-                            IconButton(
-                                onClick = onOpenNavigation,
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Navigation,
-                                    contentDescription = "Open Navigation",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
                         }
                     } else if (isDistanceLoading) {
                         Text(
@@ -1092,15 +980,7 @@ fun PartnerStatusCard(
     }
 }
 
-@Composable
-fun TravelModeButton(selected: Boolean, onClick: () -> Unit, icon: ImageVector) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape)
-    ) {
-        Icon(icon, null, tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
+
 
 @Composable
 fun OffScreenMarker(edgePoint: Offset, angle: Float, user: User?, onTap: () -> Unit) {

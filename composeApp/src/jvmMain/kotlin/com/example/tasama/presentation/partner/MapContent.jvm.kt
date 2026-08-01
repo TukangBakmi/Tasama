@@ -9,9 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.tasama.domain.model.User
-
 import com.example.tasama.domain.model.Story
-import com.example.tasama.domain.repository.TravelMode
 import com.example.tasama.domain.repository.DistanceInfo
 
 @Composable
@@ -25,7 +23,6 @@ actual fun MapContent(
     distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
-    travelMode: TravelMode,
     isPartnerComingToMe: Boolean,
     isDistanceLoading: Boolean,
     distanceError: String?,
@@ -35,18 +32,12 @@ actual fun MapContent(
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story, List<ByteArray>) -> Unit,
-    onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
     onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
-    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
-    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
-    isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit,
-    onOpenNavigation: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

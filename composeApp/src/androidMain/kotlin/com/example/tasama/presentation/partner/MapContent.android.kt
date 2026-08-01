@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,15 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.LocalHospital
-import androidx.compose.material.icons.filled.Park
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,25 +42,23 @@ import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
-import com.example.tasama.domain.model.RoutePoint
+import com.example.tasama.domain.model.WeatherInfo
+import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.DistanceInfo
-import com.example.tasama.domain.repository.TravelMode
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.theme.LocalIsDarkTheme
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.tasama.util.reverseGeocode
 import com.example.tasama.util.calculateDistance
-import com.example.tasama.util.decodePolyline
-import com.example.tasama.util.getPolylineMidpoint
 import com.example.tasama.util.Location
 import com.example.tasama.util.format
 import com.example.tasama.util.clipSegmentToRect
 import com.example.tasama.util.findRayIntersection
 import com.example.tasama.util.applyUIAvoidance
-import com.example.tasama.util.MapMarkerVisibilityData
 import com.example.tasama.util.disableHardwareBitmaps
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
@@ -81,16 +71,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.*
 import com.example.tasama.R
 import kotlin.time.Clock
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PlatformFile
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 
 val MapHeaderHeight = 88.dp
 
@@ -142,10 +129,8 @@ actual fun MapContent(
     stories: List<Story>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
-    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    weatherInfo: WeatherInfo?,
     isWeatherLoading: Boolean,
-    travelMode: TravelMode,
-    routeInfo: com.example.tasama.domain.repository.RouteInfo?,
     isPartnerComingToMe: Boolean,
     isDistanceLoading: Boolean,
     distanceError: String?,
@@ -155,21 +140,14 @@ actual fun MapContent(
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onDeleteStory: (Story) -> Unit,
     onUpdateStory: (Story, List<ByteArray>) -> Unit,
-    onSetTravelMode: (TravelMode) -> Unit,
     onUnlink: () -> Unit,
     onSelectStory: (Story?) -> Unit,
     selectedStoryForMap: Story?,
     onClearSelectedStory: () -> Unit,
-    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
-    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
-    isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit,
-    settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit,
-    onOpenNavigation: () -> Unit
+    settings: AppSettings,
+    onOpenSettings: () -> Unit
 ) {
     val density = LocalDensity.current
-    val indicatorSizePx = with(density) { 56.dp.toPx() }
 
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var showDeleteStoryDialog by remember { mutableStateOf<Story?>(null) }
@@ -179,11 +157,7 @@ actual fun MapContent(
     var editingPlace by remember { mutableStateOf<Place?>(null) }
     var editingStory by remember { mutableStateOf<Story?>(null) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var isRouteEnabled by rememberSaveable { mutableStateOf(false) }
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
-    
-    var isPreviewingJourney by rememberSaveable { mutableStateOf(false) }
-    var showSaveJourneySheet by remember { mutableStateOf(false) }
     
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
@@ -235,43 +209,6 @@ actual fun MapContent(
     val currentMyLocation = if (myLocation != null) animatedMyLocation else null
     val currentPartnerLocation = if (partnerLocation != null) animatedPartnerLocation else null
 
-    // Navigation Route Logic
-    val routePoints = remember(routeInfo) {
-        routeInfo?.polylinePoints?.map { LatLng(it.latitude, it.longitude) } ?: emptyList()
-    }
-
-    // Connect the route points to the animated avatar positions for a seamless look (Optimization 5)
-
-    val connectedRoutePoints = remember(routePoints) {
-        routePoints.toMutableList()
-    }
-    
-    // Update endpoints in-place without reallocating the whole list
-    SideEffect {
-        if (connectedRoutePoints.isNotEmpty() && currentMyLocation != null && currentPartnerLocation != null) {
-            connectedRoutePoints[0] = currentPartnerLocation
-            connectedRoutePoints[connectedRoutePoints.lastIndex] = currentMyLocation
-        }
-    }
-
-    val routeAlpha = animateFloatAsState(
-        targetValue = if (isRouteEnabled && routePoints.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(600),
-        label = "routeAlpha"
-    )
-
-    // Cache midpoint for performance (Optimization 2)
-    var routeMidpoint by remember { mutableStateOf<LatLng?>(null) }
-    LaunchedEffect(connectedRoutePoints) {
-        if (connectedRoutePoints.isNotEmpty()) {
-            routeMidpoint = withContext(Dispatchers.Default) {
-                getPolylineMidpoint(connectedRoutePoints.map { Location(it.latitude, it.longitude) })?.let {
-                    LatLng(it.latitude, it.longitude)
-                }
-            }
-        }
-    }
-
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(partnerLocation ?: LatLng(-6.2000, 106.8166), 12f)
     }
@@ -285,15 +222,9 @@ actual fun MapContent(
         )
     }
 
-    val distance by remember(currentMyLocation, currentPartnerLocation, distanceInfo, routeInfo, isRouteEnabled) {
+    val distance by remember(currentMyLocation, currentPartnerLocation, distanceInfo) {
         derivedStateOf {
-            if (isRouteEnabled) {
-                when {
-                    routeInfo != null -> routeInfo.distanceMeters.toDouble()
-                    distanceInfo != null -> distanceInfo.distanceMeters.toDouble()
-                    else -> null
-                }
-            } else if (currentMyLocation != null && currentPartnerLocation != null &&
+            if (currentMyLocation != null && currentPartnerLocation != null &&
                 currentMyLocation.latitude != 0.0 && currentPartnerLocation.latitude != 0.0) {
                 calculateDistance(Location(currentMyLocation.latitude, currentMyLocation.longitude), Location(currentPartnerLocation.latitude, currentPartnerLocation.longitude))
             } else null
@@ -313,11 +244,6 @@ actual fun MapContent(
 
             scope.launch {
                 val update = when {
-                    isRouteEnabled && connectedRoutePoints.isNotEmpty() -> {
-                        val builder = LatLngBounds.Builder()
-                        connectedRoutePoints.forEach { builder.include(it) }
-                        CameraUpdateFactory.newLatLngBounds(builder.build(), fitPaddingPx)
-                    }
                     hasMyLoc && hasPartnerLoc -> {
                         if (currentMyLocation == currentPartnerLocation) {
                             CameraUpdateFactory.newCameraPosition(
@@ -354,13 +280,6 @@ actual fun MapContent(
         }
     }
 
-    // Auto-fit when route is enabled or points change (e.g. travel mode change)
-    LaunchedEffect(isRouteEnabled, connectedRoutePoints) {
-        if (isRouteEnabled && connectedRoutePoints.isNotEmpty()) {
-            fitMarkers()
-        }
-    }
-
     // Smart Follow Mode: Disable on user gesture
     LaunchedEffect(cameraPositionState.isMoving) {
         if (cameraPositionState.isMoving && cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) {
@@ -382,16 +301,7 @@ actual fun MapContent(
         selectedStoryForMap?.let { story ->
             isFollowModeEnabled = false
             
-            if (story.route.isNotEmpty()) {
-                val builder = LatLngBounds.Builder()
-                story.route.forEach { builder.include(LatLng(it.latitude, it.longitude)) }
-                scope.launch {
-                    cameraPositionState.animate(
-                        CameraUpdateFactory.newLatLngBounds(builder.build(), fitPaddingPx),
-                        1000
-                    )
-                }
-            } else {
+            if (story.latitude != 0.0) {
                 val storyLatLng = LatLng(story.latitude, story.longitude)
                 scope.launch {
                     cameraPositionState.animate(
@@ -536,7 +446,6 @@ actual fun MapContent(
                 println("DEBUG: Map clicked at $latLng")
                 isPartnerInfoVisible = false
                 onClearSelectedStory()
-                isPreviewingJourney = false
                 
                 val clickedStory = stories.find { story ->
                     calculateDistance(Location(latLng.latitude, latLng.longitude), Location(story.latitude, story.longitude)) <= 50.0
@@ -588,21 +497,17 @@ actual fun MapContent(
                     (currentMyLocation.latitude + currentPartnerLocation.latitude) / 2,
                     (currentMyLocation.longitude + currentPartnerLocation.longitude) / 2
                 )
-                val statusMe = rememberPartnerStatus(currentUser, currentTime)
-                val statusPartner = rememberPartnerStatus(partner, currentTime)
                 
                 MarkerComposable(
-                    keys = arrayOf<Any>(currentUser?.id ?: "me", partner?.id ?: "partner", isTogether),
+                    keys = arrayOf<Any>(currentUser?.id ?: "me", partner?.id ?: "partner"),
                     state = rememberUpdatedMarkerState(position = midpoint),
                     anchor = Offset(0.5f, 0.5f),
-                    visible = (markerData?.isMeVisible ?: true) && !isTogether,
+                    visible = (markerData?.isMeVisible ?: true),
                     zIndex = 2f
                 ) {
                     CombinedUserMarker(
                         currentUser = currentUser,
-                        partner = partner,
-                        statusMe = statusMe,
-                        statusPartner = statusPartner
+                        partner = partner
                     )
                 }
             }
@@ -752,91 +657,24 @@ actual fun MapContent(
                 }
             }
 
-            // Today's Journey Preview Polyline
-            if (isPreviewingJourney && currentDayRoute.isNotEmpty()) {
-                val todayPoints = remember(currentDayRoute) {
-                    currentDayRoute.map { LatLng(it.latitude, it.longitude) }
-                }
-                Polyline(
-                    points = todayPoints,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    width = 12f,
-                    jointType = JointType.ROUND,
-                    startCap = RoundCap(),
-                    endCap = RoundCap(),
-                    zIndex = 1f
-                )
-            }
-
-            // Selected Story Journey Polyline
-            selectedStoryForMap?.let { story ->
-                if (story.route.isNotEmpty()) {
-                    val storyRoutePoints = remember(story.route) {
-                        story.route.map { LatLng(it.latitude, it.longitude) }
-                    }
-                    Polyline(
-                        points = storyRoutePoints,
-                        color = Color(0xFFFF4081),
-                        width = 12f,
-                        jointType = JointType.ROUND,
-                        startCap = RoundCap(),
-                        endCap = RoundCap(),
-                        zIndex = 1f
-                    )
-                }
-            }
-
             markerData?.let { data ->
                 if (data.showPolyline) {
-                    // 1. Dynamic Route (OSRM-based) - Only visible when partner info is shown
-                    if (routeAlpha.value > 0f && connectedRoutePoints.isNotEmpty()) {
-                        val isWalking = travelMode == TravelMode.WALKING
-                        
-                        // Route Border/Shadow for depth
-                        Polyline(
-                            points = connectedRoutePoints,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f * routeAlpha.value),
-                            width = 16f,
-                            jointType = JointType.ROUND,
-                            startCap = RoundCap(),
-                            endCap = RoundCap(),
-                            pattern = if (isWalking) listOf(Dash(20f), Gap(20f)) else null
-                        )
-                        // Main Route Line
-                        Polyline(
-                            points = connectedRoutePoints,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = routeAlpha.value),
-                            width = 10f,
-                            jointType = JointType.ROUND,
-                            startCap = RoundCap(),
-                            endCap = RoundCap(),
-                            pattern = if (isWalking) listOf(Dash(20f), Gap(20f)) else null
-                        )
-                    }
+                    // Straight Dashed Line
+                    Polyline(
+                        points = listOf(data.myEffectiveLocation, data.partnerEffectiveLocation),
+                        color = MaterialTheme.colorScheme.primary,
+                        width = 10f,
+                        pattern = listOf(Dash(30f), Gap(20f))
+                    )
 
-                    // 2. Straight Dashed Line - Fades out when the real route fades in
-                    val dashedAlpha = 1f - routeAlpha.value
-                    if (dashedAlpha > 0f) {
-                        Polyline(
-                            points = listOf(data.myEffectiveLocation, data.partnerEffectiveLocation),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = dashedAlpha),
-                            width = 10f,
-                            pattern = listOf(Dash(30f), Gap(20f))
-                        )
-                    }
-
-                    // Distance label - follows the route if visible, otherwise midpoint (Optimization 2)
-                    val labelPosition = if (routeAlpha.value > 0.5f && routeMidpoint != null) {
-                        routeMidpoint!!
-                    } else {
-                        LatLng(
-                            (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
-                            (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
-                        )
-                    }
+                    // Distance label - follows the midpoint
+                    val labelPosition = LatLng(
+                        (data.myEffectiveLocation.latitude + data.partnerEffectiveLocation.latitude) / 2,
+                        (data.myEffectiveLocation.longitude + data.partnerEffectiveLocation.longitude) / 2
+                    )
 
                     MarkerComposable(
-                        keys = arrayOf<Any>(distance ?: 0.0, distanceInfo ?: 0, labelPosition, routeAlpha.value),
+                        keys = arrayOf<Any>(distance ?: 0.0, distanceInfo ?: 0, labelPosition),
                         state = rememberUpdatedMarkerState(position = labelPosition),
                         anchor = Offset(0.5f, 0.5f),
                         zIndex = 1f
@@ -846,7 +684,7 @@ actual fun MapContent(
                         val bubbleColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
                         
                         Box(contentAlignment = Alignment.Center) {
-                            androidx.compose.foundation.Canvas(
+                            Canvas(
                                 modifier = Modifier.matchParentSize()
                             ) {
                                 val blurRadiusPx = blurRadius.toPx()
@@ -879,10 +717,9 @@ actual fun MapContent(
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 val distanceText = if ((distance ?: 0.0) < 1000) "${distance?.toInt() ?: 0}m" else "${((distance ?: 0.0) / 1000).format(1)}km"
-                                val labelText = distanceText
 
                                 Text(
-                                    text = labelText,
+                                    text = distanceText,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -911,10 +748,6 @@ actual fun MapContent(
                         onAddPlace(place)
                         showAddPlaceSheet = null
                         editingPlace = null
-                    },
-                    onCancel = { 
-                        showAddPlaceSheet = null
-                        editingPlace = null
                     }
                 )
             }
@@ -941,10 +774,6 @@ actual fun MapContent(
                         showAddStorySheet = null
                         editingStory = null
                     },
-                    onCancel = { 
-                        showAddStorySheet = null
-                        editingStory = null
-                    },
                     onCreatePlace = { loc, prefillName, prefillAddr ->
                         showAddStorySheet = null
                         editingStory = null
@@ -960,22 +789,6 @@ actual fun MapContent(
             }
         }
 
-        if (showSaveJourneySheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showSaveJourneySheet = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ) {
-                SaveJourneySheetContent(
-                    route = currentDayRoute,
-                    onSave = { title: String, desc: String, cat: String, photos: List<ByteArray> ->
-                        onSaveJourney(title, desc, cat, photos)
-                        showSaveJourneySheet = false
-                        isPreviewingJourney = false
-                    },
-                    onCancel = { showSaveJourneySheet = false }
-                )
-            }
-        }
 
         // Off-screen markers
         markerData?.let { data ->
@@ -1078,8 +891,7 @@ actual fun MapContent(
                         distanceInfo = distanceInfo,
                         isPartnerComingToMe = isPartnerComingToMe,
                         isDistanceLoading = isDistanceLoading,
-                        distanceError = distanceError,
-                        onOpenNavigation = onOpenNavigation
+                        distanceError = distanceError
                     )
                 }
             }
@@ -1134,24 +946,6 @@ actual fun MapContent(
             }
         }
 
-        // Journey Save Overlay
-        AnimatedVisibility(
-            visible = isPreviewingJourney && currentDayRoute.isNotEmpty(),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
-        ) {
-            Button(
-                onClick = { showSaveJourneySheet = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                elevation = ButtonDefaults.buttonElevation(8.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.AutoAwesome, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Save Journey as Story")
-            }
-        }
 
         // Floating action buttons container
         Column(
@@ -1161,34 +955,6 @@ actual fun MapContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.End
         ) {
-            // Today's Journey Button
-            SmallFloatingActionButton(
-                onClick = {
-                    if (!isPreviewingJourney) {
-                        fetchTodayRoute()
-                        isPreviewingJourney = true
-                    } else {
-                        isPreviewingJourney = false
-                        onClearSelectedStory()
-                    }
-                },
-                containerColor = if (isPreviewingJourney) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = if (isPreviewingJourney) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary,
-                shape = CircleShape
-            ) {
-                if (isRouteLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = if (isPreviewingJourney) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isPreviewingJourney) Icons.Default.Close else Icons.Default.History,
-                        contentDescription = "Today's Journey"
-                    )
-                }
-            }
 
             // Follow Mode Button
             AnimatedVisibility(
@@ -1221,50 +987,6 @@ actual fun MapContent(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
-            }
-
-            // Route Toggle Button
-            SmallFloatingActionButton(
-                onClick = { isRouteEnabled = !isRouteEnabled },
-                containerColor = if (isRouteEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = if (isRouteEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Directions, contentDescription = "Toggle Route")
-            }
-
-            // Travel Mode Selector (Only when route is enabled)
-            AnimatedVisibility(
-                visible = isRouteEnabled,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    shape = RoundedCornerShape(24.dp),
-                    tonalElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        TravelModeButton(
-                            selected = travelMode == TravelMode.DRIVING,
-                            onClick = { onSetTravelMode(TravelMode.DRIVING) },
-                            icon = Icons.Default.DirectionsCar
-                        )
-                        TravelModeButton(
-                            selected = travelMode == TravelMode.MOTORCYCLE,
-                            onClick = { onSetTravelMode(TravelMode.MOTORCYCLE) },
-                            icon = Icons.Default.TwoWheeler
-                        )
-                        TravelModeButton(
-                            selected = travelMode == TravelMode.WALKING,
-                            onClick = { onSetTravelMode(TravelMode.WALKING) },
-                            icon = Icons.AutoMirrored.Filled.DirectionsWalk
-                        )
-                    }
-                }
             }
         }
 
@@ -1322,10 +1044,8 @@ actual fun MapContent(
 fun AddPlaceSheetContent(
     location: LatLng,
     initialPlace: Place? = null,
-    onAddPlace: (Place) -> Unit,
-    onCancel: () -> Unit
+    onAddPlace: (Place) -> Unit
 ) {
-    val context = LocalContext.current
     var name by remember { mutableStateOf(initialPlace?.name ?: "") }
     var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
     val radius = initialPlace?.radius?.toFloat() ?: 200f
@@ -1548,30 +1268,6 @@ fun NotificationChip(
 }
 
 @Composable
-fun TravelModeButton(
-    selected: Boolean,
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(36.dp)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                CircleShape
-            )
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 fun OffScreenMarker(
     edgePoint: Offset, // Expected to be already avoided
     angle: Float,
@@ -1626,7 +1322,7 @@ fun OffScreenMarker(
         contentAlignment = Alignment.Center
     ) {
         // The "Bubble" Shape (Theme-aware Background with Pointer)
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val bubbleRadius = (indicatorSizePx - 8.dp.toPx()) / 2
             val pointerWidth = 12.dp.toPx()
             val pointerHeight = 12.dp.toPx()
@@ -1699,7 +1395,7 @@ fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifie
     Surface(
         color = color,
         shape = RoundedCornerShape(percent = 50),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
         modifier = modifier
     ) {
         Text(
@@ -1787,9 +1483,7 @@ fun UserMarker(
 @Composable
 fun CombinedUserMarker(
     currentUser: User?,
-    partner: User?,
-    statusMe: ConnectionStatus,
-    statusPartner: ConnectionStatus
+    partner: User?
 ) {
     Box(
         modifier = Modifier
@@ -1881,7 +1575,7 @@ fun CombinedUserMarker(
                     .height(8.dp)
                     .offset(y = (-1).dp)
             ) {
-                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
                     val path = Path().apply {
                         moveTo(0f, 0f)
                         lineTo(size.width, 0f)
@@ -2039,9 +1733,9 @@ fun StoryMarker(
                 .padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
             val dateStr = remember(story.date) {
-                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(story.date)
-                val dateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
-                "${dateTime.dayOfMonth}/${dateTime.monthNumber}"
+                val instant = Instant.fromEpochMilliseconds(story.date)
+                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                "${dateTime.day}/${dateTime.month.number}"
             }
             Text(
                 text = dateStr,
@@ -2060,7 +1754,6 @@ fun AddStorySheetContent(
     initialStory: Story? = null,
     onAddStory: (Story, List<ByteArray>) -> Unit,
     onUpdateStory: (Story, List<ByteArray>) -> Unit,
-    onCancel: () -> Unit,
     onCreatePlace: (LatLng, String, String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -2072,7 +1765,6 @@ fun AddStorySheetContent(
     val photoUrls = remember { mutableStateListOf<String>().apply { initialStory?.photoUrls?.let { addAll(it) } } }
     val newPhotos = remember { mutableStateListOf<Pair<String, ByteArray>>() }
     
-    val context = LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(location, initialStory) {
@@ -2138,9 +1830,9 @@ fun AddStorySheetContent(
             Icon(Icons.Default.DateRange, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(12.dp))
             val dateStr = remember(dateMillis) {
-                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(dateMillis)
-                val dateTime = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
-                "${dateTime.dayOfMonth} ${dateTime.month.name}, ${dateTime.year}"
+                val instant = Instant.fromEpochMilliseconds(dateMillis)
+                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                "${dateTime.day} ${dateTime.month.name}, ${dateTime.year}"
             }
             Text(text = dateStr, style = MaterialTheme.typography.bodyLarge)
         }
@@ -2186,7 +1878,7 @@ fun AddStorySheetContent(
                                 model = model,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                contentScale = ContentScale.Crop
                             )
                             IconButton(
                                 onClick = { 
@@ -2306,200 +1998,6 @@ fun AddStorySheetContent(
     }
 }
 
-@Composable
-fun SaveJourneySheetContent(
-    route: List<com.example.tasama.domain.model.RoutePoint>,
-    onSave: (String, String, String, List<ByteArray>) -> Unit,
-    onCancel: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var title by remember { mutableStateOf("Today's Journey") }
-    var description by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Journey") }
-    val newPhotos = remember { mutableStateListOf<Pair<String, ByteArray>>() }
-    val photoUrls = remember { mutableStateListOf<String>() }
-
-    val pickerLauncher = rememberFilePickerLauncher(
-        type = PickerType.Image,
-        onResult = { file: PlatformFile? ->
-            file?.let { platformFile ->
-                scope.launch {
-                    val bytes = platformFile.readBytes()
-                    val tempId = "temp_${Clock.System.now().toEpochMilliseconds()}"
-                    newPhotos.add(tempId to bytes)
-                    photoUrls.add(tempId)
-                }
-            }
-        }
-    )
-
-    val distance = remember(route) {
-        var total = 0.0
-        for (i in 0 until route.size - 1) {
-            total += calculateDistance(
-                Location(route[i].latitude, route[i].longitude),
-                Location(route[i + 1].latitude, route[i + 1].longitude)
-            )
-        }
-        total
-    }
-
-    val durationMs = remember(route) {
-        if (route.size > 1) route.last().timestamp - route.first().timestamp else 0L
-    }
-
-    val durationText = remember(durationMs) {
-        val hours = durationMs / 3600000
-        val minutes = (durationMs % 3600000) / 60000
-        if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Save Today's Journey",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-
-        // Journey Stats Card
-        Surface(
-            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Distance", style = MaterialTheme.typography.labelMedium)
-                    val distText = if (distance < 1000) "${distance.toInt()}m" else "${(distance / 1000).format(1)}km"
-                    Text(distText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Duration", style = MaterialTheme.typography.labelMedium)
-                    Text(durationText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Points", style = MaterialTheme.typography.labelMedium)
-                    Text("${route.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text("Title") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text("Description") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Photos", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-
-            if (photoUrls.isNotEmpty()) {
-                val pagerState = rememberPagerState(pageCount = { photoUrls.size })
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        pageSpacing = 8.dp
-                    ) { page ->
-                        val url = photoUrls[page]
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            val model = remember(url) {
-                                if (url.startsWith("temp_")) {
-                                    newPhotos.find { it.first == url }?.second
-                                } else {
-                                    url
-                                }
-                            }
-                            coil3.compose.AsyncImage(
-                                model = model,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                            IconButton(
-                                onClick = {
-                                    photoUrls.remove(url)
-                                    newPhotos.removeAll { it.first == url }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(28.dp)
-                                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = { pickerLauncher.launch() },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.AddAPhoto, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Add Photo")
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCancel,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Cancel")
-            }
-            Button(
-                onClick = {
-                    onSave(title, description, category, newPhotos.map { it.second })
-                },
-                modifier = Modifier.weight(1f),
-                enabled = title.isNotBlank(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-            ) {
-                Text("Save Journey")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
 
 @Composable
 fun PartnerStatusCard(
@@ -2509,8 +2007,7 @@ fun PartnerStatusCard(
     distanceInfo: DistanceInfo? = null,
     isPartnerComingToMe: Boolean = false,
     isDistanceLoading: Boolean = false,
-    distanceError: String? = null,
-    onOpenNavigation: () -> Unit
+    distanceError: String? = null
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -2520,7 +2017,7 @@ fun PartnerStatusCard(
             shape = RoundedCornerShape(12.dp),
             tonalElevation = 6.dp,
             shadowElevation = 8.dp,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2581,28 +2078,12 @@ fun PartnerStatusCard(
                         } else {
                             "$distanceText away"
                         }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = distanceStatus,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(
-                                onClick = onOpenNavigation,
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Navigation,
-                                    contentDescription = "Open Navigation",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
+                        Text(
+                            text = distanceStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                     } else if (isDistanceLoading) {
                         Text(
                             text = "Calculating distance...",
@@ -2694,7 +2175,7 @@ fun PartnerStatusCard(
                 .height(8.dp)
                 .offset(y = (-1).dp)
         ) {
-            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
                 val path = Path().apply {
                     moveTo(0f, 0f)
                     lineTo(size.width, 0f)
@@ -2768,7 +2249,7 @@ fun PartnerDashboard(
 @Composable
 fun WeatherWidget(
     modifier: Modifier = Modifier,
-    weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
+    weatherInfo: WeatherInfo?,
     isLoading: Boolean
 ) {
     AnimatedVisibility(

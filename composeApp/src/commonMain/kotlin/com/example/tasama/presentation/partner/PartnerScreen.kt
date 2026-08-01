@@ -26,7 +26,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
-import com.example.tasama.domain.model.DefaultRouteType
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
@@ -98,8 +97,6 @@ fun PartnerScreen(
                             distanceInfo = uiState.distanceInfo,
                             weatherInfo = uiState.weatherInfo,
                             isWeatherLoading = uiState.isWeatherLoading,
-                            travelMode = uiState.travelMode,
-                            routeInfo = uiState.routeInfo,
                             isPartnerComingToMe = uiState.isPartnerComingToMe,
                             isDistanceLoading = uiState.isDistanceLoading,
                             distanceError = uiState.distanceError,
@@ -110,19 +107,13 @@ fun PartnerScreen(
                             onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
                             onDeleteStory = { story -> viewModel.deleteStory(story) },
                             onUpdateStory = { story, bytes -> viewModel.updateStory(story, bytes) },
-                            onSetTravelMode = viewModel::setTravelMode,
                             onUnlink = viewModel::unlinkPartner,
                             onSelectStory = viewModel::selectStoryForMap,
                             selectedStoryForMap = uiState.selectedStoryForMap,
                             onClearSelectedStory = { viewModel.selectStoryForMap(null) },
-                            onSaveJourney = viewModel::saveJourneyAsStory,
-                            currentDayRoute = uiState.currentDayRoute,
-                            isRouteLoading = uiState.isRouteLoading,
-                            fetchTodayRoute = viewModel::fetchTodayRoute,
                             onUpdatePartnerMapEnabled = viewModel::updatePartnerMapEnabled,
                             onUpdateBatteryMode = viewModel::updateBatteryMode,
                             onUpdateSmartFollowEnabled = viewModel::updateSmartFollowEnabled,
-                            onUpdateLiveEtaEnabled = viewModel::updateLiveEtaEnabled,
                             onUpdateWeatherWidgetEnabled = viewModel::updateWeatherWidgetEnabled,
                             onUpdateDashboardEnabled = viewModel::updateDashboardEnabled,
                             onUpdatePlacesEnabled = viewModel::updatePlacesEnabled,
@@ -130,9 +121,7 @@ fun PartnerScreen(
                             onUpdateStoryMarkersEnabled = viewModel::updateStoryMarkersEnabled,
                             onUpdateReminderMarkersEnabled = viewModel::updateReminderMarkersEnabled,
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
-                            onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
-                            onUpdateDefaultRouteType = viewModel::updateDefaultRouteType,
-                            onOpenNavigation = viewModel::openNavigation
+                            onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled
                         )
                     } else {
                         DisabledPartnerMapContent(
@@ -327,8 +316,6 @@ fun PartnerMapContent(
     distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
     isWeatherLoading: Boolean,
-    travelMode: com.example.tasama.domain.repository.TravelMode,
-    routeInfo: com.example.tasama.domain.repository.RouteInfo? = null,
     isPartnerComingToMe: Boolean,
     isDistanceLoading: Boolean,
     distanceError: String?,
@@ -339,19 +326,13 @@ fun PartnerMapContent(
     onAddStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
     onDeleteStory: (com.example.tasama.domain.model.Story) -> Unit,
     onUpdateStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
-    onSetTravelMode: (com.example.tasama.domain.repository.TravelMode) -> Unit,
     onUnlink: () -> Unit,
     onSelectStory: (com.example.tasama.domain.model.Story?) -> Unit,
     selectedStoryForMap: com.example.tasama.domain.model.Story? = null,
     onClearSelectedStory: () -> Unit = {},
-    onSaveJourney: (String, String, String, List<ByteArray>) -> Unit,
-    currentDayRoute: List<com.example.tasama.domain.model.RoutePoint>,
-    isRouteLoading: Boolean,
-    fetchTodayRoute: () -> Unit,
     onUpdatePartnerMapEnabled: (Boolean) -> Unit,
     onUpdateBatteryMode: (BatteryMode) -> Unit,
     onUpdateSmartFollowEnabled: (Boolean) -> Unit,
-    onUpdateLiveEtaEnabled: (Boolean) -> Unit,
     onUpdateWeatherWidgetEnabled: (Boolean) -> Unit,
     onUpdateDashboardEnabled: (Boolean) -> Unit,
     onUpdatePlacesEnabled: (Boolean) -> Unit,
@@ -359,9 +340,7 @@ fun PartnerMapContent(
     onUpdateStoryMarkersEnabled: (Boolean) -> Unit,
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
-    onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
-    onUpdateDefaultRouteType: (DefaultRouteType) -> Unit,
-    onOpenNavigation: () -> Unit
+    onUpdateMapDarkThemeEnabled: (Boolean) -> Unit
 ) {
     var showOurStory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -377,8 +356,6 @@ fun PartnerMapContent(
             distanceInfo = distanceInfo,
             weatherInfo = weatherInfo,
             isWeatherLoading = isWeatherLoading,
-            travelMode = travelMode,
-            routeInfo = routeInfo,
             isPartnerComingToMe = isPartnerComingToMe,
             isDistanceLoading = isDistanceLoading,
             distanceError = distanceError,
@@ -388,18 +365,12 @@ fun PartnerMapContent(
             onAddStory = onAddStory,
             onDeleteStory = onDeleteStory,
             onUpdateStory = onUpdateStory,
-            onSetTravelMode = onSetTravelMode,
             onUnlink = onUnlink,
             onSelectStory = onSelectStory,
             selectedStoryForMap = selectedStoryForMap,
             onClearSelectedStory = onClearSelectedStory,
-            onSaveJourney = onSaveJourney,
-            currentDayRoute = currentDayRoute,
-            isRouteLoading = isRouteLoading,
-            fetchTodayRoute = fetchTodayRoute,
             settings = settings,
-            onOpenSettings = { showSettings = true },
-            onOpenNavigation = onOpenNavigation
+            onOpenSettings = { showSettings = true }
         )
 
         // Bottom Left FABs
@@ -438,7 +409,6 @@ fun PartnerMapContent(
             onUpdatePartnerMapEnabled = onUpdatePartnerMapEnabled,
             onUpdateBatteryMode = onUpdateBatteryMode,
             onUpdateSmartFollowEnabled = onUpdateSmartFollowEnabled,
-            onUpdateLiveEtaEnabled = onUpdateLiveEtaEnabled,
             onUpdateWeatherWidgetEnabled = onUpdateWeatherWidgetEnabled,
             onUpdateDashboardEnabled = onUpdateDashboardEnabled,
             onUpdatePlacesEnabled = onUpdatePlacesEnabled,
@@ -447,7 +417,6 @@ fun PartnerMapContent(
             onUpdateReminderMarkersEnabled = onUpdateReminderMarkersEnabled,
             onUpdateTrafficLayerEnabled = onUpdateTrafficLayerEnabled,
             onUpdateMapDarkThemeEnabled = onUpdateMapDarkThemeEnabled,
-            onUpdateDefaultRouteType = onUpdateDefaultRouteType,
             onDismiss = { showSettings = false }
         )
     }

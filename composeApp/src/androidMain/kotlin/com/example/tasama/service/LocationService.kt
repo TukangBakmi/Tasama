@@ -260,9 +260,13 @@ class LocationService : Service() {
         // Trigger avatar load if we don't have it yet
         if (partnerAvatarBitmap == null && partner.avatarUrl != null && !isAvatarLoading) {
             isAvatarLoading = true
+            
+            val localResId = getAvatarResId(partner.avatarUrl)
+            val loadTarget: Any = if (localResId != 0) localResId else partner.avatarUrl
+
             Glide.with(this)
                 .asBitmap()
-                .load(partner.avatarUrl)
+                .load(loadTarget)
                 .circleCrop()
                 .into(object : CustomTarget<Bitmap>() {
                     override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
@@ -357,14 +361,16 @@ class LocationService : Service() {
             val address = getAddress(partner.latitude, partner.longitude)
             expandedView.setTextViewText(R.id.notification_address, address)
 
-            // Use cached bitmap if available
-            partnerAvatarBitmap?.let {
-                collapsedView.setImageViewBitmap(R.id.notification_avatar, it)
-                expandedView.setImageViewBitmap(R.id.notification_avatar, it)
-            } ?: run {
-                // Fallback or placeholder if needed, though Glide should update it
-                collapsedView.setImageViewResource(R.id.notification_avatar, R.drawable.avatar1)
-                expandedView.setImageViewResource(R.id.notification_avatar, R.drawable.avatar1)
+            // Avatar logic: use cached circle-cropped bitmap or appropriate local resource placeholder
+            val localResId = getAvatarResId(partner.avatarUrl)
+            val placeholderResId = if (localResId != 0) localResId else R.drawable.avatar1
+
+            if (partnerAvatarBitmap != null) {
+                collapsedView.setImageViewBitmap(R.id.notification_avatar, partnerAvatarBitmap)
+                expandedView.setImageViewBitmap(R.id.notification_avatar, partnerAvatarBitmap)
+            } else {
+                collapsedView.setImageViewResource(R.id.notification_avatar, placeholderResId)
+                expandedView.setImageViewResource(R.id.notification_avatar, placeholderResId)
             }
         }
 
@@ -437,6 +443,24 @@ class LocationService : Service() {
         fusedLocationClient.removeLocationUpdates(locationCallback)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun getAvatarResId(avatarUrl: String?): Int {
+        if (avatarUrl == null || avatarUrl.startsWith("http") || avatarUrl.startsWith("content")) return 0
+
+        val normalized = avatarUrl.removePrefix("/").replace(".png", "").lowercase()
+        return when (normalized) {
+            "avatar1", "avatar_1" -> R.drawable.avatar1
+            "avatar2", "avatar_2" -> R.drawable.avatar2
+            "avatar3", "avatar_3" -> R.drawable.avatar3
+            "avatar4", "avatar_4" -> R.drawable.avatar4
+            "avatar5", "avatar_5" -> R.drawable.avatar5
+            "avatar6", "avatar_6" -> R.drawable.avatar6
+            "avatar7", "avatar_7" -> R.drawable.avatar7
+            "avatar8", "avatar_8" -> R.drawable.avatar8
+            "avatar9", "avatar_9" -> R.drawable.avatar9
+            else -> 0
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

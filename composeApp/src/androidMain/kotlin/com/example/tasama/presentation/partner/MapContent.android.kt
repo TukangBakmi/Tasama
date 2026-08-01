@@ -73,11 +73,11 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import kotlin.math.*
 import com.example.tasama.R
-import kotlin.time.Clock
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PlatformFile
 import kotlinx.datetime.*
+import kotlin.time.Clock
 
 val MapHeaderHeight = 88.dp
 
@@ -315,9 +315,11 @@ actual fun MapContent(
         }
     }
 
-    // Derived states for real-time intersection and visibility (Optimization 3)
-    val markerData by remember(currentMyLocation, currentPartnerLocation, mapSize, cameraPositionState.isMoving, density) {
+    // Derived states for real-time intersection and visibility (Optimization: Responsive to Camera Movement)
+    val markerData by remember(currentMyLocation, currentPartnerLocation, isTogether, mapSize, density) {
         derivedStateOf {
+            // Read position to trigger recomposition on camera movement
+            cameraPositionState.position 
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
             if (mapSize == IntSize.Zero || (currentMyLocation == null && currentPartnerLocation == null)) {
@@ -361,7 +363,7 @@ actual fun MapContent(
             var partnerEdge: Offset? = null
             var polyStart = currentMyLocation
             var polyEnd = currentPartnerLocation
-            val showPolyline = currentMyLocation != null && currentPartnerLocation != null
+            val showPolyline = currentMyLocation != null && currentPartnerLocation != null && !isTogether
 
             if (showPolyline && (!isMeVisible || !isPartnerVisible)) {
                 val intersections = clipSegmentToRect(pMe, pPartner, width, height)
@@ -962,26 +964,35 @@ actual fun MapContent(
         ) {
 
             // Follow Mode Button
-            AnimatedVisibility(
-                visible = !isFollowModeEnabled && partnerLocation != null,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                SmallFloatingActionButton(
-                    onClick = {
-                        scope.launch {
-                            partnerLocation?.let {
+            SmallFloatingActionButton(
+                onClick = {
+                    if (isFollowModeEnabled) {
+                        isFollowModeEnabled = false
+                    } else {
+                        isFollowModeEnabled = true
+                        partnerLocation?.let {
+                            scope.launch {
                                 cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(it, followZoom), 1000)
                             }
-                            isFollowModeEnabled = true
                         }
-                    },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Follow Partner")
-                }
+                    }
+                },
+                containerColor = if (isFollowModeEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                },
+                contentColor = if (isFollowModeEnabled) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+                shape = CircleShape
+            ) {
+                Icon(
+                    imageVector = if (isFollowModeEnabled) Icons.Default.MyLocation else Icons.Default.LocationSearching,
+                    contentDescription = "Follow Partner"
+                )
             }
 
             // Recenter/Fit Button
@@ -1635,7 +1646,7 @@ fun StoryMarker(
         label = "markerElevation"
     )
 
-    var hasAppeared by remember { mutableStateOf(true) }
+    var hasAppeared by remember(story.id) { mutableStateOf(false) }
     val appearanceScale by animateFloatAsState(
         targetValue = if (hasAppeared) 1f else 0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),

@@ -34,6 +34,7 @@ class FirebaseChatRepository(
                     .snapshots
                     .map { snapshot ->
                         snapshot.documents.map { it.data(ChatChannel.serializer()) }
+                            .filter { !it.deletedBy.contains(uid) }
                             .sortedByDescending { it.lastMessageTimestamp }
                     }
                     .catch { emit(emptyList()) }
@@ -119,6 +120,7 @@ class FirebaseChatRepository(
             "lastMessage" to (text as Any?)
             "lastMessageTimestamp" to (now as Any?)
             "unreadCounts" to (newUnreadCounts as Any?)
+            "deletedBy" to emptyList<String>()
         }
     }
 
@@ -137,9 +139,19 @@ class FirebaseChatRepository(
                 participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
                 lastMessage = "Started a conversation",
                 lastMessageTimestamp = Clock.System.now().toEpochMilliseconds(),
-                unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
+                unreadCounts = mapOf(currentUserId to 0, otherUserId to 0),
+                deletedBy = emptyList()
             )
             channelsCollection.document(channelId).set(ChatChannel.serializer(), channel)
+        } else {
+            // If it exists but was deleted by current user, undelete it for them
+            val channel = existing.data(ChatChannel.serializer())
+            if (channel.deletedBy.contains(currentUserId)) {
+                val newDeletedBy = channel.deletedBy.filter { it != currentUserId }
+                channelsCollection.document(channelId).updateFields {
+                    "deletedBy" to newDeletedBy
+                }
+            }
         }
         return channelId
     }
@@ -174,16 +186,16 @@ class FirebaseChatRepository(
     }
 
     override suspend fun deleteChannel(channelId: String) {
-        // In a real app, you might want to only hide it for the user, but request says "delete the room chat"
-        // We'll delete the document and its messages collection.
+        val userId = authRepository.getCurrentUserId() ?: return
         val channelRef = channelsCollection.document(channelId)
+        val channel = channelRef.get().data(ChatChannel.serializer())
         
-        // Delete messages first
-        val messages = channelRef.collection("messages").get().documents
-        messages.forEach { it.reference.delete() }
+        val newDeletedBy = channel.deletedBy.toMutableList()
+        if (!newDeletedBy.contains(userId)) {
+            newDeletedBy.add(userId)
+        }
         
-        // Delete channel
-        channelRef.delete()
+        channelRef.updateFields { "deletedBy" to newDeletedBy }
     }
 
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {

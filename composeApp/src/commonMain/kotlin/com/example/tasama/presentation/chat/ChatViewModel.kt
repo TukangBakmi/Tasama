@@ -2,7 +2,6 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tasama.domain.model.MessageStatus
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import kotlinx.coroutines.Job
@@ -139,7 +138,7 @@ class ChatViewModel(
 
                 // Mark unread messages as read
                 val currentUserId = repository.getCurrentUserId()
-                messages.filter { it.userId != currentUserId && it.status != MessageStatus.READ }.forEach { msg ->
+                messages.filter { it.userId != currentUserId && !it.readBy.containsKey(currentUserId) }.forEach { msg ->
                     repository.markMessageAsRead(channelId, msg.id)
                 }
             }

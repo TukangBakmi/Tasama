@@ -3,7 +3,6 @@ package com.example.tasama.data.repository
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
-import com.example.tasama.domain.model.MessageStatus
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import dev.gitlive.firebase.Firebase
@@ -66,17 +65,17 @@ class FirebaseChatRepository(
                 .where { "timestamp" greaterThan deletedAt }
                 .orderBy("timestamp", direction = Direction.DESCENDING)
                 .limit(20)
-                .snapshots
+                .snapshots()
                 .map { snapshot ->
                     snapshot.documents.map { doc ->
                         val msg = doc.data(ChatMessage.serializer())
                         
-                        // Auto-update SENT messages to DELIVERED when fetched by recipient
-                        if (msg.userId != uid && msg.status == MessageStatus.SENT) {
+                        // Auto-update deliveredTo when fetched by recipient
+                        if (msg.userId != uid && !msg.deliveredTo.containsKey(uid)) {
                             repositoryScope.launch {
                                 try {
                                     doc.reference.updateFields {
-                                        "status" to MessageStatus.DELIVERED.name
+                                        "deliveredTo.$uid" to Clock.System.now().toEpochMilliseconds()
                                     }
                                 } catch (_: Exception) {}
                             }
@@ -119,21 +118,26 @@ class FirebaseChatRepository(
         val senderName = authRepository.getUserName(userId) ?: "User"
         val now = Clock.System.now().toEpochMilliseconds()
         val id = "msg_$now"
-        val newMessage = ChatMessage(
-            id = id,
-            userId = userId,
-            senderName = senderName,
-            text = text,
-            sender = MessageSender.USER,
-            timestamp = now,
-            status = MessageStatus.SENT
-        )
         
         val channelRef = channelsCollection.document(channelId)
         val channel = channelRef.get().data(ChatChannel.serializer())
         
-        val newUnreadCounts = channel.unreadCounts.toMutableMap()
         val otherParticipantId = channel.participantIds.find { it != userId }
+        
+        val newMessage = ChatMessage(
+            id = id,
+            userId = userId,
+            receiverId = otherParticipantId ?: "",
+            senderName = senderName,
+            text = text,
+            sender = MessageSender.USER,
+            timestamp = now,
+            deliveredTo = emptyMap(),
+            readBy = emptyMap(),
+            deletedFor = emptyList()
+        )
+        
+        val newUnreadCounts = channel.unreadCounts.toMutableMap()
         
         var shouldIncrementUnread = true
         if (otherParticipantId != null) {
@@ -193,6 +197,7 @@ class FirebaseChatRepository(
         channelRef.updateFields { "unreadCounts" to newUnreadCounts }
         
         // Also mark all messages in this channel as read for this user
+        val now = Clock.System.now().toEpochMilliseconds()
         val messages = channelRef.collection("messages")
             .where { "userId" notEqualTo userId }
             .get()
@@ -200,12 +205,9 @@ class FirebaseChatRepository(
         
         messages.forEach { doc ->
             val msg = doc.data(ChatMessage.serializer())
-            if (
-                msg.userId != userId &&
-                (msg.status == MessageStatus.DELIVERED || msg.status == MessageStatus.SENT)
-            ) {
+            if (msg.userId != userId && !msg.readBy.containsKey(userId)) {
                 doc.reference.updateFields {
-                    "status" to MessageStatus.READ.name
+                    "readBy.$userId" to now
                 }
             }
         }
@@ -239,20 +241,22 @@ class FirebaseChatRepository(
     }
 
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {
+        val uid = authRepository.getCurrentUserId() ?: return
         channelsCollection.document(channelId).collection("messages").document(messageId)
-            .updateFields { "status" to MessageStatus.READ.name }
+            .updateFields { "readBy.$uid" to Clock.System.now().toEpochMilliseconds() }
     }
 
     override suspend fun markMessageAsDelivered(
         channelId: String,
         messageId: String
     ) {
+        val uid = authRepository.getCurrentUserId() ?: return
         channelsCollection
             .document(channelId)
             .collection("messages")
             .document(messageId)
             .updateFields {
-                "status" to MessageStatus.DELIVERED.name
+                "deliveredTo.$uid" to Clock.System.now().toEpochMilliseconds()
             }
     }
 

@@ -41,7 +41,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
-import com.example.tasama.domain.model.MessageStatus
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.*
@@ -498,7 +497,9 @@ fun MessageBubble(
                         }
                         if (message.isFromMe) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            MessageStatusIcon(message.status)
+                            val isRead = message.readBy.containsKey(message.receiverId)
+                            val isDelivered = message.deliveredTo.containsKey(message.receiverId)
+                            MessageStatusIcon(isRead = isRead, isDelivered = isDelivered)
                         }
                     }
                 }
@@ -508,19 +509,16 @@ fun MessageBubble(
 }
 
 @Composable
-fun MessageStatusIcon(status: MessageStatus) {
-    val icon = when (status) {
-        MessageStatus.SENT -> Icons.Default.Check
-        MessageStatus.DELIVERED, MessageStatus.READ -> Icons.Default.DoneAll
-    }
-    val tint = if (status == MessageStatus.READ) {
+fun MessageStatusIcon(isRead: Boolean, isDelivered: Boolean) {
+    val icon = if (isDelivered || isRead) Icons.Default.DoneAll else Icons.Default.Check
+    val tint = if (isRead) {
         Color(0xFF00BFFF) // Blue for read
     } else {
         LocalContentColor.current.copy(alpha = 0.5f)
     }
     Icon(
         imageVector = icon,
-        contentDescription = status.name,
+        contentDescription = if (isRead) "Read" else if (isDelivered) "Delivered" else "Sent",
         modifier = Modifier.size(14.dp),
         tint = tint
     )

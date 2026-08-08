@@ -3,11 +3,6 @@ package com.example.tasama.domain.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class MessageStatus {
-    SENT, DELIVERED, READ
-}
-
-@Serializable
 data class ChatMessage(
     val id: String = "",
     val userId: String = "",
@@ -17,6 +12,7 @@ data class ChatMessage(
     val sender: MessageSender = MessageSender.USER,
     val timestamp: Long = 0L,
     val isFromMe: Boolean = false,
-    val status: MessageStatus = MessageStatus.SENT,
+    val deliveredTo: Map<String, Long> = emptyMap(),
+    val readBy: Map<String, Long> = emptyMap(),
     val deletedFor: List<String> = emptyList()
 )

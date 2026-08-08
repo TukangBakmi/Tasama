@@ -12,7 +12,8 @@ import kotlinx.coroutines.launch
 
 class ChatViewModel(
     private val repository: ChatRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val notificationService: com.example.tasama.domain.service.NotificationService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -34,13 +35,18 @@ class ChatViewModel(
         _isResumed.value = resumed
         val channelId = currentChannelId
         if (resumed && channelId != null) {
+            // When returning to foreground, mark all messages as read and clear notifications
             markAsRead(channelId)
+            notificationService.clearNotifications(channelId)
+            
             viewModelScope.launch {
                 try {
                     repository.setActiveChannel(channelId)
                 } catch (_: Exception) {}
             }
         } else {
+            // When going to background or leaving the screen, clear active channel status
+            // so new messages will trigger notifications and increment unread counts
             viewModelScope.launch {
                 try {
                     repository.setActiveChannel(null)
@@ -66,15 +72,23 @@ class ChatViewModel(
     fun setChannel(channelId: String) {
         currentChannelId = channelId
         observeMessages(channelId)
-        markAsRead(channelId)
-        loadChannelInfo(channelId)
         
-        // Register this channel as active for the current user
-        viewModelScope.launch {
-            try {
-                repository.setActiveChannel(channelId)
-            } catch (_: Exception) {}
+        // Only mark as read and set active channel if the app is in foreground
+        if (_isResumed.value) {
+            markAsRead(channelId)
+            notificationService.clearNotifications(channelId)
+            viewModelScope.launch {
+                try {
+                    repository.setActiveChannel(channelId)
+                } catch (_: Exception) {}
+            }
+        } else {
+            // If we're setting a channel but not resumed (e.g. initialization)
+            // we still want to clear notifications if this was triggered by user action
+            notificationService.clearNotifications(channelId)
         }
+        
+        loadChannelInfo(channelId)
     }
 
     override fun onCleared() {
@@ -136,10 +150,12 @@ class ChatViewModel(
                     state.copy(messages = combined)
                 }
 
-                // Mark unread messages as read
-                val currentUserId = repository.getCurrentUserId()
-                messages.filter { it.userId != currentUserId && !it.readBy.containsKey(currentUserId) }.forEach { msg ->
-                    repository.markMessageAsRead(channelId, msg.id)
+                // Mark unread messages as read ONLY if the app is currently in foreground
+                if (_isResumed.value) {
+                    val currentUserId = repository.getCurrentUserId()
+                    messages.filter { it.userId != currentUserId && !it.readBy.containsKey(currentUserId) }.forEach { msg ->
+                        repository.markMessageAsRead(channelId, msg.id)
+                    }
                 }
             }
         }

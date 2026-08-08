@@ -19,6 +19,7 @@ actual val platformModule: Module = module {
     single<DataStore<Preferences>> { createDataStore(androidContext()) }
     single<ExportService> { AndroidExportService() }
     single<FileService> { AndroidFileService(androidContext()) }
+    single<com.example.tasama.domain.service.NotificationService> { com.example.tasama.data.service.AndroidNotificationService(androidContext()) }
     single { GroqService(apiKey = BuildConfig.GROQ_API_KEY) }
     single<DirectionsRepository> { AndroidDirectionsRepository(androidContext()) }
 }

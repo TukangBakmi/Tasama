@@ -13,5 +13,6 @@ import org.koin.dsl.module
 actual val platformModule: Module = module {
     single<DataStore<Preferences>> { createDataStore() }
     single<ExportService> { NoOpExportService() }
+    single<com.example.tasama.domain.service.NotificationService> { com.example.tasama.domain.service.NoOpNotificationService() }
     single<DirectionsRepository> { IosDirectionsRepository() }
 }

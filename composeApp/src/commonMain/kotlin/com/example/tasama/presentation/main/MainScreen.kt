@@ -31,6 +31,7 @@ import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
 import com.example.tasama.presentation.chat.ChatListScreen
 import com.example.tasama.presentation.chat.ChatScreen
+import com.example.tasama.presentation.chat.UserDetailScreen
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.partner.PartnerScreen
@@ -371,6 +372,42 @@ fun MainScreen(
                                     val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
                                     ChatScreen(
                                         channelId = channelId,
+                                        onBackClick = { navController.popBackStack() },
+                                        onUserClick = { userId ->
+                                            navController.navigate("user_detail/$userId")
+                                        }
+                                    )
+                                }
+                                composable(
+                                    route = "user_detail/{userId}",
+                                    enterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    },
+                                    exitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeOut(animationSpec = tween(300))
+                                    },
+                                    popEnterTransition = {
+                                        slideInHorizontally(
+                                            initialOffsetX = { -it / 3 },
+                                            animationSpec = tween(300)
+                                        ) + fadeIn(animationSpec = tween(300))
+                                    },
+                                    popExitTransition = {
+                                        slideOutHorizontally(
+                                            targetOffsetX = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                ) { backStackEntry ->
+                                    val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                                    UserDetailScreen(
+                                        uid = userId,
                                         onBackClick = { navController.popBackStack() }
                                     )
                                 }

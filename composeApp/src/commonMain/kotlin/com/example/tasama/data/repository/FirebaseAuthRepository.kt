@@ -351,15 +351,29 @@ class FirebaseAuthRepository : AuthRepository {
             }
 
             // Link both users
+            val userContactIds = if (!user.contactIds.contains(partnerUid)) {
+                user.contactIds + partnerUid
+            } else {
+                user.contactIds
+            }
+
+            val partnerContactIds = if (!partner.contactIds.contains(uid)) {
+                partner.contactIds + uid
+            } else {
+                partner.contactIds
+            }
+
             firestore.collection("users").document(uid).updateFields {
                 "partnerId" to partnerUid
                 "anniversaryDate" to anniversaryDate
                 "partnerRequestFrom" to null
+                "contactIds" to userContactIds
             }
             firestore.collection("users").document(partnerUid).updateFields {
                 "partnerId" to uid
                 "anniversaryDate" to anniversaryDate
                 "partnerRequestTo" to null
+                "contactIds" to partnerContactIds
             }
 
             // Send notification

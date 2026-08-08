@@ -70,7 +70,7 @@ class ChatViewModel(
         }
     }
 
-    private fun observeOtherUserStatus(userId: String) {
+    fun observeOtherUserStatus(userId: String) {
         otherUserJob?.cancel()
         otherUserJob = viewModelScope.launch {
             authRepository.getUserFlow(userId).collect { user ->

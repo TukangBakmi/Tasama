@@ -48,7 +48,8 @@ import kotlin.time.Instant
 fun ChatScreen(
     channelId: String,
     viewModel: ChatViewModel = koinViewModel(),
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    onUserClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
@@ -73,7 +74,11 @@ fun ChatScreen(
                     title = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    uiState.otherUser?.let { onUserClick(it.id) }
+                                }
                         ) {
                         UserAvatar(
                             user = uiState.otherUser,

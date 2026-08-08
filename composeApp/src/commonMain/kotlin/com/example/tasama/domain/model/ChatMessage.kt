@@ -14,5 +14,10 @@ data class ChatMessage(
     val isFromMe: Boolean = false,
     val deliveredTo: Map<String, Long> = emptyMap(),
     val readBy: Map<String, Long> = emptyMap(),
-    val deletedFor: List<String> = emptyList()
+    val deletedFor: List<String> = emptyList(),
+    val repliedMessageId: String? = null,
+    val repliedMessageSenderId: String? = null,
+    val repliedMessageSenderName: String? = null,
+    val repliedMessageText: String? = null,
+    val repliedMessageType: String? = null
 )

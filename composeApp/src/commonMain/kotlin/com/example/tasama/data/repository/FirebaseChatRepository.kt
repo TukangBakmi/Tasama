@@ -122,7 +122,15 @@ class FirebaseChatRepository(
         }
     }
 
-    override suspend fun sendMessage(channelId: String, text: String) {
+    override suspend fun sendMessage(
+        channelId: String,
+        text: String,
+        repliedMessageId: String?,
+        repliedMessageSenderId: String?,
+        repliedMessageSenderName: String?,
+        repliedMessageText: String?,
+        repliedMessageType: String?
+    ) {
         val userId = authRepository.getCurrentUserId() ?: return
         val senderName = authRepository.getUserName(userId) ?: "User"
         val now = Clock.System.now().toEpochMilliseconds()
@@ -143,7 +151,12 @@ class FirebaseChatRepository(
             timestamp = now,
             deliveredTo = emptyMap(),
             readBy = emptyMap(),
-            deletedFor = emptyList()
+            deletedFor = emptyList(),
+            repliedMessageId = repliedMessageId,
+            repliedMessageSenderId = repliedMessageSenderId,
+            repliedMessageSenderName = repliedMessageSenderName,
+            repliedMessageText = repliedMessageText,
+            repliedMessageType = repliedMessageType
         )
         
         val newUnreadCounts = channel.unreadCounts.toMutableMap()

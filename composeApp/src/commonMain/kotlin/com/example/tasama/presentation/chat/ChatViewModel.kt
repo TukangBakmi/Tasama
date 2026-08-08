@@ -2,6 +2,8 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.ChatChannel
+import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import kotlinx.coroutines.Job
@@ -254,15 +256,37 @@ class ChatViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
+    fun setReplyingTo(message: ChatMessage?) {
+        _uiState.update { it.copy(replyingToMessage = message) }
+    }
+
+    fun scrollToMessage(messageId: String) {
+        _uiState.update { it.copy(scrollToMessageId = messageId) }
+    }
+
+    fun onScrollToMessageComplete() {
+        _uiState.update { it.copy(scrollToMessageId = null) }
+    }
+
     fun sendMessage() {
         val channelId = currentChannelId ?: return
         val trimmedMessage = _uiState.value.inputText.trim()
         if (trimmedMessage.isEmpty()) return
 
+        val replyingTo = _uiState.value.replyingToMessage
+
         viewModelScope.launch {
             try {
-                repository.sendMessage(channelId, trimmedMessage)
-                _uiState.update { it.copy(inputText = "") }
+                repository.sendMessage(
+                    channelId = channelId,
+                    text = trimmedMessage,
+                    repliedMessageId = replyingTo?.id,
+                    repliedMessageSenderId = replyingTo?.userId,
+                    repliedMessageSenderName = if (replyingTo?.isFromMe == true) "You" else replyingTo?.senderName,
+                    repliedMessageText = replyingTo?.text,
+                    repliedMessageType = null // For now, we only have text messages
+                )
+                _uiState.update { it.copy(inputText = "", replyingToMessage = null) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
             }

@@ -9,7 +9,15 @@ interface ChatRepository {
     fun getChannel(channelId: String): Flow<ChatChannel?>
     fun getMessages(channelId: String): Flow<List<ChatMessage>>
     suspend fun getMoreMessages(channelId: String, limit: Int, beforeTimestamp: Long): List<ChatMessage>
-    suspend fun sendMessage(channelId: String, text: String)
+    suspend fun sendMessage(
+        channelId: String,
+        text: String,
+        repliedMessageId: String? = null,
+        repliedMessageSenderId: String? = null,
+        repliedMessageSenderName: String? = null,
+        repliedMessageText: String? = null,
+        repliedMessageType: String? = null
+    )
     suspend fun createChannelWithUser(otherUserId: String): String
     suspend fun getUserName(userId: String): String?
     suspend fun getUserIdFromShortId(shortId: String): String?

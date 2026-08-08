@@ -13,5 +13,7 @@ data class ChatUiState(
     val selectedMessageIds: Set<String> = emptySet(),
     val isSelectionMode: Boolean = false,
     val showDeleteConfirmation: Boolean = false,
+    val replyingToMessage: ChatMessage? = null,
+    val scrollToMessageId: String? = null,
     val error: String? = null
 )

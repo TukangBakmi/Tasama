@@ -1,6 +1,15 @@
 package com.example.tasama.presentation.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -214,7 +223,9 @@ fun ChatScreen(
                 ChatInput(
                     message = uiState.inputText,
                     onMessageChange = viewModel::onMessageChange,
-                    onSend = viewModel::sendMessage
+                    onSend = viewModel::sendMessage,
+                    replyingToMessage = uiState.replyingToMessage,
+                    onCancelReply = { viewModel.setReplyingTo(null) }
                 )
             }
         },
@@ -229,7 +240,10 @@ fun ChatScreen(
                 if (uiState.isSelectionMode) {
                     viewModel.toggleMessageSelection(messageId)
                 }
-            }
+            },
+            onSwipeToReply = viewModel::setReplyingTo,
+            onReplyClick = viewModel::scrollToMessage,
+            onScrollToMessageComplete = viewModel::onScrollToMessageComplete
         )
     }
 
@@ -261,7 +275,10 @@ fun ChatContent(
     modifier: Modifier = Modifier,
     onLoadMore: () -> Unit = {},
     onMessageLongClick: (String) -> Unit = {},
-    onMessageClick: (String) -> Unit = {}
+    onMessageClick: (String) -> Unit = {},
+    onSwipeToReply: (ChatMessage) -> Unit = {},
+    onReplyClick: (String) -> Unit = {},
+    onScrollToMessageComplete: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -317,6 +334,19 @@ fun ChatContent(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
+
+    // Observe scroll requests to jump to a message
+    LaunchedEffect(uiState.scrollToMessageId) {
+        uiState.scrollToMessageId?.let { targetId ->
+            val index = reversedMessages.indexOfFirst { it.id == targetId }
+            if (index != -1) {
+                listState.animateScrollToItem(index)
+                onScrollToMessageComplete()
+            }
+        }
+    }
+
     Box(modifier = modifier
         .fillMaxSize()
         .background(MaterialTheme.colorScheme.surface)
@@ -359,7 +389,14 @@ fun ChatContent(
                             isSelected = isSelected,
                             isSelectionMode = uiState.isSelectionMode,
                             onLongClick = { onMessageLongClick(message.id) },
-                            onClick = { onMessageClick(message.id) }
+                            onClick = { onMessageClick(message.id) },
+                            onSwipeToReply = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSwipeToReply(it)
+                            },
+                            onReplyClick = { repliedId ->
+                                onReplyClick(repliedId)
+                            }
                         )
                     }
                 }
@@ -413,11 +450,19 @@ fun MessageBubble(
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     onLongClick: () -> Unit = {},
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onSwipeToReply: (ChatMessage) -> Unit = {},
+    onReplyClick: (String) -> Unit = {}
 ) {
     val alignment = if (message.isFromMe) Alignment.CenterEnd else Alignment.CenterStart
     
-    // WhatsApp-like colors (keeping your theme colors but using them in a similar way)
+    // Swipe to reply logic
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val swipeThreshold = with(density) { 60.dp.toPx() }
+    
+    // WhatsApp-like colors
     val containerColor = if (message.isFromMe) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -429,7 +474,6 @@ fun MessageBubble(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     
-    // WhatsApp bubble shape
     val shape = if (message.isFromMe) {
         RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
     } else {
@@ -446,6 +490,25 @@ fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
+            .draggable(
+                state = rememberDraggableState { delta ->
+                    if (!isSelectionMode) {
+                        scope.launch {
+                            val newOffset = (offset.value + delta).coerceIn(0f, swipeThreshold * 1.5f)
+                            offset.snapTo(newOffset)
+                        }
+                    }
+                },
+                orientation = Orientation.Horizontal,
+                onDragStopped = {
+                    if (offset.value >= swipeThreshold) {
+                        onSwipeToReply(message)
+                    }
+                    scope.launch {
+                        offset.animateTo(0f)
+                    }
+                }
+            )
             .pointerInput(isSelectionMode) {
                 detectTapGestures(
                     onLongPress = { if (!isSelectionMode) onLongClick() },
@@ -455,15 +518,45 @@ fun MessageBubble(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
+        // Reply Icon that appears when swiping
+        if (offset.value > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 16.dp)
+                    .offset(x = with(density) { (offset.value - swipeThreshold).toDp().coerceAtMost(0.dp) }),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
         Surface(
             color = containerColor,
             contentColor = contentColor,
             shape = shape,
             shadowElevation = 0.5.dp,
-            modifier = Modifier.widthIn(max = 260.dp)
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .offset(x = with(density) { offset.value.toDp() })
         ) {
             Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Column {
+                    if (message.repliedMessageId != null) {
+                        ReplyPreview(
+                            senderName = message.repliedMessageSenderName ?: "Unknown",
+                            text = message.repliedMessageText ?: "",
+                            modifier = Modifier
+                                .padding(bottom = 4.dp)
+                                .clickable { onReplyClick(message.repliedMessageId) }
+                        )
+                    }
+
                     Text(
                         text = message.text,
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
@@ -568,68 +661,141 @@ fun ChatInput(
     message: String,
     onMessageChange: (String) -> Unit,
     onSend: () -> Unit,
+    replyingToMessage: ChatMessage? = null,
+    onCancelReply: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = Color.Transparent
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .padding(horizontal = 8.dp, vertical = 8.dp)
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
-            verticalAlignment = Alignment.CenterVertically
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
         ) {
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 4.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 1.dp
+            AnimatedVisibility(
+                visible = replyingToMessage != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    // Could add emoji picker button here
-                    TextField(
-                        value = message,
-                        onValueChange = onMessageChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Default
-                        ),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent
-                        ),
-                        maxLines = 4
+                if (replyingToMessage != null) {
+                    ReplyPreview(
+                        senderName = if (replyingToMessage.isFromMe) "You" else replyingToMessage.senderName ?: "Unknown",
+                        text = replyingToMessage.text,
+                        onCloseClick = onCancelReply,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
             }
-            
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (message.isNotBlank()) MaterialTheme.colorScheme.primary 
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                    )
-                    .clickable(enabled = message.isNotBlank(), onClick = onSend),
-                contentAlignment = Alignment.Center
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 4.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 1.dp
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        // Could add emoji picker button here
+                        TextField(
+                            value = message,
+                            onValueChange = onMessageChange,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Default
+                            ),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            ),
+                            maxLines = 4
+                        )
+                    }
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (message.isNotBlank()) MaterialTheme.colorScheme.primary 
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        )
+                        .clickable(enabled = message.isNotBlank(), onClick = onSend),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReplyPreview(
+    senderName: String,
+    text: String,
+    modifier: Modifier = Modifier,
+    onCloseClick: (() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(4.dp)
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .weight(1f)
+        ) {
+            Text(
+                text = senderName,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (onCloseClick != null) {
+            IconButton(onClick = onCloseClick) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    Icons.Default.Close,
+                    contentDescription = "Cancel Reply",
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

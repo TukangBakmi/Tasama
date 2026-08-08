@@ -84,6 +84,7 @@ class FirebaseChatRepository(
 
                         msg.copy(isFromMe = msg.userId == uid)
                     }
+                    .filter { !it.deletedFor.contains(uid) }
                     .sortedBy { it.timestamp }
                 }
         }.catch { emit(emptyList()) }
@@ -106,6 +107,7 @@ class FirebaseChatRepository(
                     val msg = it.data(ChatMessage.serializer())
                     msg.copy(isFromMe = msg.userId == uid)
                 }
+                .filter { !it.deletedFor.contains(uid) }
                 .sortedBy { it.timestamp }
         } catch (_: Exception) {
             emptyList()
@@ -240,6 +242,23 @@ class FirebaseChatRepository(
             .updateFields {
                 "status" to MessageStatus.DELIVERED.name
             }
+    }
+
+    override suspend fun deleteMessages(channelId: String, messageIds: List<String>) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val messagesCollection = channelsCollection.document(channelId).collection("messages")
+        
+        messageIds.forEach { messageId ->
+            try {
+                val docRef = messagesCollection.document(messageId)
+                val msg = docRef.get().data(ChatMessage.serializer())
+                val newDeletedFor = msg.deletedFor.toMutableList()
+                if (!newDeletedFor.contains(uid)) {
+                    newDeletedFor.add(uid)
+                    docRef.updateFields { "deletedFor" to newDeletedFor }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     override suspend fun getUserName(userId: String): String? {

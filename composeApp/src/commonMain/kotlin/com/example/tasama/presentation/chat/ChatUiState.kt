@@ -10,5 +10,8 @@ data class ChatUiState(
     val hasMoreMessages: Boolean = true,
     val channelName: String = "Chat",
     val otherUser: User? = null,
+    val selectedMessageIds: Set<String> = emptySet(),
+    val isSelectionMode: Boolean = false,
+    val showDeleteConfirmation: Boolean = false,
     val error: String? = null
 )

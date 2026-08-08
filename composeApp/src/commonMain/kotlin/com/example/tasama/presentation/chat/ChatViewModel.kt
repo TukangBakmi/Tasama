@@ -144,6 +144,59 @@ class ChatViewModel(
         _uiState.update { it.copy(inputText = message) }
     }
 
+    fun toggleMessageSelection(messageId: String) {
+        _uiState.update { state ->
+            val newSelected = state.selectedMessageIds.toMutableSet()
+            if (newSelected.contains(messageId)) {
+                newSelected.remove(messageId)
+            } else {
+                newSelected.add(messageId)
+            }
+            state.copy(
+                selectedMessageIds = newSelected,
+                isSelectionMode = newSelected.isNotEmpty()
+            )
+        }
+    }
+
+    fun enterSelectionMode(messageId: String) {
+        _uiState.update { it.copy(
+            isSelectionMode = true,
+            selectedMessageIds = setOf(messageId)
+        ) }
+    }
+
+    fun exitSelectionMode() {
+        _uiState.update { it.copy(
+            isSelectionMode = false,
+            selectedMessageIds = emptySet(),
+            showDeleteConfirmation = false
+        ) }
+    }
+
+    fun showDeleteConfirmation() {
+        _uiState.update { it.copy(showDeleteConfirmation = true) }
+    }
+
+    fun hideDeleteConfirmation() {
+        _uiState.update { it.copy(showDeleteConfirmation = false) }
+    }
+
+    fun deleteSelectedMessages() {
+        val channelId = currentChannelId ?: return
+        val selectedIds = _uiState.value.selectedMessageIds.toList()
+        if (selectedIds.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                repository.deleteMessages(channelId, selectedIds)
+                exitSelectionMode()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }

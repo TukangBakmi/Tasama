@@ -17,5 +17,6 @@ data class ChatMessage(
     val sender: MessageSender = MessageSender.USER,
     val timestamp: Long = 0L,
     val isFromMe: Boolean = false,
-    val status: MessageStatus = MessageStatus.SENT
+    val status: MessageStatus = MessageStatus.SENT,
+    val deletedFor: List<String> = emptyList()
 )

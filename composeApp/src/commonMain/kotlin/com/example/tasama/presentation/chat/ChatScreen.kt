@@ -7,15 +7,19 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
@@ -25,6 +29,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -72,96 +77,112 @@ fun ChatScreen(
             Column {
                 TopAppBar(
                     title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .padding(vertical = 4.dp)
-                                .clickable {
-                                    uiState.otherUser?.let { onUserClick(it.id) }
-                                }
-                        ) {
-                        UserAvatar(
-                            user = uiState.otherUser,
-                            modifier = Modifier.size(36.dp),
-                            fallbackName = uiState.channelName
-                        )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    uiState.channelName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
+                        if (uiState.isSelectionMode) {
+                            Text("${uiState.selectedMessageIds.size} selected")
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp)
+                                    .clickable {
+                                        uiState.otherUser?.let { onUserClick(it.id) }
+                                    }
+                            ) {
+                                UserAvatar(
+                                    user = uiState.otherUser,
+                                    modifier = Modifier.size(36.dp),
+                                    fallbackName = uiState.channelName
                                 )
-                                
-                                var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-                                LaunchedEffect(Unit) {
-                                    while (true) {
-                                        kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
-                                        now = Clock.System.now().toEpochMilliseconds()
-                                    }
-                                }
-
-                                val statusText = remember(uiState.otherUser, now) {
-                                    val lastActive = uiState.otherUser?.lastActive ?: 0L
-                                    if (lastActive == 0L) return@remember ""
-                                    if (now - lastActive < 30000) {
-                                        "online"
-                                    } else {
-                                        try {
-                                            val instant = Instant.fromEpochMilliseconds(lastActive)
-                                            val tz = TimeZone.currentSystemDefault()
-                                            val lastActiveDateTime = instant.toLocalDateTime(tz)
-                                            val nowDateTime = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz)
-                                            
-                                            val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
-
-                                            when (lastActiveDateTime.date) {
-                                                nowDateTime.date -> {
-                                                    "last seen today at $timeStr"
-                                                }
-                                                nowDateTime.date.minus(DatePeriod(days = 1)) -> {
-                                                    "last seen yesterday at $timeStr"
-                                                }
-                                                else -> {
-                                                    val day = lastActiveDateTime.day.toString().padStart(2, '0')
-                                                    val month = lastActiveDateTime.month.number.toString().padStart(2, '0')
-                                                    val year = lastActiveDateTime.year
-                                                    "last seen $day/$month/$year"
-                                                }
-                                            }
-                                        } catch (_: Exception) {
-                                            "offline"
-                                        }
-                                    }
-                                }
-
-                                if (statusText.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
                                     Text(
-                                        statusText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (statusText == "online") {
-                                            if (androidx.compose.foundation.isSystemInDarkTheme()) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onPrimaryContainer
-                                            }
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
+                                        uiState.channelName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
                                     )
+
+                                    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+                                    LaunchedEffect(Unit) {
+                                        while (true) {
+                                            kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
+                                            now = Clock.System.now().toEpochMilliseconds()
+                                        }
+                                    }
+
+                                    val statusText = remember(uiState.otherUser, now) {
+                                        val lastActive = uiState.otherUser?.lastActive ?: 0L
+                                        if (lastActive == 0L) return@remember ""
+                                        if (now - lastActive < 30000) {
+                                            "online"
+                                        } else {
+                                            try {
+                                                val instant = Instant.fromEpochMilliseconds(lastActive)
+                                                val tz = TimeZone.currentSystemDefault()
+                                                val lastActiveDateTime = instant.toLocalDateTime(tz)
+                                                val nowDateTime = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz)
+
+                                                val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+
+                                                when (lastActiveDateTime.date) {
+                                                    nowDateTime.date -> {
+                                                        "last seen today at $timeStr"
+                                                    }
+                                                    nowDateTime.date.minus(DatePeriod(days = 1)) -> {
+                                                        "last seen yesterday at $timeStr"
+                                                    }
+                                                    else -> {
+                                                        val day = lastActiveDateTime.day.toString().padStart(2, '0')
+                                                        val month = lastActiveDateTime.month.number.toString().padStart(2, '0')
+                                                        val year = lastActiveDateTime.year
+                                                        "last seen $day/$month/$year"
+                                                    }
+                                                }
+                                            } catch (_: Exception) {
+                                                "offline"
+                                            }
+                                        }
+                                    }
+
+                                    if (statusText.isNotEmpty()) {
+                                        Text(
+                                            statusText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (statusText == "online") {
+                                                if (androidx.compose.foundation.isSystemInDarkTheme()) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                                }
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        if (uiState.isSelectionMode) {
+                            IconButton(onClick = viewModel::exitSelectionMode) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                            }
+                        } else {
+                            IconButton(onClick = onBackClick) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
                         }
                     },
-                    actions = {},
+                    actions = {
+                        if (uiState.isSelectionMode) {
+                            IconButton(onClick = viewModel::showDeleteConfirmation) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete")
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = if (uiState.isSelectionMode) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
@@ -172,18 +193,47 @@ fun ChatScreen(
             }
         },
         bottomBar = {
-            ChatInput(
-                message = uiState.inputText,
-                onMessageChange = viewModel::onMessageChange,
-                onSend = viewModel::sendMessage
-            )
+            if (!uiState.isSelectionMode) {
+                ChatInput(
+                    message = uiState.inputText,
+                    onMessageChange = viewModel::onMessageChange,
+                    onSend = viewModel::sendMessage
+                )
+            }
         },
         contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         ChatContent(
             uiState = uiState,
             modifier = Modifier.padding(paddingValues),
-            onLoadMore = viewModel::loadMoreMessages
+            onLoadMore = viewModel::loadMoreMessages,
+            onMessageLongClick = viewModel::enterSelectionMode,
+            onMessageClick = { messageId ->
+                if (uiState.isSelectionMode) {
+                    viewModel.toggleMessageSelection(messageId)
+                }
+            }
+        )
+    }
+
+    if (uiState.showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::hideDeleteConfirmation,
+            title = { Text("Delete selected messages?") },
+            text = { Text("These messages will be removed for you. Others will still be able to see them.") },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::deleteSelectedMessages,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::hideDeleteConfirmation) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
@@ -192,7 +242,9 @@ fun ChatScreen(
 fun ChatContent(
     uiState: ChatUiState,
     modifier: Modifier = Modifier,
-    onLoadMore: () -> Unit = {}
+    onLoadMore: () -> Unit = {},
+    onMessageLongClick: (String) -> Unit = {},
+    onMessageClick: (String) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -284,7 +336,14 @@ fun ChatContent(
                             DateHeader(date)
                             Spacer(modifier = Modifier.height(8.dp))
                         }
-                        MessageBubble(message = message)
+                        val isSelected = uiState.selectedMessageIds.contains(message.id)
+                        MessageBubble(
+                            message = message,
+                            isSelected = isSelected,
+                            isSelectionMode = uiState.isSelectionMode,
+                            onLongClick = { onMessageLongClick(message.id) },
+                            onClick = { onMessageClick(message.id) }
+                        )
                     }
                 }
 
@@ -332,7 +391,13 @@ fun ChatContent(
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage) {
+fun MessageBubble(
+    message: ChatMessage,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onClick: () -> Unit = {}
+) {
     val alignment = if (message.isFromMe) Alignment.CenterEnd else Alignment.CenterStart
     
     // WhatsApp-like colors (keeping your theme colors but using them in a similar way)
@@ -354,10 +419,23 @@ fun MessageBubble(message: ChatMessage) {
         RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
     }
 
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+    } else {
+        Color.Transparent
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .background(backgroundColor)
+            .pointerInput(isSelectionMode) {
+                detectTapGestures(
+                    onLongPress = { if (!isSelectionMode) onLongClick() },
+                    onTap = { if (isSelectionMode) onClick() }
+                )
+            }
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
         Surface(

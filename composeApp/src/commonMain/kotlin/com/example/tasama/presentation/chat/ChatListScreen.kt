@@ -12,7 +12,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,6 +89,14 @@ fun ChatListScreen(
         },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
+        val displayItems = remember(uiState.channels, uiState.channelUsers) {
+            val currentUid = viewModel.currentUserId
+            uiState.channels.map { channel ->
+                val otherId = channel.participantIds.find { it != currentUid }
+                Triple(otherId?.let { uiState.channelUsers[it] }, channel, channel.id)
+            }
+        }
+
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -105,7 +112,7 @@ fun ChatListScreen(
                         )
                     }
 
-                    if (uiState.channels.isEmpty()) {
+                    if (displayItems.isEmpty()) {
                         item {
                             Column(
                                 modifier = Modifier.fillParentMaxSize(),
@@ -121,20 +128,14 @@ fun ChatListScreen(
                             }
                         }
                     } else {
-                        items(uiState.channels, key = { it.id }) { channel ->
+                        items(displayItems, key = { it.third }) { (user, channel, _) ->
                             var showMenu by remember { mutableStateOf(false) }
-                            val currentUid = viewModel.currentUserId
-                            val otherUserId = if (currentUid != null) {
-                                channel.participantIds.find { it != currentUid }
-                            } else null
-
-                            val otherUser = otherUserId?.let { uiState.channelUsers[it] }
 
                             Box {
                                 ChannelItem(
                                     channel = channel,
                                     currentUserId = viewModel.currentUserId,
-                                    otherUser = otherUser,
+                                    otherUser = user,
                                     now = now,
                                     onClick = { onChannelClick(channel.id) },
                                     onLongClick = { showMenu = true }
@@ -173,10 +174,14 @@ fun ChatListScreen(
                 viewModel.clearSearch()
             },
             onSearch = { query -> viewModel.searchUser(query) },
-            onAdd = { userId ->
-                viewModel.createChannel(userId)
-                showAddContactDialog = false
+        onAdd = { userId ->
+            viewModel.createChannel(userId) { channelId ->
+                if (channelId != null) {
+                    onChannelClick(channelId)
+                    showAddContactDialog = false
+                }
             }
+        }
         )
     }
 }
@@ -232,7 +237,7 @@ fun AIAdvisorItem(onClick: () -> Unit) {
 
 @Composable
 fun ChannelItem(
-    channel: ChatChannel, 
+    channel: ChatChannel?, 
     currentUserId: String?, 
     otherUser: User?,
     now: Long,
@@ -257,7 +262,7 @@ fun ChannelItem(
             UserAvatar(
                 user = otherUser,
                 modifier = Modifier.fillMaxSize(),
-                fallbackName = otherUser?.name ?: channel.participantNames.filterKeys { it != currentUserId }.values.firstOrNull()
+                fallbackName = otherUser?.name ?: channel?.participantNames?.filterKeys { it != currentUserId }?.values?.firstOrNull()
             )
             
             // Online status indicator
@@ -282,11 +287,11 @@ fun ChannelItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val displayName = otherUser?.name ?: run {
-                    val otherParticipants = channel.participantNames.filterKeys { it != currentUserId }
+                    val otherParticipants = channel?.participantNames?.filterKeys { it != currentUserId } ?: emptyMap()
                     if (otherParticipants.isNotEmpty()) {
                         otherParticipants.values.joinToString(", ")
                     } else {
-                        channel.participantNames.values.joinToString(", ")
+                        channel?.participantNames?.values?.joinToString(", ") ?: "Unknown"
                     }
                 }
 
@@ -299,9 +304,11 @@ fun ChannelItem(
                     modifier = Modifier.weight(1f)
                 )
                 
-                val timeString = remember(channel.lastMessageTimestamp) {
+                val timeString = remember(channel?.lastMessageTimestamp) {
+                    val timestamp = channel?.lastMessageTimestamp ?: 0L
+                    if (timestamp == 0L) return@remember ""
                     try {
-                        val instant = Instant.fromEpochMilliseconds(channel.lastMessageTimestamp)
+                        val instant = Instant.fromEpochMilliseconds(timestamp)
                         val tz = TimeZone.currentSystemDefault()
                         val localDateTime = instant.toLocalDateTime(tz)
                         val now = Clock.System.now().toLocalDateTime(tz)
@@ -336,7 +343,7 @@ fun ChannelItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = channel.lastMessage,
+                    text = channel?.lastMessage ?: "No messages yet",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -344,7 +351,7 @@ fun ChannelItem(
                     modifier = Modifier.weight(1f)
                 )
 
-                val unreadCount = currentUserId?.let { channel.unreadCounts[it] } ?: 0
+                val unreadCount = currentUserId?.let { channel?.unreadCounts?.get(it) } ?: 0
                 if (unreadCount > 0) {
                     Box(
                         modifier = Modifier
@@ -380,14 +387,16 @@ fun AddContactDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Contact") },
         text = {
-            Column {
-                Text("Enter the 12-digit User ID or UID of the person you want to chat with.")
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Enter the 12-digit User ID or UID of the person you want to chat with.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = query,
                         onValueChange = {
-                            // Only allow numbers and max 12 digits
                             if (it.all { char -> char.isDigit() } && it.length <= 12) {
                                 query = it
                             }
@@ -411,11 +420,11 @@ fun AddContactDialog(
 
                 uiState.searchedUser?.let { user ->
                     Card(
-                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth().clickable { onAdd(user.id) },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             UserAvatar(
@@ -424,6 +433,43 @@ fun AddContactDialog(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(user.name, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (uiState.contacts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        "Saved Contacts",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                    ) {
+                        items(uiState.contacts) { contact ->
+                            // Use latest data from channelUsers if available for real-time status
+                            val updatedContact = uiState.channelUsers[contact.id] ?: contact
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onAdd(contact.id) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                UserAvatar(
+                                    user = updatedContact,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = updatedContact.name,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                 }

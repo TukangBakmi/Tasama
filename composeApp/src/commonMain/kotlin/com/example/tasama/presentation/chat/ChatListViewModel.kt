@@ -24,6 +24,7 @@ class ChatListViewModel(
 
     private var dataJob: Job? = null
     private var usersJob: Job? = null
+    private var contactsJob: Job? = null
 
     val currentUserId: String?
         get() = repository.getCurrentUserId()
@@ -38,9 +39,11 @@ class ChatListViewModel(
                 if (uid == null) {
                     dataJob?.cancel()
                     usersJob?.cancel()
+                    contactsJob?.cancel()
                     _uiState.value = ChatListUiState()
                 } else {
                     loadChannels()
+                    loadContacts(uid)
                 }
             }
         }
@@ -57,16 +60,42 @@ class ChatListViewModel(
         }
     }
 
+    private fun loadContacts(uid: String) {
+        contactsJob?.cancel()
+        contactsJob = viewModelScope.launch {
+            authRepository.getUserFlow(uid).collectLatest { user ->
+                val contactIds = user?.contactIds ?: emptyList()
+                if (contactIds.isEmpty()) {
+                    _uiState.update { it.copy(contacts = emptyList()) }
+                    observeUsersStatus(uiState.value.channels)
+                } else {
+                    val contactFlows = contactIds.map { authRepository.getUserFlow(it) }
+                    combine(contactFlows) { contacts ->
+                        contacts.filterNotNull()
+                    }.collect { contactsList ->
+                        _uiState.update { it.copy(contacts = contactsList) }
+                        observeUsersStatus(uiState.value.channels)
+                    }
+                }
+            }
+        }
+    }
+
     private fun observeUsersStatus(channels: List<ChatChannel>) {
         usersJob?.cancel()
-        val otherUserIds = channels.flatMap { it.participantIds }
+        
+        val channelUserIds = channels.flatMap { it.participantIds }
             .filter { it != currentUserId }
-            .distinct()
+            .toSet()
+            
+        val contactIds = uiState.value.contacts.map { it.id }.toSet()
+        
+        val allOtherUserIds = (channelUserIds + contactIds).distinct()
 
-        if (otherUserIds.isEmpty()) return
+        if (allOtherUserIds.isEmpty()) return
 
         usersJob = viewModelScope.launch {
-            val userFlows = otherUserIds.map { uid ->
+            val userFlows = allOtherUserIds.map { uid ->
                 authRepository.getUserFlow(uid)
             }
 
@@ -78,13 +107,19 @@ class ChatListViewModel(
         }
     }
 
-    fun createChannel(otherUserId: String) {
+    fun createChannel(otherUserId: String, onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
             try {
-                repository.createChannelWithUser(otherUserId)
+                val channelId = repository.createChannelWithUser(otherUserId)
+                val currentUid = currentUserId
+                if (currentUid != null) {
+                    authRepository.addContact(currentUid, otherUserId)
+                }
                 _uiState.update { it.copy(searchedUser = null) }
+                onResult(channelId)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
+                onResult(null)
             }
         }
     }

@@ -27,6 +27,7 @@ interface AuthRepository {
     suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean)
     suspend fun updateConnectionType(uid: String, type: String)
     suspend fun updateLastActive(uid: String, timestamp: Long? = null)
+    suspend fun addContact(uid: String, contactUid: String): Result<Unit>
     suspend fun sendPartnerRequest(uid: String, partnerShortId: String): Result<Unit>
     suspend fun acceptPartnerRequest(uid: String, anniversaryDate: Long): Result<Unit>
     suspend fun declinePartnerRequest(uid: String): Result<Unit>

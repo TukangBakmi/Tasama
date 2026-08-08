@@ -10,5 +10,5 @@ data class ChatChannel(
     val lastMessage: String = "",
     val lastMessageTimestamp: Long = 0L,
     val unreadCounts: Map<String, Int> = emptyMap(),
-    val deletedBy: List<String> = emptyList()
+    val deletedAt: Map<String, Long> = emptyMap()
 )

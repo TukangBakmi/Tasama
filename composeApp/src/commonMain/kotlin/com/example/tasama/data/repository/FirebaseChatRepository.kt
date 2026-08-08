@@ -34,7 +34,10 @@ class FirebaseChatRepository(
                     .snapshots
                     .map { snapshot ->
                         snapshot.documents.map { it.data(ChatChannel.serializer()) }
-                            .filter { !it.deletedBy.contains(uid) }
+                            .filter { channel -> 
+                                val deletedAt = channel.deletedAt[uid] ?: 0L
+                                deletedAt < channel.lastMessageTimestamp
+                            }
                             .sortedByDescending { it.lastMessageTimestamp }
                     }
                     .catch { emit(emptyList()) }
@@ -44,38 +47,49 @@ class FirebaseChatRepository(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getMessages(channelId: String): Flow<List<ChatMessage>> {
-        val currentUserId = authRepository.getCurrentUserId()
-        return channelsCollection.document(channelId).collection("messages")
-            .orderBy("timestamp", direction = Direction.DESCENDING)
-            .limit(20)
-            .snapshots
-            .map { snapshot ->
-                snapshot.documents.map { doc ->
-                    val msg = doc.data(ChatMessage.serializer())
-                    
-                    // Auto-update SENT messages to DELIVERED when fetched by recipient
-                    if (msg.userId != currentUserId && msg.status == MessageStatus.SENT) {
-                        repositoryScope.launch {
-                            try {
-                                doc.reference.updateFields {
-                                    "status" to MessageStatus.DELIVERED.name
-                                }
-                            } catch (_: Exception) {}
+        val uid = authRepository.getCurrentUserId() ?: return flowOf(emptyList())
+        val channelRef = channelsCollection.document(channelId)
+        
+        return channelRef.snapshots.flatMapLatest { channelSnapshot ->
+            val channel = try { channelSnapshot.data(ChatChannel.serializer()) } catch (e: Exception) { null }
+            val deletedAt = channel?.deletedAt?.get(uid) ?: 0L
+            
+            channelRef.collection("messages")
+                .where { "timestamp" greaterThan deletedAt }
+                .orderBy("timestamp", direction = Direction.DESCENDING)
+                .limit(20)
+                .snapshots
+                .map { snapshot ->
+                    snapshot.documents.map { doc ->
+                        val msg = doc.data(ChatMessage.serializer())
+                        
+                        // Auto-update SENT messages to DELIVERED when fetched by recipient
+                        if (msg.userId != uid && msg.status == MessageStatus.SENT) {
+                            repositoryScope.launch {
+                                try {
+                                    doc.reference.updateFields {
+                                        "status" to MessageStatus.DELIVERED.name
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         }
-                    }
 
-                    msg.copy(isFromMe = msg.userId == currentUserId)
+                        msg.copy(isFromMe = msg.userId == uid)
+                    }
+                    .sortedBy { it.timestamp }
                 }
-                .sortedBy { it.timestamp }
-            }
-            .catch { emit(emptyList()) }
+        }.catch { emit(emptyList()) }
     }
 
     override suspend fun getMoreMessages(channelId: String, limit: Int, beforeTimestamp: Long): List<ChatMessage> {
         val uid = authRepository.getCurrentUserId() ?: return emptyList()
         return try {
+            val channel = channelsCollection.document(channelId).get().data(ChatChannel.serializer())
+            val deletedAt = channel.deletedAt[uid] ?: 0L
+            
             channelsCollection.document(channelId).collection("messages")
                 .where { "timestamp" lessThan beforeTimestamp }
+                .where { "timestamp" greaterThan deletedAt }
                 .orderBy("timestamp", direction = Direction.DESCENDING)
                 .limit(limit)
                 .get()
@@ -120,7 +134,6 @@ class FirebaseChatRepository(
             "lastMessage" to (text as Any?)
             "lastMessageTimestamp" to (now as Any?)
             "unreadCounts" to (newUnreadCounts as Any?)
-            "deletedBy" to emptyList<String>()
         }
     }
 
@@ -140,18 +153,9 @@ class FirebaseChatRepository(
                 lastMessage = "Started a conversation",
                 lastMessageTimestamp = Clock.System.now().toEpochMilliseconds(),
                 unreadCounts = mapOf(currentUserId to 0, otherUserId to 0),
-                deletedBy = emptyList()
+                deletedAt = emptyMap()
             )
             channelsCollection.document(channelId).set(ChatChannel.serializer(), channel)
-        } else {
-            // If it exists but was deleted by current user, undelete it for them
-            val channel = existing.data(ChatChannel.serializer())
-            if (channel.deletedBy.contains(currentUserId)) {
-                val newDeletedBy = channel.deletedBy.filter { it != currentUserId }
-                channelsCollection.document(channelId).updateFields {
-                    "deletedBy" to newDeletedBy
-                }
-            }
         }
         return channelId
     }
@@ -190,12 +194,10 @@ class FirebaseChatRepository(
         val channelRef = channelsCollection.document(channelId)
         val channel = channelRef.get().data(ChatChannel.serializer())
         
-        val newDeletedBy = channel.deletedBy.toMutableList()
-        if (!newDeletedBy.contains(userId)) {
-            newDeletedBy.add(userId)
-        }
+        val newDeletedAt = channel.deletedAt.toMutableMap()
+        newDeletedAt[userId] = Clock.System.now().toEpochMilliseconds()
         
-        channelRef.updateFields { "deletedBy" to newDeletedBy }
+        channelRef.updateFields { "deletedAt" to newDeletedAt }
     }
 
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {

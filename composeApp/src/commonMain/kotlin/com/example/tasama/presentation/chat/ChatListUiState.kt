@@ -6,6 +6,7 @@ import com.example.tasama.domain.model.User
 data class ChatListUiState(
     val channels: List<ChatChannel> = emptyList(),
     val channelUsers: Map<String, User> = emptyMap(),
+    val contacts: List<User> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val searchedUser: SearchedUser? = null,

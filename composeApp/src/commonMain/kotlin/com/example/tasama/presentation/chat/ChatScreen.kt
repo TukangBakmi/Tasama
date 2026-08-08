@@ -97,8 +97,9 @@ fun ChatScreen(
                                     }
                                 }
 
-                                val statusText = remember(uiState.otherUser?.lastActive, now) {
+                                val statusText = remember(uiState.otherUser, now) {
                                     val lastActive = uiState.otherUser?.lastActive ?: 0L
+                                    if (lastActive == 0L) return@remember ""
                                     if (now - lastActive < 30000) {
                                         "online"
                                     } else {

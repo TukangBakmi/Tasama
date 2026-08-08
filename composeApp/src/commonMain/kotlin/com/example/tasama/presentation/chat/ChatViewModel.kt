@@ -54,15 +54,14 @@ class ChatViewModel(
         channelInfoJob?.cancel()
         channelInfoJob = viewModelScope.launch {
             val currentUserId = repository.getCurrentUserId() ?: return@launch
-            repository.getChannels().collect { channels ->
-                val channel = channels.find { it.id == channelId }
+            repository.getChannel(channelId).collect { channel ->
                 channel?.let { ch ->
-                    val otherParticipantId = ch.participantIds.find { it != currentUserId }
                     val otherParticipantName = ch.participantNames.entries
                         .find { entry -> entry.key != currentUserId }?.value ?: "Chat"
                     
                     _uiState.update { state -> state.copy(channelName = otherParticipantName) }
                     
+                    val otherParticipantId = ch.participantIds.find { it != currentUserId }
                     if (otherParticipantId != null) {
                         observeOtherUserStatus(otherParticipantId)
                     }

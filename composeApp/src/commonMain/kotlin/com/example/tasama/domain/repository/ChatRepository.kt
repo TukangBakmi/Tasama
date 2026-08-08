@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface ChatRepository {
     fun getChannels(): Flow<List<ChatChannel>>
+    fun getChannel(channelId: String): Flow<ChatChannel?>
     fun getMessages(channelId: String): Flow<List<ChatMessage>>
     suspend fun getMoreMessages(channelId: String, limit: Int, beforeTimestamp: Long): List<ChatMessage>
     suspend fun sendMessage(channelId: String, text: String)

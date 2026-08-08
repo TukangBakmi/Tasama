@@ -45,6 +45,14 @@ class FirebaseChatRepository(
         }
     }
 
+    override fun getChannel(channelId: String): Flow<ChatChannel?> {
+        return channelsCollection.document(channelId).snapshots
+            .map { 
+                if (it.exists) it.data(ChatChannel.serializer()) else null
+            }
+            .catch { emit(null) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getMessages(channelId: String): Flow<List<ChatMessage>> {
         val uid = authRepository.getCurrentUserId() ?: return flowOf(emptyList())

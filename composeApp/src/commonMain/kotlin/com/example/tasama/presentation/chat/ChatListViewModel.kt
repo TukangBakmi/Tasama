@@ -221,6 +221,22 @@ class ChatListViewModel(
         _uiState.update { it.copy(searchedUser = null, error = null) }
     }
 
+    fun setContactToDelete(user: User?) {
+        _uiState.update { it.copy(contactToDelete = user) }
+    }
+
+    fun removeContact(contactId: String) {
+        val uid = currentUserId ?: return
+        viewModelScope.launch {
+            try {
+                authRepository.removeContact(uid, contactId)
+                _uiState.update { it.copy(contactToDelete = null) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message, contactToDelete = null) }
+            }
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }

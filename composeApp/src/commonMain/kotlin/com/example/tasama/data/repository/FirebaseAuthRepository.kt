@@ -273,6 +273,23 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun removeContact(uid: String, contactUid: String): Result<Unit> {
+        return try {
+            val userRef = firestore.collection("users").document(uid)
+            val user = userRef.get().data<User>()
+            
+            if (user.contactIds.contains(contactUid)) {
+                val newContacts = user.contactIds.filter { it != contactUid }
+                userRef.updateFields {
+                    "contactIds" to newContacts
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun sendPartnerRequest(uid: String, partnerShortId: String): Result<Unit> {
         return try {
             val sender = getUser(uid) ?: return Result.failure(Exception("User not found"))

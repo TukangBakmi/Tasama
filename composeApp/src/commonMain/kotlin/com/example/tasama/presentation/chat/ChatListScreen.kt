@@ -10,10 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.flow.filterNotNull
@@ -221,14 +218,38 @@ fun ChatListScreen(
                 viewModel.clearSearch()
             },
             onSearch = { query -> viewModel.searchUser(query) },
-        onAdd = { userId ->
-            viewModel.createChannel(userId) { channelId ->
-                if (channelId != null) {
-                    onChannelClick(channelId)
-                    showAddContactDialog = false
+            onAdd = { userId ->
+                viewModel.createChannel(userId) { channelId ->
+                    if (channelId != null) {
+                        onChannelClick(channelId)
+                        showAddContactDialog = false
+                    }
+                }
+            },
+            onDeleteContact = { user ->
+                viewModel.setContactToDelete(user)
+            }
+        )
+    }
+
+    uiState.contactToDelete?.let { user ->
+        AlertDialog(
+            onDismissRequest = { viewModel.setContactToDelete(null) },
+            title = { Text("Remove this contact?") },
+            text = { Text("Are you sure you want to remove ${user.name} from your contacts? Chat history will remain accessible.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.removeContact(user.id) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setContactToDelete(null) }) {
+                    Text("Cancel")
                 }
             }
-        }
         )
     }
 
@@ -462,7 +483,8 @@ fun AddContactDialog(
     uiState: ChatListUiState,
     onDismiss: () -> Unit,
     onSearch: (String) -> Unit,
-    onAdd: (String) -> Unit
+    onAdd: (String) -> Unit,
+    onDeleteContact: (User) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     AlertDialog(
@@ -549,8 +571,17 @@ fun AddContactDialog(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = updatedContact.name,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                IconButton(onClick = { onDeleteContact(updatedContact) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Remove contact",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }

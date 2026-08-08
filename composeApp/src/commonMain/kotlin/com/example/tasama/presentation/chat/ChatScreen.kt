@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.model.MessageStatus
@@ -58,6 +61,21 @@ fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.setResumed(true)
+                Lifecycle.Event.ON_PAUSE -> viewModel.setResumed(false)
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(channelId) {
         viewModel.setChannel(channelId)

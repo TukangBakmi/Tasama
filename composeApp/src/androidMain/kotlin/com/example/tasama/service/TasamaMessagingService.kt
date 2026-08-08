@@ -155,6 +155,21 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
         val senderAvatar = data["sender_avatar"]
 
         scope.launch {
+            // Check if the user is currently in this chat room
+            val currentUserId = authRepository.getCurrentUserId()
+            if (currentUserId != null) {
+                try {
+                    val currentUser = authRepository.getUser(currentUserId)
+                    if (currentUser?.activeChannelId == chatId) {
+                        // User is in the chat, don't show notification
+                        chatRepository.markMessageAsRead(chatId, messageId)
+                        return@launch
+                    }
+                } catch (_: Exception) {
+                    // Fallback to showing notification if check fails
+                }
+            }
+
             showMessagingNotification(
                 chatId = chatId,
                 messageId = messageId,

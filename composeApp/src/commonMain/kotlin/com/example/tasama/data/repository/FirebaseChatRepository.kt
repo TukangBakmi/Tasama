@@ -133,10 +133,22 @@ class FirebaseChatRepository(
         val channel = channelRef.get().data(ChatChannel.serializer())
         
         val newUnreadCounts = channel.unreadCounts.toMutableMap()
-        channel.participantIds.forEach { participantId ->
-            if (participantId != userId) {
-                newUnreadCounts[participantId] = (newUnreadCounts[participantId] ?: 0) + 1
-            }
+        val otherParticipantId = channel.participantIds.find { it != userId }
+        
+        var shouldIncrementUnread = true
+        if (otherParticipantId != null) {
+            // Check if the other user has this channel as their active channel
+            try {
+                val otherUserDoc = firestore.collection("users").document(otherParticipantId).get()
+                val activeChannel = otherUserDoc.get<String?>("activeChannelId")
+                if (activeChannel == channelId) {
+                    shouldIncrementUnread = false
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (shouldIncrementUnread && otherParticipantId != null) {
+            newUnreadCounts[otherParticipantId] = (newUnreadCounts[otherParticipantId] ?: 0) + 1
         }
 
         channelRef.collection("messages").document(id).set(ChatMessage.serializer(), newMessage)
@@ -271,5 +283,12 @@ class FirebaseChatRepository(
 
     override fun getCurrentUserId(): String? {
         return authRepository.getCurrentUserId()
+    }
+
+    override suspend fun setActiveChannel(channelId: String?) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        firestore.collection("users").document(uid).updateFields {
+            "activeChannelId" to channelId
+        }
     }
 }

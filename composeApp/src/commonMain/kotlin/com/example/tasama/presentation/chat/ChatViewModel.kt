@@ -25,8 +25,29 @@ class ChatViewModel(
 
     private var otherUserJob: Job? = null
 
+    private val _isResumed = MutableStateFlow(false)
+
     init {
         observeUserSession()
+    }
+
+    fun setResumed(resumed: Boolean) {
+        _isResumed.value = resumed
+        val channelId = currentChannelId
+        if (resumed && channelId != null) {
+            markAsRead(channelId)
+            viewModelScope.launch {
+                try {
+                    repository.setActiveChannel(channelId)
+                } catch (_: Exception) {}
+            }
+        } else {
+            viewModelScope.launch {
+                try {
+                    repository.setActiveChannel(null)
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun observeUserSession() {
@@ -48,6 +69,23 @@ class ChatViewModel(
         observeMessages(channelId)
         markAsRead(channelId)
         loadChannelInfo(channelId)
+        
+        // Register this channel as active for the current user
+        viewModelScope.launch {
+            try {
+                repository.setActiveChannel(channelId)
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Clear active channel when leaving the chat
+        viewModelScope.launch {
+            try {
+                repository.setActiveChannel(null)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun loadChannelInfo(channelId: String) {

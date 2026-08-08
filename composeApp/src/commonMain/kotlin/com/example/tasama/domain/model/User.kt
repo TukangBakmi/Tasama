@@ -23,5 +23,6 @@ data class User(
     val connectionType: String? = null, // "Wi-Fi", "Cellular", "Offline"
     val speed: Float? = null, // speed in m/s
     val accuracy: Float? = null, // accuracy in meters
-    val contactIds: List<String> = emptyList()
+    val contactIds: List<String> = emptyList(),
+    val activeChannelId: String? = null
 )

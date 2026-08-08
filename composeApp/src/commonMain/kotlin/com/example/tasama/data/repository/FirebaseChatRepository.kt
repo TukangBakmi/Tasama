@@ -208,6 +208,22 @@ class FirebaseChatRepository(
         channelRef.updateFields { "deletedAt" to newDeletedAt }
     }
 
+    override suspend fun deleteChannels(channelIds: List<String>) {
+        val userId = authRepository.getCurrentUserId() ?: return
+        val now = Clock.System.now().toEpochMilliseconds()
+        
+        // Using a loop for simplicity, though a batch or transaction could be used
+        channelIds.forEach { channelId ->
+            try {
+                val channelRef = channelsCollection.document(channelId)
+                val channel = channelRef.get().data(ChatChannel.serializer())
+                val newDeletedAt = channel.deletedAt.toMutableMap()
+                newDeletedAt[userId] = now
+                channelRef.updateFields { "deletedAt" to newDeletedAt }
+            } catch (_: Exception) {}
+        }
+    }
+
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {
         channelsCollection.document(channelId).collection("messages").document(messageId)
             .updateFields { "status" to MessageStatus.READ.name }

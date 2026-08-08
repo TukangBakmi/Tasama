@@ -166,6 +166,57 @@ class ChatListViewModel(
         }
     }
 
+    fun toggleSelectionMode(enabled: Boolean) {
+        _uiState.update { 
+            it.copy(
+                isSelectionMode = enabled, 
+                selectedChannelIds = emptySet(),
+                showDeleteConfirmation = false
+            ) 
+        }
+    }
+
+    fun toggleChannelSelection(channelId: String) {
+        _uiState.update { state ->
+            val newSelection = state.selectedChannelIds.toMutableSet()
+            if (newSelection.contains(channelId)) {
+                newSelection.remove(channelId)
+            } else {
+                newSelection.add(channelId)
+            }
+            
+            val isStillInSelectionMode = newSelection.isNotEmpty() || state.isSelectionMode
+            state.copy(
+                selectedChannelIds = newSelection,
+                isSelectionMode = isStillInSelectionMode
+            )
+        }
+    }
+
+    fun showDeleteConfirmation(show: Boolean) {
+        _uiState.update { it.copy(showDeleteConfirmation = show) }
+    }
+
+    fun deleteSelectedChannels() {
+        val selectedIds = uiState.value.selectedChannelIds.toList()
+        if (selectedIds.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                repository.deleteChannels(selectedIds)
+                _uiState.update { 
+                    it.copy(
+                        selectedChannelIds = emptySet(),
+                        isSelectionMode = false,
+                        showDeleteConfirmation = false
+                    ) 
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message, showDeleteConfirmation = false) }
+            }
+        }
+    }
+
     fun clearSearch() {
         _uiState.update { it.copy(searchedUser = null, error = null) }
     }

@@ -10,7 +10,10 @@ data class ChatListUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val searchedUser: SearchedUser? = null,
-    val isSearchingUser: Boolean = false
+    val isSearchingUser: Boolean = false,
+    val isSelectionMode: Boolean = false,
+    val selectedChannelIds: Set<String> = emptySet(),
+    val showDeleteConfirmation: Boolean = false
 )
 
 data class SearchedUser(

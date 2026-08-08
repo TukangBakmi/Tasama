@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -69,13 +70,36 @@ fun ChatListScreen(
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(
-                    title = { Text("Messages", fontWeight = FontWeight.Bold) },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                if (uiState.isSelectionMode) {
+                    TopAppBar(
+                        title = { Text("${uiState.selectedChannelIds.size} selected") },
+                        navigationIcon = {
+                            IconButton(onClick = { viewModel.toggleSelectionMode(false) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { viewModel.showDeleteConfirmation(true) },
+                                enabled = uiState.selectedChannelIds.isNotEmpty()
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                )
+                } else {
+                    TopAppBar(
+                        title = { Text("Messages", fontWeight = FontWeight.Bold) },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
                 HorizontalDivider(
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -83,8 +107,10 @@ fun ChatListScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddContactDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Contact")
+            if (!uiState.isSelectionMode) {
+                FloatingActionButton(onClick = { showAddContactDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Contact")
+                }
             }
         },
         contentWindowInsets = WindowInsets(0)
@@ -130,6 +156,7 @@ fun ChatListScreen(
                     } else {
                         items(displayItems, key = { it.third }) { (user, channel, _) ->
                             var showMenu by remember { mutableStateOf(false) }
+                            val isSelected = uiState.selectedChannelIds.contains(channel.id)
 
                             Box {
                                 ChannelItem(
@@ -137,21 +164,41 @@ fun ChatListScreen(
                                     currentUserId = viewModel.currentUserId,
                                     otherUser = user,
                                     now = now,
-                                    onClick = { onChannelClick(channel.id) },
-                                    onLongClick = { showMenu = true }
+                                    isSelected = isSelected,
+                                    isSelectionMode = uiState.isSelectionMode,
+                                    onClick = {
+                                        if (uiState.isSelectionMode) {
+                                            viewModel.toggleChannelSelection(channel.id)
+                                        } else {
+                                            onChannelClick(channel.id)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (!uiState.isSelectionMode) {
+                                            viewModel.toggleSelectionMode(true)
+                                            viewModel.toggleChannelSelection(channel.id)
+                                        }
+                                    }
                                 )
-                                DropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Delete Chat") },
-                                        onClick = {
-                                            viewModel.deleteChannel(channel.id)
-                                            showMenu = false
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                                    )
+                                if (!uiState.isSelectionMode) {
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Delete Chat") },
+                                            onClick = {
+                                                viewModel.deleteChannel(channel.id)
+                                                showMenu = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
                             }
                             HorizontalDivider(
@@ -182,6 +229,27 @@ fun ChatListScreen(
                 }
             }
         }
+        )
+    }
+
+    if (uiState.showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { viewModel.showDeleteConfirmation(false) },
+            title = { Text("Delete selected chats?") },
+            text = { Text("Delete ${uiState.selectedChannelIds.size} conversations? This will remove them from your list but keep them for other participants.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.deleteSelectedChannels() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.showDeleteConfirmation(false) }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
@@ -241,13 +309,19 @@ fun ChannelItem(
     currentUserId: String?, 
     otherUser: User?,
     now: Long,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .pointerInput(Unit) {
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                else Color.Transparent
+            )
+            .pointerInput(isSelectionMode) {
                 detectTapGestures(
                     onTap = { onClick() },
                     onLongPress = { onLongClick() }
@@ -256,6 +330,14 @@ fun ChannelItem(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (isSelectionMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onClick() },
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
+
         Box(
             modifier = Modifier.size(48.dp)
         ) {

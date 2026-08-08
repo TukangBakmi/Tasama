@@ -74,8 +74,17 @@ class FirebaseChatRepository(
                         if (msg.userId != uid && !msg.deliveredTo.containsKey(uid)) {
                             repositoryScope.launch {
                                 try {
+                                    val now = Clock.System.now().toEpochMilliseconds()
                                     doc.reference.updateFields {
-                                        "deliveredTo.$uid" to Clock.System.now().toEpochMilliseconds()
+                                        "deliveredTo.$uid" to now
+                                    }
+                                    
+                                    // Update channel's lastMessageDeliveredTo if this is the last message
+                                    val channelData = channelRef.get().data(ChatChannel.serializer())
+                                    if (channelData.lastMessageId == msg.id) {
+                                        channelRef.updateFields {
+                                            "lastMessageDeliveredTo.$uid" to now
+                                        }
                                     }
                                 } catch (_: Exception) {}
                             }
@@ -158,7 +167,11 @@ class FirebaseChatRepository(
         channelRef.collection("messages").document(id).set(ChatMessage.serializer(), newMessage)
         channelRef.updateFields {
             "lastMessage" to (text as Any?)
+            "lastMessageId" to (id as Any?)
             "lastMessageTimestamp" to (now as Any?)
+            "lastMessageSenderId" to (userId as Any?)
+            "lastMessageDeliveredTo" to (emptyMap<String, Long>() as Any?)
+            "lastMessageReadBy" to (emptyMap<String, Long>() as Any?)
             "unreadCounts" to (newUnreadCounts as Any?)
         }
     }
@@ -209,6 +222,13 @@ class FirebaseChatRepository(
                 doc.reference.updateFields {
                     "readBy.$userId" to now
                 }
+                
+                // Update channel's lastMessageReadBy if this is the last message
+                if (channel.lastMessageId == msg.id) {
+                    channelRef.updateFields {
+                        "lastMessageReadBy.$userId" to now
+                    }
+                }
             }
         }
     }
@@ -242,8 +262,21 @@ class FirebaseChatRepository(
 
     override suspend fun markMessageAsRead(channelId: String, messageId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
-        channelsCollection.document(channelId).collection("messages").document(messageId)
-            .updateFields { "readBy.$uid" to Clock.System.now().toEpochMilliseconds() }
+        val channelRef = channelsCollection.document(channelId)
+        val now = Clock.System.now().toEpochMilliseconds()
+        
+        channelRef.collection("messages").document(messageId)
+            .updateFields { "readBy.$uid" to now }
+
+        // Update channel's lastMessageReadBy if this is the last message
+        try {
+            val channelData = channelRef.get().data(ChatChannel.serializer())
+            if (channelData.lastMessageId == messageId) {
+                channelRef.updateFields {
+                    "lastMessageReadBy.$uid" to now
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     override suspend fun markMessageAsDelivered(
@@ -251,13 +284,23 @@ class FirebaseChatRepository(
         messageId: String
     ) {
         val uid = authRepository.getCurrentUserId() ?: return
-        channelsCollection
-            .document(channelId)
-            .collection("messages")
-            .document(messageId)
+        val channelRef = channelsCollection.document(channelId)
+        val now = Clock.System.now().toEpochMilliseconds()
+        
+        channelRef.collection("messages").document(messageId)
             .updateFields {
-                "deliveredTo.$uid" to Clock.System.now().toEpochMilliseconds()
+                "deliveredTo.$uid" to now
             }
+
+        // Update channel's lastMessageDeliveredTo if this is the last message
+        try {
+            val channelData = channelRef.get().data(ChatChannel.serializer())
+            if (channelData.lastMessageId == messageId) {
+                channelRef.updateFields {
+                    "lastMessageDeliveredTo.$uid" to now
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     override suspend fun deleteMessages(channelId: String, messageIds: List<String>) {

@@ -509,7 +509,7 @@ fun MessageBubble(
 }
 
 @Composable
-fun MessageStatusIcon(isRead: Boolean, isDelivered: Boolean) {
+fun MessageStatusIcon(isRead: Boolean, isDelivered: Boolean, modifier: Modifier = Modifier) {
     val icon = if (isDelivered || isRead) Icons.Default.DoneAll else Icons.Default.Check
     val tint = if (isRead) {
         Color(0xFF00BFFF) // Blue for read
@@ -519,7 +519,7 @@ fun MessageStatusIcon(isRead: Boolean, isDelivered: Boolean) {
     Icon(
         imageVector = icon,
         contentDescription = if (isRead) "Read" else if (isDelivered) "Delivered" else "Sent",
-        modifier = Modifier.size(14.dp),
+        modifier = modifier.size(14.dp),
         tint = tint
     )
 }

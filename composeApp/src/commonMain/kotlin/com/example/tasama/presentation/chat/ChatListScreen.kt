@@ -445,6 +445,19 @@ fun ChannelItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (channel?.lastMessageSenderId == currentUserId && channel?.lastMessageSenderId?.isNotEmpty() == true) {
+                    val otherId = channel.participantIds.find { it != currentUserId }
+                    if (otherId != null) {
+                        val isRead = channel.lastMessageReadBy.containsKey(otherId)
+                        val isDelivered = channel.lastMessageDeliveredTo.containsKey(otherId)
+                        MessageStatusIcon(
+                            isRead = isRead,
+                            isDelivered = isDelivered,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                }
+
                 Text(
                     text = channel?.lastMessage ?: "No messages yet",
                     style = MaterialTheme.typography.bodySmall,

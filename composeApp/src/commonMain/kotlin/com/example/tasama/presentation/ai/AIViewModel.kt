@@ -127,13 +127,13 @@ class AIViewModel(
     }
 
     fun sendMessage() {
-        val text = _uiState.value.inputText
-        if (text.isBlank()) return
+        val trimmedText = _uiState.value.inputText.trim()
+        if (trimmedText.isEmpty()) return
 
         val now = Clock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
-            text = text,
+            text = trimmedText,
             sender = MessageSender.USER,
             timestamp = now,
             isFromMe = true
@@ -148,7 +148,7 @@ class AIViewModel(
                         isTyping = true
                     )
                 }
-                processAIResponse(text)
+                processAIResponse(trimmedText)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
             }

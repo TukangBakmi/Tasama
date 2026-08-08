@@ -600,12 +600,7 @@ fun ChatInput(
                         placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Send
-                        ),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onSend = {
-                                if (message.isNotBlank()) onSend()
-                            }
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Default
                         ),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,

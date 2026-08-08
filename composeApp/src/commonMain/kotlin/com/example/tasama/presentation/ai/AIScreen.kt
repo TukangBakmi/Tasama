@@ -166,6 +166,10 @@ fun AIInput(
                         onValueChange = onMessageChange,
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Tanya Sir Quack...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Default
+                        ),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,

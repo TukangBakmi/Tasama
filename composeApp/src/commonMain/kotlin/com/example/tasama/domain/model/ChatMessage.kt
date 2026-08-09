@@ -19,5 +19,6 @@ data class ChatMessage(
     val repliedMessageSenderId: String? = null,
     val repliedMessageSenderName: String? = null,
     val repliedMessageText: String? = null,
-    val repliedMessageType: String? = null
+    val repliedMessageType: String? = null,
+    val repliedMessageTimestamp: Long? = null
 )

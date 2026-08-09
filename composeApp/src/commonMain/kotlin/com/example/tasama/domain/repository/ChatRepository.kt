@@ -16,7 +16,8 @@ interface ChatRepository {
         repliedMessageSenderId: String? = null,
         repliedMessageSenderName: String? = null,
         repliedMessageText: String? = null,
-        repliedMessageType: String? = null
+        repliedMessageType: String? = null,
+        repliedMessageTimestamp: Long? = null
     )
     suspend fun createChannelWithUser(otherUserId: String): String
     suspend fun getUserName(userId: String): String?

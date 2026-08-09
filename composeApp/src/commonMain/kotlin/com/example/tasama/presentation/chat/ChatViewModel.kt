@@ -268,12 +268,37 @@ class ChatViewModel(
         _uiState.update { it.copy(scrollToMessageId = null) }
     }
 
+    fun setHighlightedMessage(messageId: String?) {
+        _uiState.update { it.copy(highlightedMessageId = messageId) }
+        if (messageId != null) {
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2000)
+                if (_uiState.value.highlightedMessageId == messageId) {
+                    _uiState.update { it.copy(highlightedMessageId = null) }
+                }
+            }
+        }
+    }
+
+    fun jumpToMessage(messageId: String, timestamp: Long?) {
+        val exists = _uiState.value.messages.any { it.id == messageId }
+        if (exists) {
+            scrollToMessage(messageId)
+            setHighlightedMessage(messageId)
+        } else {
+            _uiState.update { it.copy(error = "Message not found or deleted") }
+        }
+    }
+
     fun sendMessage() {
         val channelId = currentChannelId ?: return
         val trimmedMessage = _uiState.value.inputText.trim()
-        if (trimmedMessage.isEmpty()) return
+        if (trimmedMessage.isEmpty() || _uiState.value.isSending) return
 
         val replyingTo = _uiState.value.replyingToMessage
+
+        // Lock sending immediately to prevent duplicates from fast taps
+        _uiState.update { it.copy(isSending = true) }
 
         viewModelScope.launch {
             try {
@@ -284,11 +309,25 @@ class ChatViewModel(
                     repliedMessageSenderId = replyingTo?.userId,
                     repliedMessageSenderName = if (replyingTo?.isFromMe == true) "You" else replyingTo?.senderName,
                     repliedMessageText = replyingTo?.text,
-                    repliedMessageType = null // For now, we only have text messages
+                    repliedMessageType = null, // For now, we only have text messages
+                    repliedMessageTimestamp = replyingTo?.timestamp
                 )
-                _uiState.update { it.copy(inputText = "", replyingToMessage = null) }
+                // Clear input only after successful send
+                _uiState.update {
+                    it.copy(
+                        isSending = false,
+                        inputText = "",
+                        replyingToMessage = null
+                    )
+                }
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
+                // Restore sending state on error so user can retry
+                _uiState.update {
+                    it.copy(
+                        isSending = false,
+                        error = e.message ?: "Failed to send message"
+                    )
+                }
             }
         }
     }

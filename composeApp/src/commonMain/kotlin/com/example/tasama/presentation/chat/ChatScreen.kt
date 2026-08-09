@@ -1,10 +1,16 @@
 package com.example.tasama.presentation.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -70,6 +76,10 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -225,7 +235,9 @@ fun ChatScreen(
                     onMessageChange = viewModel::onMessageChange,
                     onSend = viewModel::sendMessage,
                     replyingToMessage = uiState.replyingToMessage,
-                    onCancelReply = { viewModel.setReplyingTo(null) }
+                    onCancelReply = { viewModel.setReplyingTo(null) },
+                    isSending = uiState.isSending,
+                    focusRequester = focusRequester
                 )
             }
         },
@@ -241,8 +253,14 @@ fun ChatScreen(
                     viewModel.toggleMessageSelection(messageId)
                 }
             },
-            onSwipeToReply = viewModel::setReplyingTo,
-            onReplyClick = viewModel::scrollToMessage,
+            onSwipeToReply = { message ->
+                viewModel.setReplyingTo(message)
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            },
+            onReplyClick = { repliedId, timestamp ->
+                viewModel.jumpToMessage(repliedId, timestamp)
+            },
             onScrollToMessageComplete = viewModel::onScrollToMessageComplete
         )
     }
@@ -277,7 +295,7 @@ fun ChatContent(
     onMessageLongClick: (String) -> Unit = {},
     onMessageClick: (String) -> Unit = {},
     onSwipeToReply: (ChatMessage) -> Unit = {},
-    onReplyClick: (String) -> Unit = {},
+    onReplyClick: (String, Long?) -> Unit = { _, _ -> },
     onScrollToMessageComplete: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
@@ -337,11 +355,22 @@ fun ChatContent(
     val haptic = LocalHapticFeedback.current
 
     // Observe scroll requests to jump to a message
-    LaunchedEffect(uiState.scrollToMessageId) {
+    LaunchedEffect(uiState.scrollToMessageId, reversedMessages) {
         uiState.scrollToMessageId?.let { targetId ->
             val index = reversedMessages.indexOfFirst { it.id == targetId }
             if (index != -1) {
-                listState.animateScrollToItem(index)
+                // To center the item, we need to know its index and the viewport height
+                val layoutInfo = listState.layoutInfo
+                val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                
+                // Find if the item is already visible to estimate its height
+                val targetItem = layoutInfo.visibleItemsInfo.find { it.key == targetId }
+                val itemHeightEstimate = targetItem?.size ?: 60 // fallback estimate
+
+                // Offset to place item at the center: (viewportHeight - itemHeight) / 2
+                val centerOffset = (viewportHeight - itemHeightEstimate) / 2
+                
+                listState.animateScrollToItem(index, -centerOffset)
                 onScrollToMessageComplete()
             }
         }
@@ -384,9 +413,11 @@ fun ChatContent(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                         val isSelected = uiState.selectedMessageIds.contains(message.id)
+                        val isHighlighted = uiState.highlightedMessageId == message.id
                         MessageBubble(
                             message = message,
                             isSelected = isSelected,
+                            isHighlighted = isHighlighted,
                             isSelectionMode = uiState.isSelectionMode,
                             onLongClick = { onMessageLongClick(message.id) },
                             onClick = { onMessageClick(message.id) },
@@ -394,8 +425,8 @@ fun ChatContent(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onSwipeToReply(it)
                             },
-                            onReplyClick = { repliedId ->
-                                onReplyClick(repliedId)
+                            onReplyClick = { repliedId, timestamp ->
+                                onReplyClick(repliedId, timestamp)
                             }
                         )
                     }
@@ -448,11 +479,12 @@ fun ChatContent(
 fun MessageBubble(
     message: ChatMessage,
     isSelected: Boolean = false,
+    isHighlighted: Boolean = false,
     isSelectionMode: Boolean = false,
     onLongClick: () -> Unit = {},
     onClick: () -> Unit = {},
     onSwipeToReply: (ChatMessage) -> Unit = {},
-    onReplyClick: (String) -> Unit = {}
+    onReplyClick: (String, Long?) -> Unit = { _, _ -> }
 ) {
     val alignment = if (message.isFromMe) Alignment.CenterEnd else Alignment.CenterStart
     
@@ -480,10 +512,20 @@ fun MessageBubble(
         RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
     }
 
+    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+    val animatedHighlightColor by animateColorAsState(
+        targetValue = if (isHighlighted) highlightColor else Color.Transparent,
+        animationSpec = tween(
+            durationMillis = if (isHighlighted) 800 else 800,
+            easing = FastOutSlowInEasing
+        ),
+        label = "highlight"
+    )
+
     val backgroundColor = if (isSelected) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
     } else {
-        Color.Transparent
+        animatedHighlightColor
     }
 
     Box(
@@ -537,10 +579,10 @@ fun MessageBubble(
         }
 
         Surface(
-            color = containerColor,
+            color = if (isHighlighted) containerColor.copy(alpha = 0.9f) else containerColor,
             contentColor = contentColor,
             shape = shape,
-            shadowElevation = 0.5.dp,
+            shadowElevation = if (isHighlighted) 4.dp else 0.5.dp,
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .offset(x = with(density) { offset.value.toDp() })
@@ -553,7 +595,12 @@ fun MessageBubble(
                             text = message.repliedMessageText ?: "",
                             modifier = Modifier
                                 .padding(bottom = 4.dp)
-                                .clickable { onReplyClick(message.repliedMessageId) }
+                                .clickable { 
+                                    onReplyClick(
+                                        message.repliedMessageId,
+                                        message.repliedMessageTimestamp
+                                    ) 
+                                }
                         )
                     }
 
@@ -663,6 +710,8 @@ fun ChatInput(
     onSend: () -> Unit,
     replyingToMessage: ChatMessage? = null,
     onCancelReply: () -> Unit = {},
+    isSending: Boolean = false,
+    focusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -708,7 +757,9 @@ fun ChatInput(
                         TextField(
                             value = message,
                             onValueChange = onMessageChange,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
                             placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                                 capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
@@ -721,7 +772,8 @@ fun ChatInput(
                                 unfocusedIndicatorColor = Color.Transparent,
                                 disabledIndicatorColor = Color.Transparent
                             ),
-                            maxLines = 4
+                            maxLines = 4,
+                            enabled = true
                         )
                     }
                 }
@@ -731,18 +783,26 @@ fun ChatInput(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(
-                            if (message.isNotBlank()) MaterialTheme.colorScheme.primary 
+                            if (message.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary 
                             else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                         )
-                        .clickable(enabled = message.isNotBlank(), onClick = onSend),
+                        .clickable(enabled = message.isNotBlank() && !isSending, onClick = onSend),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
+                    if (isSending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
         }
@@ -756,6 +816,9 @@ fun ReplyPreview(
     modifier: Modifier = Modifier,
     onCloseClick: (() -> Unit)? = null
 ) {
+    val displaySender = if (senderName.isBlank()) "Unknown" else senderName
+    val displayText = if (text.isBlank()) "Message not available" else text
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -775,7 +838,7 @@ fun ReplyPreview(
                 .weight(1f)
         ) {
             Text(
-                text = senderName,
+                text = displaySender,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
@@ -783,7 +846,7 @@ fun ReplyPreview(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = text,
+                text = displayText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

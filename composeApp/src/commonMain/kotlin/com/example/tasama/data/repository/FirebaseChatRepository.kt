@@ -129,7 +129,8 @@ class FirebaseChatRepository(
         repliedMessageSenderId: String?,
         repliedMessageSenderName: String?,
         repliedMessageText: String?,
-        repliedMessageType: String?
+        repliedMessageType: String?,
+        repliedMessageTimestamp: Long?
     ) {
         val userId = authRepository.getCurrentUserId() ?: return
         val senderName = authRepository.getUserName(userId) ?: "User"
@@ -156,7 +157,8 @@ class FirebaseChatRepository(
             repliedMessageSenderId = repliedMessageSenderId,
             repliedMessageSenderName = repliedMessageSenderName,
             repliedMessageText = repliedMessageText,
-            repliedMessageType = repliedMessageType
+            repliedMessageType = repliedMessageType,
+            repliedMessageTimestamp = repliedMessageTimestamp
         )
         
         val newUnreadCounts = channel.unreadCounts.toMutableMap()

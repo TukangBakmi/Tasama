@@ -5,13 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.Place
-import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.SettingsRepository
-import com.example.tasama.domain.repository.StoryRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
 import kotlinx.coroutines.Job
@@ -24,7 +22,6 @@ data class PartnerUiState(
     val currentUser: User? = null,
     val partner: User? = null,
     val places: List<Place> = emptyList(),
-    val stories: List<Story> = emptyList(),
     val pendingRequestFrom: User? = null,
     val pendingRequestTo: User? = null,
     val isLoading: Boolean = false,
@@ -41,14 +38,12 @@ data class PartnerUiState(
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
-    val selectedStoryForMap: Story? = null,
     val settings: AppSettings = AppSettings()
 )
 
 class PartnerViewModel(
     private val authRepository: AuthRepository,
     private val placeRepository: PlaceRepository,
-    private val storyRepository: StoryRepository,
     private val directionsRepository: DirectionsRepository,
     private val weatherRepository: WeatherRepository,
     private val settingsRepository: SettingsRepository
@@ -59,7 +54,6 @@ class PartnerViewModel(
     private var settingsJob: Job? = null
     private var partnerObservationJob: Job? = null
     private var placesObservationJob: Job? = null
-    private var storiesObservationJob: Job? = null
     private var currentUserJob: Job? = null
     private var distanceJob: Job? = null
     private var weatherJob: Job? = null
@@ -67,8 +61,6 @@ class PartnerViewModel(
     private var currentPartnerId: String? = null
     private var currentPlacesUserId: String? = null
     private var currentPlacesPartnerId: String? = null
-    private var currentStoriesUserId: String? = null
-    private var currentStoriesPartnerId: String? = null
 
     private var lastDistanceRequestLocationMe: Pair<Double, Double>? = null
     private var lastDistanceRequestLocationPartner: Pair<Double, Double>? = null
@@ -102,14 +94,12 @@ class PartnerViewModel(
     private fun stopAllActivities() {
         partnerObservationJob?.cancel()
         placesObservationJob?.cancel()
-        storiesObservationJob?.cancel()
         distanceJob?.cancel()
         weatherJob?.cancel()
         _uiState.update {
             it.copy(
                 partner = null,
                 places = emptyList(),
-                stories = emptyList(),
                 distanceInfo = null,
                 weatherInfo = null
             )
@@ -131,7 +121,6 @@ class PartnerViewModel(
                         if (user != null) {
                             handlePartnerAndRequests(user)
                             observePlaces(user.id, user.partnerId)
-                            observeStories(user.id, user.partnerId)
                             checkAndFetchDistance()
                         }
                     }
@@ -214,7 +203,7 @@ class PartnerViewModel(
         val pLat = partner.latitude ?: return
         val pLon = partner.longitude ?: return
 
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         
         // Define thresholds based on battery mode
         val (distThreshold, timeThreshold) = when (_uiState.value.settings.batteryMode) {
@@ -234,7 +223,7 @@ class PartnerViewModel(
     }
 
     private fun updateDistance(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
-        lastDistanceTimestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        lastDistanceTimestamp = Clock.System.now().toEpochMilliseconds()
         lastDistanceRequestLocationMe = myLat to myLon
         lastDistanceRequestLocationPartner = pLat to pLon
         
@@ -357,89 +346,6 @@ class PartnerViewModel(
         }
     }
 
-    private fun observeStories(userId: String, partnerId: String?) {
-        if (!_uiState.value.settings.partnerMapEnabled || !_uiState.value.settings.storyMarkersEnabled) {
-            _uiState.update { it.copy(stories = emptyList()) }
-            currentStoriesUserId = null
-            currentStoriesPartnerId = null
-            storiesObservationJob?.cancel()
-            return
-        }
-        if (storiesObservationJob?.isActive == true && currentStoriesUserId == userId && currentStoriesPartnerId == partnerId) return
-        currentStoriesUserId = userId
-        currentStoriesPartnerId = partnerId
-
-        storiesObservationJob?.cancel()
-        storiesObservationJob = viewModelScope.launch {
-            val myStoriesFlow = storyRepository.getStories(userId)
-            val partnerStoriesFlow = partnerId?.let { storyRepository.getStories(it) } ?: flowOf(emptyList())
-
-            combine(myStoriesFlow, partnerStoriesFlow) { myStories, pStories ->
-                (myStories + pStories).distinctBy { it.id }
-            }.collect { allStories ->
-                _uiState.update { it.copy(stories = allStories) }
-            }
-        }
-    }
-
-    fun addStory(story: Story, photoBytes: List<ByteArray> = emptyList()) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                // Image compression before upload
-                val compressedPhotos = photoBytes.map { bytes ->
-                    compressImage(bytes, 80)
-                }
-                
-                val photoUrls = compressedPhotos.map { bytes ->
-                    storyRepository.uploadStoryPhoto(uid, bytes)
-                }
-                val storyWithPhotos = story.copy(photoUrls = story.photoUrls + photoUrls)
-                storyRepository.addStory(uid, storyWithPhotos)
-                _uiState.update { it.copy(isLoading = false, successMessage = "Story added successfully!") }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to add story") }
-            }
-        }
-    }
-
-    fun deleteStory(story: Story) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                storyRepository.deleteStory(uid, story)
-                _uiState.update { it.copy(isLoading = false, successMessage = "Story deleted successfully") }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to delete story") }
-            }
-        }
-    }
-
-    fun updateStory(story: Story, photoBytes: List<ByteArray> = emptyList()) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                // Compress and upload new photos
-                val compressedPhotos = photoBytes.map { bytes ->
-                    compressImage(bytes, 80)
-                }
-                
-                val newPhotoUrls = compressedPhotos.map { bytes ->
-                    storyRepository.uploadStoryPhoto(uid, bytes)
-                }
-                
-                val storyWithPhotos = story.copy(photoUrls = story.photoUrls + newPhotoUrls)
-                storyRepository.updateStory(uid, storyWithPhotos)
-                _uiState.update { it.copy(isLoading = false, successMessage = "Story updated successfully!") }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to update story") }
-            }
-        }
-    }
-
     fun onPartnerShortIdChange(shortId: String) {
         _uiState.update { it.copy(partnerShortIdInput = shortId) }
     }
@@ -532,14 +438,6 @@ class PartnerViewModel(
         }
     }
 
-    fun updateLocation(lat: Double, lon: Double, speed: Float? = null, accuracy: Float? = null) {
-        if (!_uiState.value.settings.partnerMapEnabled) return
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            authRepository.updateLocation(uid, lat, lon, speed, accuracy)
-        }
-    }
-
     fun updateBatteryLevel(level: Float, isCharging: Boolean) {
         if (!_uiState.value.settings.partnerMapEnabled) return
         val uid = authRepository.getCurrentUserId() ?: return
@@ -554,16 +452,8 @@ class PartnerViewModel(
         }
     }
 
-    fun selectStoryForMap(story: Story?) {
-        _uiState.update { it.copy(selectedStoryForMap = story) }
-    }
-
     fun onIdCopied() {
         _uiState.update { it.copy(successMessage = "ID copied to clipboard") }
-    }
-
-    fun clearOperationSuccess() {
-        _uiState.update { it.copy(isOperationSuccess = false) }
     }
 
     fun clearError() {
@@ -597,10 +487,6 @@ class PartnerViewModel(
 
     fun updateReminderNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.updateReminderNotificationsEnabled(enabled) }
-    }
-
-    fun updateStoryMarkersEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.updateStoryMarkersEnabled(enabled) }
     }
 
     fun updateReminderMarkersEnabled(enabled: Boolean) {

@@ -41,7 +41,6 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Rect
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.RoutePoint
-import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.model.WeatherInfo
 import com.example.tasama.domain.repository.DistanceInfo
@@ -104,12 +103,8 @@ class MapCoordinator(
             is MKPolyline -> {
                 MKPolylineRenderer(overlay).apply {
                     val style = overlay.title
-                    when {
-                        style == "Story" -> {
-                            strokeColor = UIColor.systemPinkColor
-                            lineWidth = 8.0
-                        }
-                        style == "Dashed" -> {
+                    when (style) {
+                        "Dashed" -> {
                             strokeColor = UIColor.systemBlueColor
                             lineWidth = 4.0
                             lineDashPattern = listOf(10, 10)
@@ -156,7 +151,6 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
-    stories: List<Story>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
     weatherInfo: WeatherInfo?,
@@ -167,13 +161,7 @@ actual fun MapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
-    onAddStory: (Story, List<ByteArray>) -> Unit,
-    onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onUnlink: () -> Unit,
-    onSelectStory: (Story?) -> Unit,
-    selectedStoryForMap: Story?,
-    onClearSelectedStory: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
     onOpenSettings: () -> Unit
 ) {
@@ -199,19 +187,12 @@ actual fun MapContent(
         MapCoordinator(
             onMapClick = { lat, lon ->
                 isPartnerInfoVisible = false
-                onClearSelectedStory()
                 
-                val clickedStory = stories.find { story ->
-                    calculateDistance(Location(lat, lon), Location(story.latitude, story.longitude)) <= 50.0
+                val clickedPlace = places.find { place ->
+                    calculateDistance(Location(lat, lon), Location(place.latitude, place.longitude)) <= maxOf(place.radius, 50.0)
                 }
-                
-                if (clickedStory == null) {
-                    val clickedPlace = places.find { place ->
-                        calculateDistance(Location(lat, lon), Location(place.latitude, place.longitude)) <= maxOf(place.radius, 50.0)
-                    }
-                    if (clickedPlace != null) {
-                        // Handle place click
-                    }
+                if (clickedPlace != null) {
+                    // Handle place click
                 }
             },
             onRegionChanged = { /* Handle if needed */ }
@@ -327,21 +308,6 @@ actual fun MapContent(
                 mapView.removeOverlays(mapView.overlays)
                 mapView.showsTraffic = settings.trafficLayerEnabled
                 
-                selectedStoryForMap?.let { story ->
-                    if (settings.partnerMapEnabled && settings.storyMarkersEnabled && story.route.isNotEmpty()) {
-                        memScoped {
-                            val coords = allocArray<CLLocationCoordinate2D>(story.route.size)
-                            story.route.forEachIndexed { index, pt ->
-                                coords[index].latitude = pt.latitude
-                                coords[index].longitude = pt.longitude
-                            }
-                            val polyline = MKPolyline.polylineWithCoordinates(coords, story.route.size.toULong())
-                            polyline.setTitle("Story")
-                            mapView.addOverlay(polyline)
-                        }
-                    }
-                }
-
                 if (settings.partnerMapEnabled && settings.placesEnabled) {
                     places.forEach { place ->
                         val coord = CLLocationCoordinate2DMake(place.latitude, place.longitude)
@@ -374,14 +340,6 @@ actual fun MapContent(
                 val annotations = mutableListOf<platform.MapKit.MKPointAnnotation>()
                 
                 if (settings.partnerMapEnabled) {
-                    if (settings.storyMarkersEnabled) {
-                        annotations.addAll(stories.map { story ->
-                            MKPointAnnotation().apply {
-                                setCoordinate(CLLocationCoordinate2DMake(story.latitude, story.longitude))
-                                setTitle(story.title)
-                            }
-                        })
-                    }
                     if (settings.placesEnabled) {
                         annotations.addAll(places.map { place ->
                             MKPointAnnotation().apply {
@@ -396,40 +354,6 @@ actual fun MapContent(
         )
 
         markerData?.let { data ->
-            if (settings.partnerMapEnabled && settings.storyMarkersEnabled) {
-                stories.forEach { story ->
-                    val coord = CLLocationCoordinate2DMake(story.latitude, story.longitude)
-                    val pos = mapViewInstance?.convertCoordinate(coord, toPointToView = mapViewInstance)?.useContents {
-                        Offset(x.toFloat() * density.density, y.toFloat() * density.density)
-                    }
-                    val isSelected = selectedStoryForMap?.id == story.id
-                    
-                    if (pos != null && pos.x in 0f..mapSize.width.toFloat() && pos.y in 0f..mapSize.height.toFloat()) {
-                        Box(
-                            modifier = Modifier
-                                .offset { 
-                                    IntOffset(
-                                        pos.x.toInt() - with(density) { 24.dp.toPx().toInt() }, 
-                                        pos.y.toInt() - with(density) { 24.dp.toPx().toInt() }
-                                    ) 
-                                }
-                                .zIndex(if (isSelected) 3f else 1f)
-                        ) {
-                            StoryMarker(
-                                story = story, 
-                                isSelected = isSelected,
-                                modifier = Modifier.clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    // Select logic
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
             if (settings.partnerMapEnabled && isTogether && myLocation != null && partnerLocation != null) {
                 val midpoint = Location(
                     (myLocation.latitude + partnerLocation.latitude) / 2.0,
@@ -601,88 +525,6 @@ fun UserMarker(user: User?, isMe: Boolean, status: ConnectionStatus, onClick: ((
             shadowElevation = 4.dp
         ) {
             UserAvatar(user = user, modifier = Modifier.fillMaxSize(), showInitials = user?.avatarUrl == null)
-        }
-    }
-}
-
-@Composable
-fun StoryMarker(story: Story, isSelected: Boolean = false, modifier: Modifier = Modifier) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.25f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "markerScale"
-    )
-
-    val elevation by animateDpAsState(
-        targetValue = if (isSelected) 12.dp else 4.dp,
-        label = "markerElevation"
-    )
-
-    var hasAppeared by remember { mutableStateOf(false) }
-    val appearanceScale by animateFloatAsState(
-        targetValue = if (hasAppeared) 1f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "appearanceScale"
-    )
-
-    LaunchedEffect(Unit) {
-        hasAppeared = true
-    }
-
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .graphicsLayer {
-                scaleX = scale * appearanceScale
-                scaleY = scale * appearanceScale
-                shadowElevation = elevation.toPx()
-                shape = CircleShape
-                clip = false
-            }
-            .background(Color.White, CircleShape)
-            .border(
-                width = if (isSelected) 3.dp else 2.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081),
-                shape = CircleShape
-            )
-            .padding(2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (story.photoUrls.isNotEmpty()) {
-            AsyncImage(
-                model = story.photoUrls.first(),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = Color(0xFFFF4081),
-                modifier = Modifier.size(24.dp)
-            )
-        }
-        
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 4.dp, y = 4.dp)
-                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081), CircleShape)
-                .border(1.dp, Color.White, CircleShape)
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        ) {
-            val dateStr = remember(story.date) {
-                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(story.date)
-                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                "${dateTime.day}/${dateTime.monthNumber}"
-            }
-            Text(
-                text = dateStr,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }

@@ -2,7 +2,6 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
@@ -272,7 +271,7 @@ class ChatViewModel(
         _uiState.update { it.copy(highlightedMessageId = messageId) }
         if (messageId != null) {
             viewModelScope.launch {
-                kotlinx.coroutines.delay(2000)
+                kotlinx.coroutines.delay(1400)
                 if (_uiState.value.highlightedMessageId == messageId) {
                     _uiState.update { it.copy(highlightedMessageId = null) }
                 }
@@ -280,7 +279,7 @@ class ChatViewModel(
         }
     }
 
-    fun jumpToMessage(messageId: String, timestamp: Long?) {
+    fun jumpToMessage(messageId: String) {
         val exists = _uiState.value.messages.any { it.id == messageId }
         if (exists) {
             scrollToMessage(messageId)

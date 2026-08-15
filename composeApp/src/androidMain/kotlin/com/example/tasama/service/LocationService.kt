@@ -31,6 +31,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.koin.android.ext.android.inject
 import java.util.*
+import kotlin.math.abs
 
 class LocationService : Service() {
 
@@ -193,7 +194,7 @@ class LocationService : Service() {
         // 6. Update if speed changes significantly (5+ km/h)
         val oldSpeedKmh = ((oldPartner.speed ?: 0f) * 3.6f).toInt()
         val newSpeedKmh = ((newPartner.speed ?: 0f) * 3.6f).toInt()
-        if (Math.abs(oldSpeedKmh - newSpeedKmh) >= 5) return true
+        if (abs(oldSpeedKmh - newSpeedKmh) >= 5) return true
 
         // 7. Update if moved significantly (40+ meters)
         val distance = calculateDistance(

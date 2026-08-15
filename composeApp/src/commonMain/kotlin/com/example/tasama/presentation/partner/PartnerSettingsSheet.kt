@@ -28,7 +28,6 @@ fun PartnerSettingsSheet(
     onUpdateDashboardEnabled: (Boolean) -> Unit,
     onUpdatePlacesEnabled: (Boolean) -> Unit,
     onUpdateReminderNotificationsEnabled: (Boolean) -> Unit,
-    onUpdateStoryMarkersEnabled: (Boolean) -> Unit,
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
@@ -122,14 +121,6 @@ fun PartnerSettingsSheet(
                         icon = Icons.Default.DarkMode,
                         checked = settings.mapDarkThemeEnabled,
                         onCheckedChange = onUpdateMapDarkThemeEnabled
-                    )
-
-                    SettingsToggleItem(
-                        title = "Memory Markers",
-                        subtitle = "Show stories on the map",
-                        icon = Icons.Default.PhotoLibrary,
-                        checked = settings.storyMarkersEnabled,
-                        onCheckedChange = onUpdateStoryMarkersEnabled
                     )
 
                     SettingsToggleItem(

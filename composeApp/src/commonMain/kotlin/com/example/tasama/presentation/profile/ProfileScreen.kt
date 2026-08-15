@@ -63,7 +63,7 @@ fun ProfileScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     val clipboardManager = LocalClipboardManager.current
-    val scope = rememberCoroutineScope()
+    rememberCoroutineScope()
 
     var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
     var showCropper by remember { mutableStateOf(false) }
@@ -124,7 +124,6 @@ fun ProfileScreen(
                 },
                 onEditName = { showEditNameDialog = true },
                 onEditAvatar = { showAvatarSelectionDialog = true },
-                onDeleteAvatar = viewModel::deleteProfilePicture,
                 onThemeClick = { showThemeDialog = true },
                 onCurrencyClick = { showCurrencyDialog = true },
                 onPartnerClick = {
@@ -655,7 +654,6 @@ fun ProfileContent(
     onCopyId: (String) -> Unit,
     onEditName: () -> Unit,
     onEditAvatar: () -> Unit,
-    onDeleteAvatar: () -> Unit,
     onThemeClick: () -> Unit,
     onCurrencyClick: () -> Unit,
     onPartnerClick: () -> Unit,
@@ -990,7 +988,6 @@ fun ProfilePreview() {
             onCopyId = {},
             onEditName = {},
             onEditAvatar = {},
-            onDeleteAvatar = {},
             onThemeClick = {},
             onCurrencyClick = {},
             onPartnerClick = {}

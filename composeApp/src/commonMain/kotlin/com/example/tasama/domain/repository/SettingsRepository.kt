@@ -19,7 +19,6 @@ interface SettingsRepository {
     suspend fun updateDashboardEnabled(enabled: Boolean)
     suspend fun updatePlacesEnabled(enabled: Boolean)
     suspend fun updateReminderNotificationsEnabled(enabled: Boolean)
-    suspend fun updateStoryMarkersEnabled(enabled: Boolean)
     suspend fun updateReminderMarkersEnabled(enabled: Boolean)
     suspend fun updateTrafficLayerEnabled(enabled: Boolean)
     suspend fun updateMapDarkThemeEnabled(enabled: Boolean)

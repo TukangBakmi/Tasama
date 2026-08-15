@@ -12,7 +12,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,7 +25,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -79,7 +77,7 @@ fun ChatScreen(
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val scope = rememberCoroutineScope()
+    rememberCoroutineScope()
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -258,8 +256,8 @@ fun ChatScreen(
                 focusRequester.requestFocus()
                 keyboardController?.show()
             },
-            onReplyClick = { repliedId, timestamp ->
-                viewModel.jumpToMessage(repliedId, timestamp)
+            onReplyClick = { repliedId, _ ->
+                viewModel.jumpToMessage(repliedId)
             },
             onScrollToMessageComplete = viewModel::onScrollToMessageComplete
         )
@@ -516,7 +514,7 @@ fun MessageBubble(
     val animatedHighlightColor by animateColorAsState(
         targetValue = if (isHighlighted) highlightColor else Color.Transparent,
         animationSpec = tween(
-            durationMillis = if (isHighlighted) 800 else 800,
+            durationMillis = if (isHighlighted) 100 else 1200,
             easing = FastOutSlowInEasing
         ),
         label = "highlight"
@@ -730,7 +728,7 @@ fun ChatInput(
             ) {
                 if (replyingToMessage != null) {
                     ReplyPreview(
-                        senderName = if (replyingToMessage.isFromMe) "You" else replyingToMessage.senderName ?: "Unknown",
+                        senderName = if (replyingToMessage.isFromMe) "You" else replyingToMessage.senderName,
                         text = replyingToMessage.text,
                         onCloseClick = onCancelReply,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -816,8 +814,8 @@ fun ReplyPreview(
     modifier: Modifier = Modifier,
     onCloseClick: (() -> Unit)? = null
 ) {
-    val displaySender = if (senderName.isBlank()) "Unknown" else senderName
-    val displayText = if (text.isBlank()) "Message not available" else text
+    val displaySender = senderName.ifBlank { "Unknown" }
+    val displayText = text.ifBlank { "Message not available" }
 
     Row(
         modifier = modifier

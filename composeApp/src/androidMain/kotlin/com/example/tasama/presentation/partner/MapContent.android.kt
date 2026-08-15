@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Place
-import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.model.WeatherInfo
 import com.example.tasama.domain.model.AppSettings
@@ -69,13 +68,8 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import kotlin.math.*
 import com.example.tasama.R
-import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
-import io.github.vinceglb.filekit.core.PickerType
-import io.github.vinceglb.filekit.core.PlatformFile
 import kotlinx.datetime.*
 import kotlin.time.Clock
 
@@ -126,7 +120,6 @@ actual fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
-    stories: List<Story>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
     weatherInfo: WeatherInfo?,
@@ -137,25 +130,16 @@ actual fun MapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
-    onAddStory: (Story, List<ByteArray>) -> Unit,
-    onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onUnlink: () -> Unit,
-    onSelectStory: (Story?) -> Unit,
-    selectedStoryForMap: Story?,
-    onClearSelectedStory: () -> Unit,
     settings: AppSettings,
     onOpenSettings: () -> Unit
 ) {
     val density = LocalDensity.current
 
     var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
-    var showDeleteStoryDialog by remember { mutableStateOf<Story?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
-    var showAddStorySheet by remember { mutableStateOf<LatLng?>(null) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
-    var editingStory by remember { mutableStateOf<Story?>(null) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
     
@@ -296,25 +280,6 @@ actual fun MapContent(
         }
     }
 
-    // Story Selection Logic
-    LaunchedEffect(selectedStoryForMap) {
-        selectedStoryForMap?.let { story ->
-            isFollowModeEnabled = false
-            
-            if (story.latitude != 0.0) {
-                val storyLatLng = LatLng(story.latitude, story.longitude)
-                scope.launch {
-                    cameraPositionState.animate(
-                        CameraUpdateFactory.newLatLngZoom(storyLatLng, 15f),
-                        1000
-                    )
-                    delay(1500)
-                    onClearSelectedStory()
-                }
-            }
-        }
-    }
-
     // Derived states for real-time intersection and visibility (Optimization: Responsive to Camera Movement)
     val markerData by remember(currentMyLocation, currentPartnerLocation, isTogether, mapSize, density) {
         derivedStateOf {
@@ -447,38 +412,20 @@ actual fun MapContent(
             onMapClick = { latLng ->
                 println("DEBUG: Map clicked at $latLng")
                 isPartnerInfoVisible = false
-                onClearSelectedStory()
                 
-                val clickedStory = stories.find { story ->
-                    calculateDistance(Location(latLng.latitude, latLng.longitude), Location(story.latitude, story.longitude)) <= 50.0
+                val clickedPlace = places.find { place ->
+                    val distanceValue = calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude))
+                    distanceValue <= maxOf(place.radius, 50.0) 
                 }
-                
-                if (clickedStory != null) {
-                    editingStory = clickedStory
-                    showAddStorySheet = LatLng(clickedStory.latitude, clickedStory.longitude)
-                } else {
-                    val clickedPlace = places.find { place ->
-                        val distanceValue = calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude))
-                        distanceValue <= maxOf(place.radius, 50.0) 
-                    }
-                    if (clickedPlace != null) {
-                        println("DEBUG: Map click detected place: ${clickedPlace.name}")
-                        editingPlace = clickedPlace
-                        showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
-                    }
+                if (clickedPlace != null) {
+                    println("DEBUG: Map click detected place: ${clickedPlace.name}")
+                    editingPlace = clickedPlace
+                    showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
                 }
             },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
-                val existingStory = stories.find { story ->
-                    calculateDistance(Location(latLng.latitude, latLng.longitude), Location(story.latitude, story.longitude)) <= 50.0
-                }
-                if (existingStory != null) {
-                    showDeleteStoryDialog = existingStory
-                    return@GoogleMap
-                }
-
                 val existingPlace = places.find { place ->
                     calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude)) <= place.radius
                 }
@@ -486,10 +433,7 @@ actual fun MapContent(
                     showDeletePlaceDialog = existingPlace
                 } else {
                     editingPlace = null
-                    editingStory = null
-                    // Default to showing a selection dialog or the story sheet?
-                    // Let's modify the flow to show a selection sheet.
-                    showAddStorySheet = latLng
+                    showAddPlaceSheet = latLng
                 }
             }
         ) {
@@ -571,96 +515,51 @@ actual fun MapContent(
 
             if (settings.placesEnabled) {
                 places.forEach { place ->
-                    val placeLatLng = LatLng(place.latitude, place.longitude)
-                    val placeColor = place.color?.let { Color(it.toInt()) } ?: MaterialTheme.colorScheme.primary
+                    val markerState = rememberUpdatedMarkerState(position = LatLng(place.latitude, place.longitude))
                     
+                    // Simple Marker for Places
+                    MarkerComposable(
+                        keys = arrayOf<Any>(place.id, place.name, place.color ?: 0L, place.iconName ?: ""),
+                        state = markerState,
+                        anchor = Offset(0.5f, 0.5f),
+                        zIndex = 0f
+                    ) {
+                        Surface(
+                            color = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.9f),
+                            shape = CircleShape,
+                            border = BorderStroke(2.dp, Color.White),
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = when (place.iconName) {
+                                        "Home" -> Icons.Default.Home
+                                        "Work" -> Icons.Default.Work
+                                        "School" -> Icons.Default.School
+                                        "Shopping" -> Icons.Default.ShoppingCart
+                                        "Restaurant" -> Icons.Default.Restaurant
+                                        "Gym" -> Icons.Default.FitnessCenter
+                                        "Hospital" -> Icons.Default.LocalHospital
+                                        "Park" -> Icons.Default.Park
+                                        else -> Icons.Default.LocationOn
+                                    },
+                                    contentDescription = place.name,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    // Circle for Place radius
                     Circle(
-                        center = placeLatLng,
+                        center = LatLng(place.latitude, place.longitude),
                         radius = place.radius,
-                        fillColor = placeColor.copy(alpha = 0.2f),
-                        strokeColor = placeColor,
+                        fillColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.15f),
+                        strokeColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.3f),
                         strokeWidth = 2f
                     )
-                    val markerState = rememberUpdatedMarkerState(position = placeLatLng)
-                    MarkerComposable(
-                        keys = arrayOf<Any>(place.id, place.name, place.latitude, place.longitude, place.color ?: 0L, place.iconName ?: ""),
-                        state = markerState,
-                        anchor = Offset(0.5f, 0.5f),
-                        title = place.name,
-                        onClick = {
-                            println("DEBUG: Marker content clicked for place: ${place.name}")
-                            editingPlace = place
-                            showAddPlaceSheet = placeLatLng
-                            true
-                        },
-                        onInfoWindowLongClick = {
-                            showDeletePlaceDialog = place
-                        }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .background(MaterialTheme.colorScheme.surface, CircleShape)
-                                .border(2.dp, placeColor, CircleShape)
-                                .padding(8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val icon = when (place.iconName) {
-                                "Home" -> Icons.Default.Home
-                                "Work" -> Icons.Default.Work
-                                "School" -> Icons.Default.School
-                                "Shopping" -> Icons.Default.ShoppingCart
-                                "Restaurant" -> Icons.Default.Restaurant
-                                "Gym" -> Icons.Default.FitnessCenter
-                                "Hospital" -> Icons.Default.LocalHospital
-                                "Park" -> Icons.Default.Park
-                                else -> Icons.Default.LocationOn
-                            }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = placeColor,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (settings.storyMarkersEnabled) {
-                stories.forEach { story ->
-                    val storyLatLng = LatLng(story.latitude, story.longitude)
-                    val markerState = rememberUpdatedMarkerState(position = storyLatLng)
-                    val isSelected = selectedStoryForMap?.id == story.id
-                    
-                    var isLoaded by remember(story.id) { mutableStateOf(false) }
-                    
-                    MarkerComposable(
-                        keys = arrayOf<Any>(
-                            story.id, 
-                            story.title, 
-                            story.latitude, 
-                            story.longitude, 
-                            story.photoUrls.firstOrNull() ?: "", 
-                            isSelected,
-                            isLoaded
-                        ),
-                        state = markerState,
-                        anchor = Offset(0.5f, 0.5f),
-                        title = story.title,
-                        zIndex = if (isSelected) 3f else 1f,
-                        onClick = {
-                            editingStory = story
-                            showAddStorySheet = storyLatLng
-                            true
-                        }
-                    ) {
-                        StoryMarker(
-                            story = story, 
-                            isSelected = isSelected,
-                            onImageLoaded = { isLoaded = it }
-                        )
-                    }
                 }
             }
 
@@ -759,43 +658,6 @@ actual fun MapContent(
                 )
             }
         }
-
-        if (showAddStorySheet != null) {
-            ModalBottomSheet(
-                onDismissRequest = { 
-                    showAddStorySheet = null
-                    editingStory = null
-                },
-                sheetState = bottomSheetState
-            ) {
-                AddStorySheetContent(
-                    location = showAddStorySheet!!,
-                    initialStory = editingStory,
-                    onAddStory = { story, bytes ->
-                        onAddStory(story, bytes)
-                        showAddStorySheet = null
-                        editingStory = null
-                    },
-                    onUpdateStory = { story, bytes ->
-                        onUpdateStory(story, bytes)
-                        showAddStorySheet = null
-                        editingStory = null
-                    },
-                    onCreatePlace = { loc, prefillName, prefillAddr ->
-                        showAddStorySheet = null
-                        editingStory = null
-                        editingPlace = Place(
-                            name = prefillName,
-                            address = prefillAddr,
-                            latitude = loc.latitude,
-                            longitude = loc.longitude
-                        )
-                        showAddPlaceSheet = loc
-                    }
-                )
-            }
-        }
-
 
         // Off-screen markers
         markerData?.let { data ->
@@ -1024,30 +886,6 @@ actual fun MapContent(
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeletePlaceDialog = null }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
-
-        if (showDeleteStoryDialog != null) {
-            AlertDialog(
-                onDismissRequest = { showDeleteStoryDialog = null },
-                title = { Text("Delete Story") },
-                text = { Text("Are you sure you want to delete \"${showDeleteStoryDialog?.title}\"? This memory will be removed for both you and your partner.") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDeleteStoryDialog?.let { onDeleteStory(it) }
-                            showDeleteStoryDialog = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Delete")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteStoryDialog = null }) {
                         Text("Cancel")
                     }
                 }
@@ -1629,390 +1467,7 @@ fun CombinedUserMarker(
     }
 }
 
-@Composable
-fun StoryMarker(
-    story: Story, 
-    isSelected: Boolean = false,
-    onImageLoaded: (Boolean) -> Unit = {}
-) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.25f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "markerScale"
-    )
 
-    val elevation by animateDpAsState(
-        targetValue = if (isSelected) 12.dp else 4.dp,
-        label = "markerElevation"
-    )
-
-    var hasAppeared by remember(story.id) { mutableStateOf(false) }
-    val appearanceScale by animateFloatAsState(
-        targetValue = if (hasAppeared) 1f else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "appearanceScale"
-    )
-
-    LaunchedEffect(story.id) {
-        hasAppeared = true
-    }
-
-    // Image loading state for MarkerComposable re-rendering
-    val imageUrl = story.photoUrls.firstOrNull()
-    val context = LocalPlatformContext.current
-    
-    val painter = if (!imageUrl.isNullOrEmpty()) {
-        val request = remember(imageUrl, context) {
-            ImageRequest.Builder(context)
-                .data(imageUrl)
-                .disableHardwareBitmaps()
-                .crossfade(false)
-                .build()
-        }
-        rememberAsyncImagePainter(
-            model = request,
-            contentScale = ContentScale.Crop
-        )
-    } else null
-
-    val imageState = painter?.state?.collectAsState()?.value
-    val isLoaded = imageState is AsyncImagePainter.State.Success
-    
-    LaunchedEffect(isLoaded) {
-        onImageLoaded(isLoaded)
-    }
-
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .graphicsLayer {
-                val finalScale = scale * appearanceScale
-                scaleX = finalScale
-                scaleY = finalScale
-                shadowElevation = elevation.toPx()
-                shape = CircleShape
-                clip = false
-            }
-            .background(MaterialTheme.colorScheme.surface, CircleShape)
-            .border(
-                width = if (isSelected) 3.dp else 2.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081),
-                shape = CircleShape
-            )
-            .padding(2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (painter != null) {
-            Image(
-                painter = painter,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-            
-            // Re-composition trigger when image is loaded
-            // This ensures that MarkerComposable takes a new snapshot
-            if (!isLoaded) {
-                // Background/Placeholder while loading
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        } else {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = Color(0xFFFF4081),
-                modifier = Modifier.size(24.dp)
-            )
-        }
-        
-        // Date badge
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 4.dp, y = 4.dp)
-                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFFF4081), CircleShape)
-                .border(1.dp, Color.White, CircleShape)
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        ) {
-            val dateStr = remember(story.date) {
-                val instant = Instant.fromEpochMilliseconds(story.date)
-                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                "${dateTime.day}/${dateTime.month.number}"
-            }
-            Text(
-                text = dateStr,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AddStorySheetContent(
-    location: LatLng,
-    initialStory: Story? = null,
-    onAddStory: (Story, List<ByteArray>) -> Unit,
-    onUpdateStory: (Story, List<ByteArray>) -> Unit,
-    onCreatePlace: (LatLng, String, String) -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var title by remember { mutableStateOf(initialStory?.title ?: "") }
-    var description by remember { mutableStateOf(initialStory?.description ?: "") }
-    var dateMillis by remember { mutableLongStateOf(initialStory?.date ?: Clock.System.now().toEpochMilliseconds()) }
-    var category by remember { mutableStateOf(initialStory?.category ?: "Memory") }
-    var address by remember { mutableStateOf(initialStory?.address ?: "Fetching address...") }
-    val photoUrls = remember { mutableStateListOf<String>().apply { initialStory?.photoUrls?.let { addAll(it) } } }
-    val newPhotos = remember { mutableStateListOf<Pair<String, ByteArray>>() }
-    
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    LaunchedEffect(location, initialStory) {
-        if (initialStory != null) return@LaunchedEffect
-        val result = reverseGeocode(location.latitude, location.longitude)
-        if (result != null) {
-            address = result
-        }
-    }
-
-    val pickerLauncher = rememberFilePickerLauncher(
-        type = PickerType.Image,
-        onResult = { file: PlatformFile? ->
-            file?.let { platformFile ->
-                scope.launch {
-                    val bytes = platformFile.readBytes()
-                    // Use a unique ID instead of potentially null path
-                    val tempId = "temp_${Clock.System.now().toEpochMilliseconds()}"
-                    newPhotos.add(tempId to bytes)
-                    photoUrls.add(tempId)
-                }
-            }
-        }
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = if (initialStory == null) "New Story" else "Edit Story",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text("Title") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text("Description") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showDatePicker = true }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.DateRange, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(12.dp))
-            val dateStr = remember(dateMillis) {
-                val instant = Instant.fromEpochMilliseconds(dateMillis)
-                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                "${dateTime.day} ${dateTime.month.name}, ${dateTime.year}"
-            }
-            Text(text = dateStr, style = MaterialTheme.typography.bodyLarge)
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = address,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Photos", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            
-            if (photoUrls.isNotEmpty()) {
-                val pagerState = rememberPagerState(pageCount = { photoUrls.size })
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        pageSpacing = 8.dp
-                    ) { page ->
-                        val url = photoUrls[page]
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            val model = remember(url) {
-                                if (url.startsWith("temp_")) {
-                                    newPhotos.find { it.first == url }?.second
-                                } else {
-                                    url
-                                }
-                            }
-                            coil3.compose.AsyncImage(
-                                model = model,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            IconButton(
-                                onClick = { 
-                                    photoUrls.remove(url)
-                                    newPhotos.removeAll { it.first == url }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(28.dp)
-                                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                    
-                    if (photoUrls.size > 1) {
-                        Row(
-                            Modifier
-                                .height(32.dp)
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            repeat(photoUrls.size) { iteration ->
-                                val color = if (pagerState.currentPage == iteration) Color.White else Color.White.copy(alpha = 0.5f)
-                                Box(
-                                    modifier = Modifier
-                                        .padding(2.dp)
-                                        .clip(CircleShape)
-                                        .background(color)
-                                        .size(6.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = { pickerLauncher.launch() },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.AddAPhoto, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Add Photo")
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Button(
-                onClick = {
-                    val story = Story(
-                        id = initialStory?.id ?: "",
-                        title = title,
-                        description = description,
-                        date = dateMillis,
-                        category = category,
-                        latitude = location.latitude,
-                        longitude = location.longitude,
-                        address = address,
-                        photoUrls = photoUrls.filter { !it.startsWith("temp_") && !it.startsWith("/") }
-                    )
-                    if (initialStory == null) {
-                        onAddStory(story, newPhotos.map { it.second })
-                    } else {
-                        onUpdateStory(story, newPhotos.map { it.second })
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = title.isNotBlank(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Save Story")
-            }
-
-            if (initialStory == null) {
-                OutlinedButton(
-                    onClick = { onCreatePlace(location, title, address) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Make it a Place")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dateMillis)
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { dateMillis = it }
-                    showDatePicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-}
 
 
 @Composable

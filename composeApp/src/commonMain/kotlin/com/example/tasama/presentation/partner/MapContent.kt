@@ -3,7 +3,6 @@ package com.example.tasama.presentation.partner
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.tasama.domain.model.Place
-import com.example.tasama.domain.model.Story
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
 
@@ -13,7 +12,6 @@ expect fun MapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place> = emptyList(),
-    stories: List<Story> = emptyList(),
     anniversaryDate: Long? = null,
     distanceInfo: DistanceInfo? = null,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
@@ -24,13 +22,7 @@ expect fun MapContent(
     onEditAnniversary: () -> Unit = {},
     onAddPlace: (Place) -> Unit = {},
     onDeletePlace: (String) -> Unit = {},
-    onAddStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
-    onDeleteStory: (Story) -> Unit = {},
-    onUpdateStory: (Story, List<ByteArray>) -> Unit = { _, _ -> },
     onUnlink: () -> Unit = {},
-    onSelectStory: (Story?) -> Unit = {},
-    selectedStoryForMap: Story? = null,
-    onClearSelectedStory: () -> Unit = {},
     settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
     onOpenSettings: () -> Unit = {}
 )

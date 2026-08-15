@@ -1,7 +1,5 @@
 package com.example.tasama.presentation.partner
 
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -11,8 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,16 +25,9 @@ import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
-import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.math.pow
-import kotlin.math.roundToInt
-import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +81,6 @@ fun PartnerScreen(
                             currentUser = uiState.currentUser,
                             partner = uiState.partner,
                             places = uiState.places,
-                            stories = uiState.stories,
                             anniversaryDate = uiState.currentUser?.anniversaryDate,
                             distanceInfo = uiState.distanceInfo,
                             weatherInfo = uiState.weatherInfo,
@@ -104,13 +92,7 @@ fun PartnerScreen(
                             onEditAnniversary = { showDatePicker = true },
                             onAddPlace = { viewModel.addPlace(it) },
                             onDeletePlace = viewModel::deletePlace,
-                            onAddStory = { story, bytes -> viewModel.addStory(story, bytes) },
-                            onDeleteStory = { story -> viewModel.deleteStory(story) },
-                            onUpdateStory = { story, bytes -> viewModel.updateStory(story, bytes) },
                             onUnlink = viewModel::unlinkPartner,
-                            onSelectStory = viewModel::selectStoryForMap,
-                            selectedStoryForMap = uiState.selectedStoryForMap,
-                            onClearSelectedStory = { viewModel.selectStoryForMap(null) },
                             onUpdatePartnerMapEnabled = viewModel::updatePartnerMapEnabled,
                             onUpdateBatteryMode = viewModel::updateBatteryMode,
                             onUpdateSmartFollowEnabled = viewModel::updateSmartFollowEnabled,
@@ -118,7 +100,6 @@ fun PartnerScreen(
                             onUpdateDashboardEnabled = viewModel::updateDashboardEnabled,
                             onUpdatePlacesEnabled = viewModel::updatePlacesEnabled,
                             onUpdateReminderNotificationsEnabled = viewModel::updateReminderNotificationsEnabled,
-                            onUpdateStoryMarkersEnabled = viewModel::updateStoryMarkersEnabled,
                             onUpdateReminderMarkersEnabled = viewModel::updateReminderMarkersEnabled,
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
                             onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled
@@ -311,7 +292,6 @@ fun PartnerMapContent(
     currentUser: User?,
     partner: User?,
     places: List<Place>,
-    stories: List<com.example.tasama.domain.model.Story> = emptyList(),
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
@@ -323,13 +303,7 @@ fun PartnerMapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
-    onAddStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
-    onDeleteStory: (com.example.tasama.domain.model.Story) -> Unit,
-    onUpdateStory: (com.example.tasama.domain.model.Story, List<ByteArray>) -> Unit,
     onUnlink: () -> Unit,
-    onSelectStory: (com.example.tasama.domain.model.Story?) -> Unit,
-    selectedStoryForMap: com.example.tasama.domain.model.Story? = null,
-    onClearSelectedStory: () -> Unit = {},
     onUpdatePartnerMapEnabled: (Boolean) -> Unit,
     onUpdateBatteryMode: (BatteryMode) -> Unit,
     onUpdateSmartFollowEnabled: (Boolean) -> Unit,
@@ -337,12 +311,10 @@ fun PartnerMapContent(
     onUpdateDashboardEnabled: (Boolean) -> Unit,
     onUpdatePlacesEnabled: (Boolean) -> Unit,
     onUpdateReminderNotificationsEnabled: (Boolean) -> Unit,
-    onUpdateStoryMarkersEnabled: (Boolean) -> Unit,
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit
 ) {
-    var showOurStory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -351,7 +323,6 @@ fun PartnerMapContent(
             currentUser = currentUser,
             partner = partner,
             places = places,
-            stories = stories,
             anniversaryDate = anniversaryDate,
             distanceInfo = distanceInfo,
             weatherInfo = weatherInfo,
@@ -362,44 +333,9 @@ fun PartnerMapContent(
             onEditAnniversary = onEditAnniversary,
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,
-            onAddStory = onAddStory,
-            onDeleteStory = onDeleteStory,
-            onUpdateStory = onUpdateStory,
             onUnlink = onUnlink,
-            onSelectStory = onSelectStory,
-            selectedStoryForMap = selectedStoryForMap,
-            onClearSelectedStory = onClearSelectedStory,
             settings = settings,
             onOpenSettings = { showSettings = true }
-        )
-
-        // Bottom Left FABs
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(bottom = 16.dp, start = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Our Story Button
-            FloatingActionButton(
-                onClick = { showOurStory = true },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Favorite, contentDescription = "Our Story")
-            }
-        }
-    }
-
-    if (showOurStory) {
-        OurStoryScreen(
-            stories = stories,
-            onDismiss = { showOurStory = false },
-            onStoryClick = { story ->
-                showOurStory = false
-                onSelectStory(story)
-            }
         )
     }
 
@@ -413,7 +349,6 @@ fun PartnerMapContent(
             onUpdateDashboardEnabled = onUpdateDashboardEnabled,
             onUpdatePlacesEnabled = onUpdatePlacesEnabled,
             onUpdateReminderNotificationsEnabled = onUpdateReminderNotificationsEnabled,
-            onUpdateStoryMarkersEnabled = onUpdateStoryMarkersEnabled,
             onUpdateReminderMarkersEnabled = onUpdateReminderMarkersEnabled,
             onUpdateTrafficLayerEnabled = onUpdateTrafficLayerEnabled,
             onUpdateMapDarkThemeEnabled = onUpdateMapDarkThemeEnabled,
@@ -458,58 +393,5 @@ fun DisabledPartnerMapContent(
             Text("Enable Partner Map")
         }
     }
-}
-
-@Composable
-fun AnniversaryBadge(timestamp: Long, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Favorite,
-                null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            val days = (Clock.System.now().toEpochMilliseconds() - timestamp) / (1000 * 60 * 60 * 24)
-            Text(
-                text = "Together for $days days",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
-    }
-}
-
-@Composable
-fun MovingIndicator() {
-    val infiniteTransition = rememberInfiniteTransition()
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-
-    Box(
-        modifier = Modifier
-            .size(8.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha))
-    )
-}
-
-private fun Double.formatDecimal(digits: Int): String {
-    val precision = 10.0.pow(digits)
-    return ((this * precision).roundToInt() / precision).toString()
 }
 

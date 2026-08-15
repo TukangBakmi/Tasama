@@ -21,7 +21,6 @@ data class AppSettings(
     val dashboardEnabled: Boolean = true,
     val placesEnabled: Boolean = true,
     val reminderNotificationsEnabled: Boolean = true,
-    val storyMarkersEnabled: Boolean = true,
     val reminderMarkersEnabled: Boolean = true,
     val trafficLayerEnabled: Boolean = false,
     val mapDarkThemeEnabled: Boolean = false

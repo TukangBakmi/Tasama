@@ -25,7 +25,6 @@ class DataStoreSettingsRepository(
         val DASHBOARD_ENABLED = booleanPreferencesKey("dashboard_enabled")
         val PLACES_ENABLED = booleanPreferencesKey("places_enabled")
         val REMINDER_NOTIFICATIONS_ENABLED = booleanPreferencesKey("reminder_notifications_enabled")
-        val STORY_MARKERS_ENABLED = booleanPreferencesKey("story_markers_enabled")
         val REMINDER_MARKERS_ENABLED = booleanPreferencesKey("reminder_markers_enabled")
         val TRAFFIC_LAYER_ENABLED = booleanPreferencesKey("traffic_layer_enabled")
         val MAP_DARK_THEME_ENABLED = booleanPreferencesKey("map_dark_theme_enabled")
@@ -43,7 +42,6 @@ class DataStoreSettingsRepository(
             dashboardEnabled = preferences[PreferencesKeys.DASHBOARD_ENABLED] ?: true,
             placesEnabled = preferences[PreferencesKeys.PLACES_ENABLED] ?: true,
             reminderNotificationsEnabled = preferences[PreferencesKeys.REMINDER_NOTIFICATIONS_ENABLED] ?: true,
-            storyMarkersEnabled = preferences[PreferencesKeys.STORY_MARKERS_ENABLED] ?: true,
             reminderMarkersEnabled = preferences[PreferencesKeys.REMINDER_MARKERS_ENABLED] ?: true,
             trafficLayerEnabled = preferences[PreferencesKeys.TRAFFIC_LAYER_ENABLED] ?: false,
             mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false
@@ -94,10 +92,6 @@ class DataStoreSettingsRepository(
 
     override suspend fun updateReminderNotificationsEnabled(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.REMINDER_NOTIFICATIONS_ENABLED] = enabled }
-    }
-
-    override suspend fun updateStoryMarkersEnabled(enabled: Boolean) {
-        dataStore.edit { preferences -> preferences[PreferencesKeys.STORY_MARKERS_ENABLED] = enabled }
     }
 
     override suspend fun updateReminderMarkersEnabled(enabled: Boolean) {

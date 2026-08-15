@@ -35,11 +35,11 @@ private val DarkColorScheme = darkColorScheme(
     onSecondaryContainer = SecondaryContainerLightBlue,
     tertiary = TertiaryLightBlue,
     onTertiary = Color(0xFF003547),
-    background = Color(0xFF1C1B1F),
-    surface = Color(0xFF1C1B1F),
+    background = Color(0xFF0B1014),
+    surface = Color(0xFF0B1014),
     onBackground = Color(0xFFE6E1E5),
     onSurface = Color(0xFFE6E1E5),
-    surfaceVariant = Color(0xFF49454F),
+    surfaceVariant = Color(0xFF1F272A),
     onSurfaceVariant = Color(0xFFCAC4D0),
 )
 

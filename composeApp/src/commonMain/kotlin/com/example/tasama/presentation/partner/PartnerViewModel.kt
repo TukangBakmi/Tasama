@@ -315,34 +315,48 @@ class PartnerViewModel(
             placesObservationJob?.cancel()
             return
         }
-        if (placesObservationJob?.isActive == true && currentPlacesUserId == userId && currentPlacesPartnerId == partnerId) return
-        currentPlacesUserId = userId
-        currentPlacesPartnerId = partnerId
+
+        // Use a stable identifier for the relationship
+        val relationshipId = if (partnerId != null) {
+            listOf(userId, partnerId).sorted().joinToString("_")
+        } else {
+            userId // Fallback for single users
+        }
+
+        if (placesObservationJob?.isActive == true && currentPlacesUserId == relationshipId) return
+        currentPlacesUserId = relationshipId
 
         placesObservationJob?.cancel()
         placesObservationJob = viewModelScope.launch {
-            val myPlacesFlow = placeRepository.getPlaces(userId)
-            val partnerPlacesFlow = partnerId?.let { placeRepository.getPlaces(it) } ?: flowOf(emptyList())
-
-            combine(myPlacesFlow, partnerPlacesFlow) { myPlaces, pPlaces ->
-                (myPlaces + pPlaces).distinctBy { it.id }
-            }.collect { allPlaces ->
+            placeRepository.getPlaces(relationshipId).collect { allPlaces ->
                 _uiState.update { it.copy(places = allPlaces) }
             }
         }
     }
 
     fun addPlace(place: Place) {
-        val uid = authRepository.getCurrentUserId() ?: return
+        val user = _uiState.value.currentUser ?: return
+        val partnerId = _uiState.value.partner?.id
+        
+        val relationshipId = if (partnerId != null) {
+            listOf(user.id, partnerId).sorted().joinToString("_")
+        } else {
+            user.id
+        }
+
         viewModelScope.launch {
-            placeRepository.addPlace(uid, place)
+            placeRepository.addPlace(
+                place.copy(
+                    relationshipId = relationshipId,
+                    createdBy = user.id
+                )
+            )
         }
     }
 
     fun deletePlace(placeId: String) {
-        val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            placeRepository.deletePlace(uid, placeId)
+            placeRepository.deletePlace(placeId)
         }
     }
 
@@ -376,6 +390,8 @@ class PartnerViewModel(
             _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
             val result = authRepository.acceptPartnerRequest(uid, anniversaryDate)
             if (result.isSuccess) {
+                // When linking, we migrate user-specific places to the new shared relationship collection
+                // or just delete them to start fresh as per the previous logic, but now targeting the right identifier.
                 placeRepository.deleteAllPlaces(uid)
                 if (partnerUid != null) {
                     placeRepository.deleteAllPlaces(partnerUid)

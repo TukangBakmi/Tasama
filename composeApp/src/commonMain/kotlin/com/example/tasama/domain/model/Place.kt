@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Place(
     val id: String = "",
+    val relationshipId: String = "",
     val name: String = "",
     val address: String = "",
     val latitude: Double = 0.0,
@@ -14,5 +15,7 @@ data class Place(
     val notifyOnEntry: Boolean = true,
     val notifyOnExit: Boolean = true,
     val color: Long? = null,
-    val iconName: String? = null
+    val iconName: String? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
 )

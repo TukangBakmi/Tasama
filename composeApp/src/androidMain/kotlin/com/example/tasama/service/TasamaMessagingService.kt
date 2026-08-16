@@ -188,7 +188,9 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
 
         if (type == "PARTNER_ACCEPT") {
             authRepository.getCurrentUserId()?.let { uid ->
-                placeRepository.deleteAllPlaces(uid)
+                scope.launch {
+                    placeRepository.deleteAllPlaces(uid)
+                }
             }
         }
 
@@ -219,7 +221,8 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             
             val destination = when (category) {
-                Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP, Categories.PLACES -> "partner"
+                Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
+                Categories.PLACES -> "partner" // Redirect Place Alerts to Partner Map tab
                 Categories.MESSAGING -> "chat"
                 else -> "dashboard"
             }

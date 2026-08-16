@@ -140,6 +140,7 @@ actual fun MapContent(
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
+    var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
     
@@ -410,6 +411,7 @@ actual fun MapContent(
             uiSettings = uiSettings,
             onMapLoaded = { isMapLoaded = true },
             onMapClick = { latLng ->
+                if (isPlacementModeEnabled) return@GoogleMap
                 println("DEBUG: Map clicked at $latLng")
                 isPartnerInfoVisible = false
                 
@@ -426,6 +428,7 @@ actual fun MapContent(
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
+                if (isPlacementModeEnabled) return@GoogleMap
                 val existingPlace = places.find { place ->
                     calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude)) <= place.radius
                 }
@@ -502,6 +505,7 @@ actual fun MapContent(
                     anchor = Offset(0.5f, 0.5f),
                     visible = (markerData?.isPartnerVisible ?: true) && !isTogether,
                     onClick = {
+                        if (isPlacementModeEnabled) return@MarkerComposable true
                         isPartnerInfoVisible = !isPartnerInfoVisible
                         scope.launch {
                             cameraPositionState.animate(CameraUpdateFactory.newLatLng(location))
@@ -709,7 +713,7 @@ actual fun MapContent(
         val partnerScreenPos = markerData?.partnerScreenPos
         
         // Show info if manually clicked
-        val showCard = isPartnerInfoVisible && partnerScreenPos != null && showAddPlaceSheet == null
+        val showCard = isPartnerInfoVisible && partnerScreenPos != null && showAddPlaceSheet == null && !isPlacementModeEnabled
         
         if (showCard && partner != null) {
             val markerRadiusPx = with(density) { 24.dp.toPx() }
@@ -767,104 +771,206 @@ actual fun MapContent(
         }
 
         // New Header Layout: Weather(Left), Dashboard(Center), Settings(Right)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(top = 14.dp)
+        AnimatedVisibility(
+            visible = !isPlacementModeEnabled,
+            enter = fadeIn() + slideInVertically { -it / 2 },
+            exit = fadeOut() + slideOutVertically { -it / 2 }
         ) {
-            if (settings.weatherWidgetEnabled) {
-                WeatherWidget(
-                    modifier = Modifier.align(Alignment.CenterStart),
-                    weatherInfo = weatherInfo,
-                    isLoading = isWeatherLoading
-                )
-            }
-
-            if (settings.dashboardEnabled) {
-                PartnerDashboard(
-                    modifier = Modifier.align(Alignment.Center),
-                    anniversaryDate = anniversaryDate,
-                    currentTime = currentTime,
-                    onEditAnniversary = onEditAnniversary
-                )
-            }
-
-            // Map Settings Button (Top Right, standalone circular button)
-            Surface(
-                onClick = { onOpenSettings() },
+            Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                shadowElevation = 8.dp
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = 14.dp)
             ) {
-                Box(
-                    modifier = Modifier.size(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                if (settings.weatherWidgetEnabled) {
+                    WeatherWidget(
+                        modifier = Modifier.align(Alignment.CenterStart),
+                        weatherInfo = weatherInfo,
+                        isLoading = isWeatherLoading
                     )
+                }
+
+                if (settings.dashboardEnabled) {
+                    PartnerDashboard(
+                        modifier = Modifier.align(Alignment.Center),
+                        anniversaryDate = anniversaryDate,
+                        currentTime = currentTime,
+                        onEditAnniversary = onEditAnniversary
+                    )
+                }
+
+                // Map Settings Button (Top Right, standalone circular button)
+                Surface(
+                    onClick = { onOpenSettings() },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    shape = CircleShape,
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+
+        // Placement Mode UI
+        if (isPlacementModeEnabled) {
+            // Center Pin / Crosshair
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Pin icon
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .offset(y = (-22).dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                
+                // Small dot at the exact center for precision
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color.White, CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
+
+            // Controls
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(24.dp),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        text = "Move map to set location",
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = { isPlacementModeEnabled = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val center = cameraPositionState.position.target
+                            showAddPlaceSheet = center
+                            isPlacementModeEnabled = false
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text("Confirm Location")
+                    }
                 }
             }
         }
 
 
         // Floating action buttons container
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.End
+        AnimatedVisibility(
+            visible = !isPlacementModeEnabled,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomEnd)
         ) {
+            Column(
+                modifier = Modifier
+                    .padding(bottom = 16.dp, end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.End
+            ) {
 
-            // Follow Mode Button
-            SmallFloatingActionButton(
-                onClick = {
-                    if (isFollowModeEnabled) {
-                        isFollowModeEnabled = false
-                    } else {
-                        isFollowModeEnabled = true
-                        partnerLocation?.let {
-                            scope.launch {
-                                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(it, followZoom), 1000)
+                // Follow Mode Button
+                SmallFloatingActionButton(
+                    onClick = {
+                        if (isFollowModeEnabled) {
+                            isFollowModeEnabled = false
+                        } else {
+                            isFollowModeEnabled = true
+                            partnerLocation?.let {
+                                scope.launch {
+                                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(it, followZoom), 1000)
+                                }
                             }
                         }
-                    }
-                },
-                containerColor = if (isFollowModeEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
-                },
-                contentColor = if (isFollowModeEnabled) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                shape = CircleShape
-            ) {
-                Icon(
-                    imageVector = if (isFollowModeEnabled) Icons.Default.MyLocation else Icons.Default.LocationSearching,
-                    contentDescription = "Follow Partner"
-                )
-            }
+                    },
+                    containerColor = if (isFollowModeEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                    },
+                    contentColor = if (isFollowModeEnabled) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        imageVector = if (isFollowModeEnabled) Icons.Default.MyLocation else Icons.Default.LocationSearching,
+                        contentDescription = "Follow Partner"
+                    )
+                }
 
-            // Recenter/Fit Button
-            SmallFloatingActionButton(
-                onClick = { fitMarkers() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                // Recenter/Fit Button
+                SmallFloatingActionButton(
+                    onClick = { fitMarkers() },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                }
+
+                // Add Place Button
+                SmallFloatingActionButton(
+                    onClick = { isPlacementModeEnabled = true },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.AddLocationAlt, contentDescription = "Add Place")
+                }
             }
         }
 

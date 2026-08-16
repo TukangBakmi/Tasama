@@ -171,6 +171,9 @@ actual fun MapContent(
     val scope = rememberCoroutineScope()
     
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
+    var showAddPlaceSheet by remember { mutableStateOf<Location?>(null) }
+    var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
+    var editingPlace by remember { mutableStateOf<Place?>(null) }
     
     var currentTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
@@ -186,13 +189,15 @@ actual fun MapContent(
     val coordinator = remember {
         MapCoordinator(
             onMapClick = { lat, lon ->
+                if (isPlacementModeEnabled) return@MapCoordinator
                 isPartnerInfoVisible = false
                 
                 val clickedPlace = places.find { place ->
                     calculateDistance(Location(lat, lon), Location(place.latitude, place.longitude)) <= maxOf(place.radius, 50.0)
                 }
                 if (clickedPlace != null) {
-                    // Handle place click
+                    editingPlace = clickedPlace
+                    showAddPlaceSheet = Location(clickedPlace.latitude, clickedPlace.longitude)
                 }
             },
             onRegionChanged = { /* Handle if needed */ }
@@ -399,7 +404,9 @@ actual fun MapContent(
             if (settings.partnerMapEnabled && data.isPartnerVisible && !isTogether) {
                 data.partnerScreenPos?.let {
                     Box(modifier = Modifier.offset { IntOffset(it.x.toInt() - 32.dp.toPx().toInt(), it.y.toInt() - 48.dp.toPx().toInt()) }) {
-                        UserMarker(partner, false, rememberPartnerStatus(partner, currentTime), onClick = { isPartnerInfoVisible = !isPartnerInfoVisible })
+                        UserMarker(partner, false, rememberPartnerStatus(partner, currentTime), onClick = { 
+                            if (!isPlacementModeEnabled) isPartnerInfoVisible = !isPartnerInfoVisible 
+                        })
                     }
                 }
             } else if (settings.partnerMapEnabled && data.partnerEdgePoint != null && !isTogether) {
@@ -407,7 +414,7 @@ actual fun MapContent(
             }
         }
 
-        if (settings.partnerMapEnabled && partner != null && isPartnerInfoVisible) {
+        if (settings.partnerMapEnabled && partner != null && isPartnerInfoVisible && !isPlacementModeEnabled) {
             val status = rememberPartnerStatus(partner, currentTime)
             PartnerStatusCard(
                 modifier = Modifier
@@ -425,69 +432,424 @@ actual fun MapContent(
         }
 
         // New Header Layout: Weather(Left), Dashboard(Center), Settings(Right)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(top = 14.dp)
+        AnimatedVisibility(
+            visible = !isPlacementModeEnabled,
+            enter = fadeIn() + slideInVertically { -it / 2 },
+            exit = fadeOut() + slideOutVertically { -it / 2 }
         ) {
-            if (settings.partnerMapEnabled && settings.weatherWidgetEnabled) {
-                WeatherWidget(
-                    modifier = Modifier.align(Alignment.CenterStart),
-                    weatherInfo = weatherInfo,
-                    isLoading = isWeatherLoading
-                )
-            }
-
-            if (settings.partnerMapEnabled && settings.dashboardEnabled) {
-                PartnerDashboard(
-                    modifier = Modifier.align(Alignment.Center),
-                    anniversaryDate = anniversaryDate,
-                    currentTime = currentTime,
-                    onEditAnniversary = onEditAnniversary
-                )
-            }
-
-            // Map Settings Button (Top Right, standalone circular button)
-            Surface(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp)
-                    .size(40.dp)
-                    .clickable { onOpenSettings() },
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                shadowElevation = 8.dp
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = 14.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                if (settings.partnerMapEnabled && settings.weatherWidgetEnabled) {
+                    WeatherWidget(
+                        modifier = Modifier.align(Alignment.CenterStart),
+                        weatherInfo = weatherInfo,
+                        isLoading = isWeatherLoading
                     )
+                }
+
+                if (settings.partnerMapEnabled && settings.dashboardEnabled) {
+                    PartnerDashboard(
+                        modifier = Modifier.align(Alignment.Center),
+                        anniversaryDate = anniversaryDate,
+                        currentTime = currentTime,
+                        onEditAnniversary = onEditAnniversary
+                    )
+                }
+
+                // Map Settings Button (Top Right, standalone circular button)
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 16.dp)
+                        .size(40.dp)
+                        .clickable { onOpenSettings() },
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    shape = CircleShape,
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            SmallFloatingActionButton(
-                onClick = { fitAllMarkers() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = CircleShape
+        // Placement Mode UI
+        if (isPlacementModeEnabled) {
+            // Center Pin / Crosshair
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                // Pin icon
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .offset(y = (-22).dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                
+                // Small dot at the exact center for precision
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color.White, CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
+
+            // Controls
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(24.dp),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        text = "Move map to set location",
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = { isPlacementModeEnabled = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            mapViewInstance?.centerCoordinate?.useContents {
+                                showAddPlaceSheet = Location(latitude, longitude)
+                            }
+                            isPlacementModeEnabled = false
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text("Confirm Location")
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = !isPlacementModeEnabled,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomEnd)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(bottom = 16.dp, end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { fitAllMarkers() },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                }
+
+                SmallFloatingActionButton(
+                    onClick = { isPlacementModeEnabled = true },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.AddLocationAlt, contentDescription = "Add Place")
+                }
+            }
+        }
+
+        if (showAddPlaceSheet != null) {
+            val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = { 
+                    showAddPlaceSheet = null
+                    editingPlace = null
+                },
+                sheetState = bottomSheetState
+            ) {
+                AddPlaceSheetContent(
+                    location = showAddPlaceSheet!!,
+                    initialPlace = editingPlace,
+                    onAddPlace = { place: Place ->
+                        onAddPlace(place)
+                        showAddPlaceSheet = null
+                        editingPlace = null
+                    }
+                )
             }
         }
     }
+}
+
+@Composable
+fun AddPlaceSheetContent(
+    location: Location,
+    initialPlace: Place? = null,
+    onAddPlace: (Place) -> Unit
+) {
+    var name by remember { mutableStateOf(initialPlace?.name ?: "") }
+    var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
+    val radius = initialPlace?.radius?.toFloat() ?: 200f
+    var notifyOnEntry by remember { mutableStateOf(initialPlace?.notifyOnEntry ?: true) }
+    var notifyOnExit by remember { mutableStateOf(initialPlace?.notifyOnExit ?: true) }
+    var selectedColor by remember { 
+        mutableStateOf(initialPlace?.color?.let { Color(it.toULong()) } ?: Color(0xFF2196F3)) 
+    }
+    var selectedIconName by remember { mutableStateOf(initialPlace?.iconName ?: "Location") }
+
+    val colors = listOf(
+        Color(0xFF2196F3), // Blue
+        Color(0xFF4CAF50), // Green
+        Color(0xFFF44336), // Red
+        Color(0xFFFFC107), // Amber
+        Color(0xFF9C27B0), // Purple
+        Color(0xFF795548)  // Brown
+    )
+
+    val icons = listOf(
+        "Location" to Icons.Default.LocationOn,
+        "Home" to Icons.Default.Home,
+        "Work" to Icons.Default.Work,
+        "School" to Icons.Default.School,
+        "Shopping" to Icons.Default.ShoppingCart,
+        "Restaurant" to Icons.Default.Restaurant,
+        "Gym" to Icons.Default.FitnessCenter,
+        "Hospital" to Icons.Default.LocalHospital,
+        "Park" to Icons.Default.Park
+    )
+
+    LaunchedEffect(location, initialPlace) {
+        if (initialPlace != null) return@LaunchedEffect
+        
+        delay(500) // Debounce rapid location changes during interaction
+        
+        val result = reverseGeocode(location.latitude, location.longitude)
+        if (result != null) {
+            address = result
+            if (name.isEmpty()) {
+                name = result.split(",").firstOrNull() ?: result
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (initialPlace == null) "Add Place Marker" else "Edit Place Marker",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Get notified when your partner enters or leaves this area.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Place Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            NotificationChip(
+                label = "Entry",
+                selected = notifyOnEntry,
+                onClick = { notifyOnEntry = !notifyOnEntry },
+                modifier = Modifier.weight(1f)
+            )
+            NotificationChip(
+                label = "Exit",
+                selected = notifyOnExit,
+                onClick = { notifyOnExit = !notifyOnExit },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                colors.forEach { color ->
+                    val isSelected = selectedColor == color
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { selectedColor = color },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .border(
+                                    width = if (isSelected) 2.dp else 0.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    shape = CircleShape
+                                )
+                                .padding(if (isSelected) 4.dp else 0.dp)
+                                .background(color, CircleShape)
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                icons.forEach { (iconName, icon) ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                            .clickable { selectedIconName = iconName },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = iconName,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (selectedIconName == iconName) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Button(
+            onClick = {
+                onAddPlace(
+                    Place(
+                        id = initialPlace?.id ?: "",
+                        name = name.ifBlank { address },
+                        address = address,
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        radius = radius.toDouble(),
+                        notifyOnEntry = notifyOnEntry,
+                        notifyOnExit = notifyOnExit,
+                        color = selectedColor.toArgb().toLong(),
+                        iconName = selectedIconName
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = name.isNotBlank() || address != "Fetching address...",
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(if (initialPlace == null) "Save Place" else "Update Place")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun NotificationChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp)
+    )
+}
+
+fun Color.toArgb(): Int {
+    return ((alpha * 255.0f + 0.5f).toInt() shl 24) or
+            ((red * 255.0f + 0.5f).toInt() shl 16) or
+            ((green * 255.0f + 0.5f).toInt() shl 8) or
+            (blue * 255.0f + 0.5f).toInt()
 }
 
 @Composable

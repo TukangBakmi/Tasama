@@ -4,8 +4,8 @@ import com.example.tasama.domain.model.Place
 import kotlinx.coroutines.flow.Flow
 
 interface PlaceRepository {
-    fun getPlaces(userId: String): Flow<List<Place>>
-    suspend fun addPlace(userId: String, place: Place)
-    suspend fun deletePlace(userId: String, placeId: String)
-    suspend fun deleteAllPlaces(userId: String)
+    fun getPlaces(relationshipId: String): Flow<List<Place>>
+    suspend fun addPlace(place: Place): Result<Unit>
+    suspend fun deletePlace(placeId: String): Result<Unit>
+    suspend fun deleteAllPlaces(relationshipId: String): Result<Unit>
 }

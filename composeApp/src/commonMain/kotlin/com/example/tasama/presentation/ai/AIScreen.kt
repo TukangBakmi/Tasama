@@ -217,7 +217,8 @@ fun AIScreen(
                 AIInput(
                     message = uiState.inputText,
                     onMessageChange = viewModel::onInputChange,
-                    onSend = viewModel::sendMessage
+                    onSend = viewModel::sendMessage,
+                    isSending = uiState.isTyping
                 )
             }
         },
@@ -232,6 +233,7 @@ fun AIScreen(
                     viewModel.toggleMessageSelection(messageId)
                 }
             },
+            onUndoClick = viewModel::undoTransaction,
             modifier = Modifier.padding(paddingValues)
         )
     }
@@ -319,6 +321,7 @@ fun AIInput(
     message: String,
     onMessageChange: (String) -> Unit,
     onSend: () -> Unit,
+    isSending: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -336,7 +339,7 @@ fun AIInput(
                     .weight(1f)
                     .padding(end = 4.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 shadowElevation = 1.dp
             ) {
                 Row(
@@ -369,18 +372,26 @@ fun AIInput(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(
-                        if (message.isNotBlank()) MaterialTheme.colorScheme.primary 
+                        if (message.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary 
                         else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     )
-                    .clickable(enabled = message.isNotBlank(), onClick = onSend),
+                    .clickable(enabled = message.isNotBlank() && !isSending, onClick = onSend),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
+                if (isSending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
         }
     }
@@ -392,6 +403,7 @@ fun AIContent(
     onLoadMore: () -> Unit,
     onMessageLongClick: (String) -> Unit,
     onMessageClick: (String) -> Unit,
+    onUndoClick: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -459,7 +471,7 @@ fun AIContent(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (uiState.isLoadingMore) {
                 item {
@@ -494,6 +506,8 @@ fun AIContent(
                     MessageBubble(
                         message = message,
                         isSelected = isSelected,
+                        undoableTransaction = uiState.undoableTransaction,
+                        onUndoClick = onUndoClick,
                         onLongClick = { onMessageLongClick(message.id) },
                         onClick = { onMessageClick(message.id) }
                     )
@@ -558,11 +572,14 @@ fun AIContent(
 fun MessageBubble(
     message: ChatMessage,
     isSelected: Boolean = false,
+    undoableTransaction: UndoableTransaction? = null,
+    onUndoClick: (String, String) -> Unit = { _, _ -> },
     onLongClick: () -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     val isUser = message.isFromMe
     val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val isUndoable = !isUser && undoableTransaction?.messageId == message.id
     
     val containerColor = when {
         isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
@@ -576,9 +593,9 @@ fun MessageBubble(
     }
     
     val shape = if (isUser) {
-        RoundedCornerShape(12.dp, 4.dp, 12.dp, 12.dp)
+        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
     } else {
-        RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)
+        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
     }
 
     Box(
@@ -597,9 +614,9 @@ fun MessageBubble(
             contentColor = contentColor,
             shape = shape,
             shadowElevation = 0.5.dp,
-            modifier = Modifier.widthIn(max = 260.dp)
+            modifier = Modifier.widthIn(max = 280.dp)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Column {
                     Text(
                         text = message.text,
@@ -619,14 +636,35 @@ fun MessageBubble(
                         }
                     }
 
-                    if (timeString.isNotEmpty()) {
-                        Text(
-                            text = timeString,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = contentColor.copy(alpha = 0.6f),
-                            fontSize = 10.sp,
-                            modifier = Modifier.align(Alignment.End)
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        if (timeString.isNotEmpty()) {
+                            Text(
+                                text = timeString,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = contentColor.copy(alpha = 0.6f),
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    if (isUndoable) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { onUndoClick(undoableTransaction.spaceId, undoableTransaction.transactionId) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                "Batal",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -686,7 +724,8 @@ fun AIPreview() {
             ),
             onLoadMore = {},
             onMessageLongClick = {},
-            onMessageClick = {}
+            onMessageClick = {},
+            onUndoClick = { _, _ -> }
         )
     }
 }

@@ -28,6 +28,11 @@ class DataStoreSettingsRepository(
         val REMINDER_MARKERS_ENABLED = booleanPreferencesKey("reminder_markers_enabled")
         val TRAFFIC_LAYER_ENABLED = booleanPreferencesKey("traffic_layer_enabled")
         val MAP_DARK_THEME_ENABLED = booleanPreferencesKey("map_dark_theme_enabled")
+        
+        val UNDO_TRANSACTION_ID = stringPreferencesKey("undo_transaction_id")
+        val UNDO_SPACE_ID = stringPreferencesKey("undo_space_id")
+        val UNDO_MESSAGE_ID = stringPreferencesKey("undo_message_id")
+        val UNDO_CREATED_AT = longPreferencesKey("undo_created_at")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
@@ -44,7 +49,11 @@ class DataStoreSettingsRepository(
             reminderNotificationsEnabled = preferences[PreferencesKeys.REMINDER_NOTIFICATIONS_ENABLED] ?: true,
             reminderMarkersEnabled = preferences[PreferencesKeys.REMINDER_MARKERS_ENABLED] ?: true,
             trafficLayerEnabled = preferences[PreferencesKeys.TRAFFIC_LAYER_ENABLED] ?: false,
-            mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false
+            mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false,
+            undoTransactionId = preferences[PreferencesKeys.UNDO_TRANSACTION_ID],
+            undoSpaceId = preferences[PreferencesKeys.UNDO_SPACE_ID],
+            undoMessageId = preferences[PreferencesKeys.UNDO_MESSAGE_ID],
+            undoCreatedAt = preferences[PreferencesKeys.UNDO_CREATED_AT]
         )
     }
 
@@ -104,5 +113,26 @@ class DataStoreSettingsRepository(
 
     override suspend fun updateMapDarkThemeEnabled(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] = enabled }
+    }
+
+    override suspend fun setUndoTransaction(
+        transactionId: String?,
+        spaceId: String?,
+        messageId: String?,
+        createdAt: Long?
+    ) {
+        dataStore.edit { preferences ->
+            if (transactionId == null) preferences.remove(PreferencesKeys.UNDO_TRANSACTION_ID)
+            else preferences[PreferencesKeys.UNDO_TRANSACTION_ID] = transactionId
+
+            if (spaceId == null) preferences.remove(PreferencesKeys.UNDO_SPACE_ID)
+            else preferences[PreferencesKeys.UNDO_SPACE_ID] = spaceId
+
+            if (messageId == null) preferences.remove(PreferencesKeys.UNDO_MESSAGE_ID)
+            else preferences[PreferencesKeys.UNDO_MESSAGE_ID] = messageId
+
+            if (createdAt == null) preferences.remove(PreferencesKeys.UNDO_CREATED_AT)
+            else preferences[PreferencesKeys.UNDO_CREATED_AT] = createdAt
+        }
     }
 }

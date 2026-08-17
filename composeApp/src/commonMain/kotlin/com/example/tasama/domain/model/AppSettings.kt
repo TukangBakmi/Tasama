@@ -23,5 +23,11 @@ data class AppSettings(
     val reminderNotificationsEnabled: Boolean = true,
     val reminderMarkersEnabled: Boolean = true,
     val trafficLayerEnabled: Boolean = false,
-    val mapDarkThemeEnabled: Boolean = false
+    val mapDarkThemeEnabled: Boolean = false,
+
+    // AI Undo persistent state
+    val undoTransactionId: String? = null,
+    val undoSpaceId: String? = null,
+    val undoMessageId: String? = null,
+    val undoCreatedAt: Long? = null
 )

@@ -10,7 +10,9 @@ import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +24,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -31,7 +34,8 @@ class AIViewModel(
     private val savingsRepository: SavingsRepository,
     private val aiChatRepository: AIChatRepository,
     private val groqService: GroqService,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AIUiState())
@@ -39,9 +43,56 @@ class AIViewModel(
 
     private var dataJob: Job? = null
     private var lastTxJob: Job? = null
+    private var undoTimerJob: Job? = null
+    private var settingsJob: Job? = null
 
     init {
         observeUserSession()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                val createdAt = settings.undoCreatedAt
+                val now = Clock.System.now().toEpochMilliseconds()
+                
+                if (createdAt != null && (now - createdAt) < 60000L) {
+                    println("DEBUG: Setting undoableTransaction: ${settings.undoTransactionId}, msg: ${settings.undoMessageId}")
+                    _uiState.update { 
+                        it.copy(
+                            undoableTransaction = UndoableTransaction(
+                                transactionId = settings.undoTransactionId ?: "",
+                                spaceId = settings.undoSpaceId ?: "",
+                                messageId = settings.undoMessageId ?: "",
+                                expiryTime = createdAt + 60000L
+                            )
+                        )
+                    }
+                    startUndoExpiryTimer(createdAt)
+                } else {
+                    if (createdAt != null) {
+                        settingsRepository.setUndoTransaction(null, null, null, null)
+                    }
+                    _uiState.update { it.copy(undoableTransaction = null) }
+                }
+            }
+        }
+    }
+
+    private fun startUndoExpiryTimer(createdAt: Long) {
+        undoTimerJob?.cancel()
+        val now = Clock.System.now().toEpochMilliseconds()
+        val remaining = 60000L - (now - createdAt)
+        
+        if (remaining > 0) {
+            undoTimerJob = viewModelScope.launch {
+                delay(remaining)
+                settingsRepository.setUndoTransaction(null, null, null, null)
+                _uiState.update { it.copy(undoableTransaction = null) }
+            }
+        }
     }
 
     private fun observeUserSession() {
@@ -212,41 +263,32 @@ class AIViewModel(
                 3. Selalu bersikap ramah dan menggunakan persona bebek yang cerdas (Sir Quack).
 
                 ATURAN TRANSAKSI:
-                - Jika pengguna ingin menabung (income): "[Nama] [Amount] [Note (opsional)]"
-                  Contoh: "Budi 100k nabung" -> Type: INCOME, Amount: 100000, Note: nabung.
-                - Jika pengguna ingin mencatat pengeluaran (expense): "[Amount] [Note]"
-                  Contoh: "20k kopi" -> Type: EXPENSE, Amount: 20000, Note: kopi.
-                - Jika menyebut nama di awal untuk pengeluaran (misal: "Budi 50k bakso"), artinya Budi menabung dulu lalu dipakai belanja. Buat 2 transaksi:
-                  a. Type: INCOME, Category: Budi, Amount: 50000, Note: nabung
-                  b. Type: EXPENSE, Category: General, Amount: 50000, Note: bakso
-                - Jika pengguna ingin UNDO (membatalkan) transaksi terakhir: "[UNDO]"
-                  Contoh: "undo transaksi terakhir", "batalin dong" -> is_undo: true.
-                - Jika pengguna ingin KOREKSI (mengubah) transaksi terakhir: "[CORRECTION]"
-                  Contoh: "salah, harusnya 50k", "ganti jumlahnya jadi 100k" -> is_correction: true, mention new amount/note.
+                - Jika pengguna ingin menabung (income): Panggil tool `CREATE_TRANSACTION` dengan type INCOME.
+                - Jika pengguna ingin mencatat pengeluaran (expense): Panggil tool `CREATE_TRANSACTION` dengan type EXPENSE.
+                - Jika pengguna ingin membatalkan transaksi terakhir: Panggil tool `DELETE_TRANSACTION`.
+                - Jika pengguna ingin memperbaiki kesalahan data transaksi terakhir (seperti nominal salah): Panggil tool `UPDATE_TRANSACTION`.
 
                 KONVERSI NOMINAL:
-                - "k" = x1.000, "jt" = x1.000.000.
+                - "k" = x1.000, "jt" = x1.000.000. (Contoh: "50k" -> 50000, "1.5jt" -> 1500000)
 
                 OUTPUT FORMAT (JSON):
-                Jika terdeteksi niat transaksi baru, isi `is_transaction: true`.
-                Jika terdeteksi niat undo, isi `is_undo: true`.
-                Jika terdeteksi niat koreksi, isi `is_correction: true`.
-                Jika hanya chat biasa, isi semua false.
-
+                Pesan harus mengandung salah satu intent tool call jika terdeteksi niat manipulasi data.
+                
                 {
-                  "is_transaction": boolean,
-                  "is_undo": boolean,
-                  "is_correction": boolean,
-                  "transactions": [ ... sama seperti sebelumnya ... ],
+                  "action": "CREATE_TRANSACTION" | "UPDATE_TRANSACTION" | "DELETE_TRANSACTION" | "NONE",
+                  "transactions": [ 
+                    { "type": "INCOME"|"EXPENSE", "amount": number, "category": "string", "note": "string" }
+                  ],
                   "correction_data": {
                      "amount": number (optional),
                      "note": "string (optional)"
                   },
-                  "reply": "Respon konfirmasi atau jawaban chat"
+                  "reply": "Respon awal ke pengguna sebelum aksi dilakukan"
                 }
 
-                INFO TRANSAKSI TERAKHIR (Gunakan jika is_undo atau is_correction):
+                INFO TRANSAKSI TERAKHIR (Gunakan jika action adalah UPDATE_TRANSACTION atau DELETE_TRANSACTION):
                 ${_uiState.value.lastTransaction?.let { "ID: ${it.id}, Amount: ${it.amount}, Note: ${it.note}" } ?: "Tidak ada transaksi terbaru"}
+                Catatan: Jika user mengoreksi nominal (misal: "salah, harusnya 50k"), gunakan UPDATE_TRANSACTION dengan `amount` baru.
 
                 INPUT USER: "$userText"
             """.trimIndent()
@@ -271,78 +313,144 @@ class AIViewModel(
                 val jsonStr = response.substring(jsonStart, jsonEnd + 1)
                 val jsonElement = Json.parseToJsonElement(jsonStr).jsonObject
                 
-                val isTransaction = jsonElement["is_transaction"]?.jsonPrimitive?.booleanOrNull ?: false
-                val isUndo = jsonElement["is_undo"]?.jsonPrimitive?.booleanOrNull ?: false
-                val isCorrection = jsonElement["is_correction"]?.jsonPrimitive?.booleanOrNull ?: false
+                val action = jsonElement["action"]?.jsonPrimitive?.content ?: "NONE"
+                val aiReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
 
-                if (isUndo && activeSpaceId != null && lastTx != null) {
-                    savingsRepository.deleteTransaction(activeSpaceId, lastTx.id)
-                    finalReply = jsonElement["reply"]?.jsonPrimitive?.content ?: "Oke, transaksi Rp${lastTx.amount} sudah saya batalkan."
-                } else if (isCorrection && activeSpaceId != null && lastTx != null) {
-                    val correctionData = jsonElement["correction_data"]?.jsonObject
-                    val newAmount = correctionData?.get("amount")?.jsonPrimitive?.longOrNull?.toDouble() ?: lastTx.amount
-                    val newNote = correctionData?.get("note")?.jsonPrimitive?.content ?: lastTx.note
-                    
-                    val newTx = lastTx.copy(amount = newAmount, note = newNote)
-                    
-                    val confirmText = jsonElement["reply"]?.jsonPrimitive?.content 
-                        ?: "Saya akan ubah transaksi terakhir dari Rp${lastTx.amount} menjadi Rp$newAmount. Konfirmasi?"
-                    
-                    _uiState.update { it.copy(
-                        pendingCorrection = PendingCorrection(lastTx, newTx, confirmText),
-                        isTyping = false
-                    ) }
-                    
-                    // Add AI message for confirmation
-                    val aiMessage = ChatMessage(
-                        id = "ai_$now",
-                        text = confirmText,
-                        sender = MessageSender.AI,
-                        timestamp = now
-                    )
-                    aiChatRepository.saveMessage(aiMessage)
-                    return // Wait for user confirmation
-                } else if (isTransaction && activeSpaceId != null) {
-                    val transactionsArray = jsonElement["transactions"]?.jsonArray
-                    transactionsArray?.forEachIndexed { index, item ->
-                        val data = item.jsonObject
-                        val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
-                        val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
-                        val amount = data["amount"]?.jsonPrimitive?.longOrNull?.toDouble() ?: 0.0
-                        val category = data["category"]?.jsonPrimitive?.content ?: "General"
-                        val note = data["note"]?.jsonPrimitive?.content ?: ""
-
-                        // Simpan ke Savings Space
-                        savingsRepository.addTransaction(
-                            spaceId = activeSpaceId,
-                            transaction = SavingsTransaction(
-                                id = "ai_${now}_$index",
-                                spaceId = activeSpaceId,
-                                userId = userId,
-                                userName = category, // In this context, category often stores the name
-                                amount = amount,
-                                type = type,
-                                note = note,
-                                timestamp = now
-                            )
-                        )
+                when (action) {
+                    "DELETE_TRANSACTION" -> {
+                        if (activeSpaceId != null && lastTx != null) {
+                            try {
+                                savingsRepository.deleteTransaction(activeSpaceId, lastTx.id)
+                                finalReply = aiReply
+                                saveAiMessage(finalReply)
+                                _uiState.update { 
+                                    if (it.undoableTransaction?.transactionId == lastTx.id) {
+                                        it.copy(undoableTransaction = null, isTyping = false)
+                                    } else it.copy(isTyping = false)
+                                }
+                                return
+                            } catch (e: Exception) {
+                                finalReply = "Gagal membatalkan transaksi: ${e.message}"
+                            }
+                        } else {
+                            finalReply = "Tidak ada transaksi terakhir yang bisa dibatalkan."
+                        }
                     }
-                    finalReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
-                } else {
-                    finalReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
+                    "UPDATE_TRANSACTION" -> {
+                        if (activeSpaceId != null && lastTx != null) {
+                            val correctionData = jsonElement["correction_data"]?.jsonObject
+                            val newAmount = correctionData?.get("amount")?.jsonPrimitive?.doubleOrNull ?: lastTx.amount
+                            val newNote = correctionData?.get("note")?.jsonPrimitive?.content ?: lastTx.note
+                            
+                            val newTx = lastTx.copy(amount = newAmount, note = newNote)
+                            
+                            val confirmText = aiReply
+                            
+                            _uiState.update { it.copy(
+                                pendingCorrection = PendingCorrection(lastTx, newTx, confirmText),
+                                isTyping = false
+                            ) }
+                            
+                            saveAiMessage(confirmText)
+                            return 
+                        } else {
+                            finalReply = "Tidak ada transaksi untuk diperbaiki."
+                        }
+                    }
+                    "CREATE_TRANSACTION" -> {
+                        if (activeSpaceId != null) {
+                            val transactionsArray = jsonElement["transactions"]?.jsonArray
+                            var successCount = 0
+                            var lastCreatedTxId: String? = null
+                            
+                            transactionsArray?.forEachIndexed { index, item ->
+                                try {
+                                    val data = item.jsonObject
+                                    val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
+                                    val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
+                                    val amount = data["amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                                    val category = data["category"]?.jsonPrimitive?.content ?: "General"
+                                    val note = data["note"]?.jsonPrimitive?.content ?: ""
+
+                                    val txId = "ai_${Clock.System.now().toEpochMilliseconds()}_$index"
+                                    savingsRepository.addTransaction(
+                                        activeSpaceId,
+                                        SavingsTransaction(
+                                            id = txId,
+                                            spaceId = activeSpaceId,
+                                            userId = userId,
+                                            userName = category,
+                                            amount = amount,
+                                            type = type,
+                                            note = note,
+                                            timestamp = now
+                                        )
+                                    )
+                                    successCount++
+                                    lastCreatedTxId = txId
+                                } catch (_: Exception) {}
+                            }
+                            
+                            if (successCount > 0) {
+                                finalReply = aiReply
+                                val aiMsgId = saveAiMessage(finalReply)
+                                if (lastCreatedTxId != null) {
+                                    startUndoTimer(lastCreatedTxId, activeSpaceId, aiMsgId)
+                                }
+                                _uiState.update { it.copy(isTyping = false) }
+                                return
+                            } else {
+                                finalReply = "Gagal mencatat transaksi."
+                            }
+                        }
+                    }
+                    else -> {
+                        finalReply = aiReply
+                    }
                 }
             }
         } catch (_: Exception) { }
 
+        saveAiMessage(finalReply)
+        _uiState.update { it.copy(isTyping = false) }
+    }
+
+    private suspend fun saveAiMessage(text: String): String {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val id = "ai_$now"
         val aiMessage = ChatMessage(
-            id = "ai_$now",
-            text = finalReply,
+            id = id,
+            text = text,
             sender = MessageSender.AI,
             timestamp = now
         )
-
         aiChatRepository.saveMessage(aiMessage)
-        _uiState.update { it.copy(isTyping = false) }
+        return id
+    }
+
+    private fun startUndoTimer(transactionId: String, spaceId: String, messageId: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        println("DEBUG: startUndoTimer for msg: $messageId")
+        viewModelScope.launch {
+            settingsRepository.setUndoTransaction(transactionId, spaceId, messageId, now)
+        }
+    }
+
+    fun undoTransaction(spaceId: String, transactionId: String) {
+        viewModelScope.launch {
+            try {
+                // Check if transaction still exists before deleting
+                // The repository's deleteTransaction might fail if it doesn't exist, which is fine
+                savingsRepository.deleteTransaction(spaceId, transactionId)
+                
+                settingsRepository.setUndoTransaction(null, null, null, null)
+                _uiState.update { it.copy(undoableTransaction = null) }
+                
+                saveAiMessage("Transaksi berhasil dibatalkan!")
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Gagal membatalkan: ${e.message}") }
+            }
+        }
     }
 
     fun confirmCorrection() {
@@ -354,14 +462,7 @@ class AIViewModel(
                 savingsRepository.updateTransaction(spaceId, pending.newTransaction)
                 _uiState.update { it.copy(pendingCorrection = null) }
                 
-                val now = Clock.System.now().toEpochMilliseconds()
-                val aiMessage = ChatMessage(
-                    id = "ai_$now",
-                    text = "Berhasil diperbarui! Transaksi sekarang menjadi Rp${pending.newTransaction.amount}.",
-                    sender = MessageSender.AI,
-                    timestamp = now
-                )
-                aiChatRepository.saveMessage(aiMessage)
+                saveAiMessage("Berhasil diperbarui! Transaksi sekarang menjadi Rp${pending.newTransaction.amount}.")
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to update transaction") }
             }
@@ -389,14 +490,14 @@ class AIViewModel(
         viewModelScope.launch {
             try {
                 savingsRepository.deleteTransaction(spaceId, lastTx.id)
-                val now = Clock.System.now().toEpochMilliseconds()
-                val aiMessage = ChatMessage(
-                    id = "ai_$now",
-                    text = "Transaksi Rp${lastTx.amount} berhasil dibatalkan.",
-                    sender = MessageSender.AI,
-                    timestamp = now
-                )
-                aiChatRepository.saveMessage(aiMessage)
+                
+                val currentUndo = _uiState.value.undoableTransaction
+                if (currentUndo?.transactionId == lastTx.id) {
+                    settingsRepository.setUndoTransaction(null, null, null, null)
+                    _uiState.update { it.copy(undoableTransaction = null) }
+                }
+
+                saveAiMessage("Transaksi Rp${lastTx.amount} berhasil dibatalkan.")
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to undo transaction") }
             }

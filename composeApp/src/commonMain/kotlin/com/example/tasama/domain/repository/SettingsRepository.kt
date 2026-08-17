@@ -22,4 +22,7 @@ interface SettingsRepository {
     suspend fun updateReminderMarkersEnabled(enabled: Boolean)
     suspend fun updateTrafficLayerEnabled(enabled: Boolean)
     suspend fun updateMapDarkThemeEnabled(enabled: Boolean)
+
+    // AI Undo persistent state
+    suspend fun setUndoTransaction(transactionId: String?, spaceId: String?, messageId: String?, createdAt: Long?)
 }

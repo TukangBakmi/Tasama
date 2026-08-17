@@ -16,7 +16,15 @@ data class AIUiState(
     val pendingCorrection: PendingCorrection? = null,
     val selectedMessageIds: Set<String> = emptySet(),
     val currentUserName: String = "User",
-    val error: String? = null
+    val error: String? = null,
+    val undoableTransaction: UndoableTransaction? = null
+)
+
+data class UndoableTransaction(
+    val transactionId: String,
+    val spaceId: String,
+    val messageId: String,
+    val expiryTime: Long
 )
 
 data class PendingCorrection(

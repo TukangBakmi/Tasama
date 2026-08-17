@@ -19,9 +19,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +34,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -113,7 +116,7 @@ fun ChatScreen(
                 TopAppBar(
                     title = {
                         if (uiState.isSelectionMode) {
-                            Text("${uiState.selectedMessageIds.size} selected")
+                            Text("${uiState.selectedMessageIds.size} terpilih")
                         } else {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -211,6 +214,14 @@ fun ChatScreen(
                     },
                     actions = {
                         if (uiState.isSelectionMode) {
+                            val clipboardManager = LocalClipboardManager.current
+                            IconButton(onClick = {
+                                val text = viewModel.getSelectedMessagesText()
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+                                viewModel.exitSelectionMode()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                            }
                             IconButton(onClick = viewModel::showDeleteConfirmation) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete")
                             }
@@ -478,6 +489,7 @@ fun ChatContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: ChatMessage,
@@ -526,7 +538,7 @@ fun MessageBubble(
     )
 
     val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
     } else {
         animatedHighlightColor
     }
@@ -535,6 +547,10 @@ fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .draggable(
                 state = rememberDraggableState { delta ->
                     if (!isSelectionMode) {
@@ -554,12 +570,6 @@ fun MessageBubble(
                     }
                 }
             )
-            .pointerInput(isSelectionMode) {
-                detectTapGestures(
-                    onLongPress = { if (!isSelectionMode) onLongClick() },
-                    onTap = { if (isSelectionMode) onClick() }
-                )
-            }
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
@@ -582,7 +592,13 @@ fun MessageBubble(
         }
 
         Surface(
-            color = if (isHighlighted) containerColor.copy(alpha = 0.9f) else containerColor,
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            } else if (isHighlighted) {
+                containerColor.copy(alpha = 0.9f)
+            } else {
+                containerColor
+            },
             contentColor = contentColor,
             shape = shape,
             shadowElevation = if (isHighlighted) 4.dp else 0.5.dp,

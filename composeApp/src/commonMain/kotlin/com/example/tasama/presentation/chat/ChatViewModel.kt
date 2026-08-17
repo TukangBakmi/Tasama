@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.Instant
 
 class ChatViewModel(
     private val repository: ChatRepository,
@@ -249,6 +252,27 @@ class ChatViewModel(
                 _uiState.update { it.copy(error = e.message) }
             }
         }
+    }
+
+    fun getSelectedMessagesText(): String {
+        val state = _uiState.value
+        val selectedIds = state.selectedMessageIds
+        if (selectedIds.isEmpty()) return ""
+
+        return state.messages
+            .filter { it.id in selectedIds }
+            .sortedBy { it.timestamp }
+            .joinToString("\n") { message ->
+                val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                val month = localDateTime.monthNumber
+                val day = localDateTime.dayOfMonth
+                val hour = localDateTime.hour.toString().padStart(2, '0')
+                val minute = localDateTime.minute.toString().padStart(2, '0')
+                
+                val senderName = if (message.isFromMe) "You" else message.senderName
+                "[$month/$day, $hour:$minute] $senderName: ${message.text}"
+            }
     }
 
     fun clearError() {

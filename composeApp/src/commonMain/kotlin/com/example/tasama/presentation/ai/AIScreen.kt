@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -179,13 +180,13 @@ fun AIScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (uiState.selectedMessageIds.isNotEmpty()) 
-                            MaterialTheme.colorScheme.surfaceVariant 
+                        containerColor = if (uiState.selectedMessageIds.isNotEmpty())
+                            MaterialTheme.colorScheme.surfaceVariant
                         else MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-                
+
                 // Active Space Indicator
                 uiState.savingsSpaces.find { it.id == uiState.activeSpaceId }?.let { activeSpace ->
                     Surface(
@@ -330,8 +331,7 @@ fun AIInput(
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -366,13 +366,13 @@ fun AIInput(
                     )
                 }
             }
-            
+
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(
-                        if (message.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary 
+                        if (message.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     )
                     .clickable(enabled = message.isNotBlank() && !isSending, onClick = onSend),
@@ -409,38 +409,36 @@ fun AIContent(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    val reversedMessages = remember(uiState.messages) {
+        uiState.messages.asReversed()
+    }
+
+    // Detect when user scrolls to the "top" (which is now the end of the list in reverseLayout)
     val shouldLoadMore by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
-            val visibleItemsInfo = layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isEmpty()) false
+            val totalItemsNumber = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+
+            if (lastVisibleItem == null) false
             else {
-                val firstVisibleItem = visibleItemsInfo.first()
-                firstVisibleItem.index == 0 && firstVisibleItem.offset >= 0
+                lastVisibleItem.index == totalItemsNumber - 1
             }
         }
     }
 
-    // Auto-scroll logic matching ChatScreen
-    var previousMessageCount by remember { mutableStateOf(uiState.messages.size) }
-    LaunchedEffect(uiState.messages.size) {
-        val newMessageCount = uiState.messages.size
-        val isNewMessageAtBottom = newMessageCount > previousMessageCount && 
-            uiState.messages.lastOrNull()?.isFromMe == true
-        
-        if (isNewMessageAtBottom || previousMessageCount == 0) {
-            if (newMessageCount > 0) {
-                listState.animateScrollToItem(newMessageCount - 1)
-            }
+    // Auto-scroll to bottom when keyboard opens
+    val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    LaunchedEffect(isImeVisible) {
+        if (isImeVisible && reversedMessages.isNotEmpty() && listState.firstVisibleItemIndex < 2) {
+            listState.animateScrollToItem(0)
         }
-        previousMessageCount = newMessageCount
     }
 
-    // Also scroll when AI starts typing
-    LaunchedEffect(uiState.isTyping) {
-        if (uiState.isTyping) {
-            val totalItems = uiState.messages.size + 1
-            listState.animateScrollToItem(totalItems - 1)
+    // Auto-scroll to bottom when new messages arrive or AI starts typing
+    LaunchedEffect(reversedMessages.firstOrNull()?.id, uiState.isTyping) {
+        if (reversedMessages.isNotEmpty() || uiState.isTyping) {
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -452,17 +450,8 @@ fun AIContent(
 
     val showScrollToBottom by remember {
         derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val totalItemsCount = layoutInfo.totalItemsCount
-            if (totalItemsCount == 0) return@derivedStateOf false
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-                ?: return@derivedStateOf false
-            val isLastItem = lastVisibleItem.index == totalItemsCount - 1
-            if (!isLastItem) true
-            else {
-                val viewportBottom = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
-                lastVisibleItem.offset + lastVisibleItem.size > viewportBottom
-            }
+            // In reverseLayout, index 0 is the bottom message.
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 10
         }
     }
 
@@ -470,50 +459,10 @@ fun AIContent(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
+            reverseLayout = true,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
-            if (uiState.isLoadingMore) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
-
-            items(uiState.messages.size, key = { uiState.messages[it].id }) { index ->
-                val message = uiState.messages[index]
-                val date = Instant
-                    .fromEpochMilliseconds(message.timestamp)
-                    .toLocalDateTime(TimeZone.currentSystemDefault())
-                    .date
-                
-                val showHeader = if (index == 0) true else {
-                    val prevDate = Instant.fromEpochMilliseconds(uiState.messages[index - 1].timestamp)
-                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
-                    date != prevDate
-                }
-                
-                Column {
-                    if (showHeader) {
-                        DateHeader(date)
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    val isSelected = uiState.selectedMessageIds.contains(message.id)
-                    MessageBubble(
-                        message = message,
-                        isSelected = isSelected,
-                        undoableTransaction = uiState.undoableTransaction,
-                        onUndoClick = onUndoClick,
-                        onLongClick = { onMessageLongClick(message.id) },
-                        onClick = { onMessageClick(message.id) }
-                    )
-                }
-            }
-
             if (uiState.isTyping) {
                 item {
                     Row(
@@ -534,6 +483,50 @@ fun AIContent(
                     }
                 }
             }
+
+            items(reversedMessages.size, key = { reversedMessages[it].id }) { index ->
+                val message = reversedMessages[index]
+                val date = Instant
+                    .fromEpochMilliseconds(message.timestamp)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
+                    .date
+
+                // In reverseLayout, index 0 is bottom.
+                // Header shows if it's the last message in the reversed list (top of chat history)
+                // or if the message "above" it (index + 1) is a different date.
+                val showHeader = if (index == reversedMessages.size - 1) true else {
+                    val nextDate = Instant.fromEpochMilliseconds(reversedMessages[index + 1].timestamp)
+                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                    date != nextDate
+                }
+
+                Column {
+                    if (showHeader) {
+                        DateHeader(date)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    val isSelected = uiState.selectedMessageIds.contains(message.id)
+                    MessageBubble(
+                        message = message,
+                        isSelected = isSelected,
+                        undoableTransaction = uiState.undoableTransaction,
+                        onUndoClick = onUndoClick,
+                        onLongClick = { onMessageLongClick(message.id) },
+                        onClick = { onMessageClick(message.id) }
+                    )
+                }
+            }
+
+            if (uiState.isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
         }
 
         AnimatedVisibility(
@@ -547,10 +540,7 @@ fun AIContent(
             SmallFloatingActionButton(
                 onClick = {
                     coroutineScope.launch {
-                        val totalItems = listState.layoutInfo.totalItemsCount
-                        if (totalItems > 0) {
-                            listState.animateScrollToItem(totalItems - 1)
-                        }
+                        listState.animateScrollToItem(0)
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -580,7 +570,7 @@ fun MessageBubble(
     val isUser = message.isFromMe
     val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     val isUndoable = !isUser && undoableTransaction?.messageId == message.id
-    
+
     val containerColor = when {
         isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
         isUser -> MaterialTheme.colorScheme.primaryContainer
@@ -591,7 +581,7 @@ fun MessageBubble(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    
+
     val shape = if (isUser) {
         RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
     } else {
@@ -623,7 +613,7 @@ fun MessageBubble(
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
                         modifier = Modifier.padding(bottom = 2.dp)
                     )
-                    
+
                     val timeString = remember(message.timestamp) {
                         try {
                             val instant = Instant.fromEpochMilliseconds(message.timestamp)

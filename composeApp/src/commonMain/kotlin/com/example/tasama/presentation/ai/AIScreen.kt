@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
@@ -27,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,6 +57,7 @@ fun AIScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
+    val clipboardManager = LocalClipboardManager.current
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -121,6 +125,15 @@ fun AIScreen(
                     },
                     actions = {
                         if (uiState.selectedMessageIds.isNotEmpty()) {
+                            IconButton(onClick = {
+                                val textToCopy = viewModel.getSelectedMessagesText()
+                                if (textToCopy.isNotEmpty()) {
+                                    clipboardManager.setText(AnnotatedString(textToCopy))
+                                }
+                                viewModel.clearSelection()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Selected")
+                            }
                             IconButton(onClick = { viewModel.deleteSelectedMessages() }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
                             }

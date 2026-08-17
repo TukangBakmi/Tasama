@@ -23,6 +23,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.Instant
 
 class AIViewModel(
     private val savingsRepository: SavingsRepository,
@@ -50,8 +53,16 @@ class AIViewModel(
                 } else {
                     observeMessages()
                     observeSavingsSpaces()
+                    fetchCurrentUserName(uid)
                 }
             }
+        }
+    }
+
+    private fun fetchCurrentUserName(uid: String) {
+        viewModelScope.launch {
+            val name = authRepository.getUserName(uid) ?: "User"
+            _uiState.update { it.copy(currentUserName = name) }
         }
     }
 
@@ -416,6 +427,27 @@ class AIViewModel(
             aiChatRepository.deleteMessages(selectedIds)
             _uiState.update { it.copy(selectedMessageIds = emptySet()) }
         }
+    }
+
+    fun getSelectedMessagesText(): String {
+        val state = _uiState.value
+        val selectedIds = state.selectedMessageIds
+        if (selectedIds.isEmpty()) return ""
+
+        return state.messages
+            .filter { it.id in selectedIds }
+            .sortedBy { it.timestamp }
+            .joinToString("\n") { message ->
+                val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                val month = localDateTime.monthNumber
+                val day = localDateTime.dayOfMonth
+                val hour = localDateTime.hour.toString().padStart(2, '0')
+                val minute = localDateTime.minute.toString().padStart(2, '0')
+                
+                val senderName = if (message.sender == MessageSender.AI) "Sir Quack" else state.currentUserName
+                "[$month/$day, $hour:$minute] $senderName: ${message.text}"
+            }
     }
 
     fun clearHistory() {

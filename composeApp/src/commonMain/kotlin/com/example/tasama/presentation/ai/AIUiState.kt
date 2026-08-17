@@ -15,6 +15,7 @@ data class AIUiState(
     val lastTransaction: SavingsTransaction? = null,
     val pendingCorrection: PendingCorrection? = null,
     val selectedMessageIds: Set<String> = emptySet(),
+    val currentUserName: String = "User",
     val error: String? = null
 )
 

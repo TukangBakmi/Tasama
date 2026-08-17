@@ -68,6 +68,24 @@ class FirebaseAIChatRepository(
         }
     }
 
+    override suspend fun deleteMessages(messageIds: List<String>) {
+        try {
+            val userId = authRepository.getCurrentUserId() ?: return
+            messageIds.forEach { id ->
+                val doc = collection.document(id)
+                val snapshot = doc.get()
+                if (snapshot.exists) {
+                    val message = snapshot.data<ChatMessage>()
+                    if (message.userId == userId) {
+                        doc.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println("Firestore deleteMessages error: ${e.message}")
+        }
+    }
+
     override suspend fun clearHistory() {
         try {
             val userId = authRepository.getCurrentUserId() ?: return

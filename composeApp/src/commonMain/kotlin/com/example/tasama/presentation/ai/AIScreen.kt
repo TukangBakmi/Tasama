@@ -3,9 +3,11 @@ package com.example.tasama.presentation.ai
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -14,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -50,6 +54,7 @@ fun AIScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         snapshotFlow { uiState.error }
@@ -65,78 +70,105 @@ fun AIScreen(
             Column {
                 TopAppBar(
                     title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(36.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer
+                        if (uiState.selectedMessageIds.isNotEmpty()) {
+                            Text("${uiState.selectedMessageIds.size} terpilih")
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 4.dp)
                             ) {
-                                Image(
-                                    painter = painterResource(Res.drawable.sir_quack),
-                                    contentDescription = "Sir Quack",
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    "Sir Quack",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    "AI Advisor",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Surface(
+                                    modifier = Modifier.size(36.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Image(
+                                        painter = painterResource(Res.drawable.sir_quack),
+                                        contentDescription = "Sir Quack",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        "Sir Quack",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        "AI Advisor",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = {
+                            if (uiState.selectedMessageIds.isNotEmpty()) {
+                                viewModel.clearSelection()
+                            } else {
+                                onBackClick()
+                            }
+                        }) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                imageVector = if (uiState.selectedMessageIds.isNotEmpty()) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back"
                             )
                         }
                     },
                     actions = {
-                        var showMenu by remember { mutableStateOf(false) }
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Savings Space")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            uiState.savingsSpaces.forEach { space ->
+                        if (uiState.selectedMessageIds.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.deleteSelectedMessages() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                            }
+                        } else {
+                            var showMenu by remember { mutableStateOf(false) }
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
                                 DropdownMenuItem(
-                                    text = { 
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(space.icon)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(space.name)
-                                        }
-                                    },
+                                    text = { Text("Hapus Chat") },
                                     onClick = {
-                                        viewModel.setActiveSpace(space.id)
                                         showMenu = false
+                                        showDeleteConfirmation = true
                                     },
-                                    trailingIcon = {
-                                        if (uiState.activeSpaceId == space.id) {
-                                            RadioButton(selected = true, onClick = null)
-                                        }
-                                    }
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
                                 )
+                                HorizontalDivider()
+                                uiState.savingsSpaces.forEach { space ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(space.icon)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(space.name)
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setActiveSpace(space.id)
+                                            showMenu = false
+                                        },
+                                        trailingIcon = {
+                                            if (uiState.activeSpaceId == space.id) {
+                                                RadioButton(selected = true, onClick = null)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = if (uiState.selectedMessageIds.isNotEmpty()) 
+                            MaterialTheme.colorScheme.surfaceVariant 
+                        else MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
@@ -163,19 +195,108 @@ fun AIScreen(
             }
         },
         bottomBar = {
-            AIInput(
-                message = uiState.inputText,
-                onMessageChange = viewModel::onInputChange,
-                onSend = viewModel::sendMessage
-            )
+            Column {
+                CorrectionPrompt(
+                    pendingCorrection = uiState.pendingCorrection,
+                    onConfirm = viewModel::confirmCorrection,
+                    onCancel = viewModel::cancelCorrection
+                )
+                AIInput(
+                    message = uiState.inputText,
+                    onMessageChange = viewModel::onInputChange,
+                    onSend = viewModel::sendMessage
+                )
+            }
         },
         contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         AIContent(
             uiState = uiState,
             onLoadMore = viewModel::loadMoreMessages,
+            onMessageLongClick = viewModel::toggleMessageSelection,
+            onMessageClick = { messageId ->
+                if (uiState.selectedMessageIds.isNotEmpty()) {
+                    viewModel.toggleMessageSelection(messageId)
+                }
+            },
             modifier = Modifier.padding(paddingValues)
         )
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Hapus Chat History?") },
+            text = { Text("Semua pesan dengan Sir Quack akan dihapus. Riwayat transaksi tabungan Anda tidak akan terpengaruh.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearHistory()
+                        showDeleteConfirmation = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun CorrectionPrompt(
+    pendingCorrection: PendingCorrection?,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = pendingCorrection != null,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        if (pendingCorrection != null) {
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                tonalElevation = 2.dp,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = pendingCorrection.confirmationText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onCancel,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Batal")
+                        }
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Konfirmasi")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -256,6 +377,8 @@ fun AIInput(
 fun AIContent(
     uiState: AIUiState,
     onLoadMore: () -> Unit,
+    onMessageLongClick: (String) -> Unit,
+    onMessageClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -354,7 +477,13 @@ fun AIContent(
                         DateHeader(date)
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    MessageBubble(message)
+                    val isSelected = uiState.selectedMessageIds.contains(message.id)
+                    MessageBubble(
+                        message = message,
+                        isSelected = isSelected,
+                        onLongClick = { onMessageLongClick(message.id) },
+                        onClick = { onMessageClick(message.id) }
+                    )
                 }
             }
 
@@ -411,15 +540,21 @@ fun AIContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MessageBubble(message: ChatMessage) {
+fun MessageBubble(
+    message: ChatMessage,
+    isSelected: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onClick: () -> Unit = {}
+) {
     val isUser = message.isFromMe
     val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     
-    val containerColor = if (isUser) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    val containerColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        isUser -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val contentColor = if (isUser) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -428,15 +563,20 @@ fun MessageBubble(message: ChatMessage) {
     }
     
     val shape = if (isUser) {
-        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
+        RoundedCornerShape(12.dp, 4.dp, 12.dp, 12.dp)
     } else {
-        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
+        RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
         Surface(
@@ -446,7 +586,7 @@ fun MessageBubble(message: ChatMessage) {
             shadowElevation = 0.5.dp,
             modifier = Modifier.widthIn(max = 260.dp)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Column {
                     Text(
                         text = message.text,
@@ -531,7 +671,9 @@ fun AIPreview() {
                     ChatMessage(id = "3", text = "Baik, sudah saya catat ya!", sender = MessageSender.AI)
                 )
             ),
-            onLoadMore = {}
+            onLoadMore = {},
+            onMessageLongClick = {},
+            onMessageClick = {}
         )
     }
 }

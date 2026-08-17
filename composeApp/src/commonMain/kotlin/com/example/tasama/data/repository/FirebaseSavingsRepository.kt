@@ -111,6 +111,56 @@ class FirebaseSavingsRepository(
         }
     }
 
+    override suspend fun updateTransaction(spaceId: String, transaction: SavingsTransaction) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val transRef = spacesCollection.document(spaceId).collection("transactions").document(transaction.id)
+        
+        firestore.runTransaction {
+            val spaceDoc = spacesCollection.document(spaceId)
+            val snapshot = get(spaceDoc)
+            val space = snapshot.data<SavingsSpace>()
+            val oldTransaction = get(transRef).data<SavingsTransaction>()
+            
+            // Reverse old balance impact
+            val intermediateBalance = if (oldTransaction.type == TransactionType.INCOME) {
+                space.balance - oldTransaction.amount
+            } else {
+                space.balance + oldTransaction.amount
+            }
+            
+            // Apply new balance impact
+            val newBalance = if (transaction.type == TransactionType.INCOME) {
+                intermediateBalance + transaction.amount
+            } else {
+                intermediateBalance - transaction.amount
+            }
+            
+            set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
+            set(transRef, transaction)
+        }
+    }
+
+    override suspend fun deleteTransaction(spaceId: String, transactionId: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val transRef = spacesCollection.document(spaceId).collection("transactions").document(transactionId)
+        
+        firestore.runTransaction {
+            val spaceDoc = spacesCollection.document(spaceId)
+            val snapshot = get(spaceDoc)
+            val space = snapshot.data<SavingsSpace>()
+            val transaction = get(transRef).data<SavingsTransaction>()
+            
+            val newBalance = if (transaction.type == TransactionType.INCOME) {
+                space.balance - transaction.amount
+            } else {
+                space.balance + transaction.amount
+            }
+            
+            set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
+            delete(transRef)
+        }
+    }
+
     override suspend fun inviteMember(spaceId: String, email: String) {
         val userSnapshot = firestore.collection("users")
             .where { "email" equalTo email }

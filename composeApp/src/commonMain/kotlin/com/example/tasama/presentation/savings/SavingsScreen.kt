@@ -1,6 +1,9 @@
 package com.example.tasama.presentation.savings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -62,6 +65,7 @@ fun SavingsScreen(
             uiState = uiState,
             onInviteClick = { viewModel.onInviteClick(it) },
             onAddTransactionClick = { viewModel.onAddTransactionClick(it) },
+            onUndoTransaction = { viewModel.undoLastTransaction(it) },
             modifier = Modifier.padding(paddingValues)
         )
 
@@ -107,6 +111,7 @@ fun SavingsContent(
     uiState: SavingsUiState,
     onInviteClick: (String) -> Unit,
     onAddTransactionClick: (String) -> Unit,
+    onUndoTransaction: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (uiState.savingsSpaces.isEmpty() && !uiState.isLoading) {
@@ -120,11 +125,42 @@ fun SavingsContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(uiState.savingsSpaces) { space ->
-                SavingsSpaceItem(
-                    space = space,
-                    onInviteClick = { onInviteClick(space.id) },
-                    onAddTransactionClick = { onAddTransactionClick(space.id) }
-                )
+                val isRecent = uiState.lastTransaction?.spaceId == space.id
+                
+                Column {
+                    SavingsSpaceItem(
+                        space = space,
+                        onInviteClick = { onInviteClick(space.id) },
+                        onAddTransactionClick = { onAddTransactionClick(space.id) }
+                    )
+                    
+                    AnimatedVisibility(visible = isRecent && uiState.lastTransaction != null) {
+                        uiState.lastTransaction?.let { tx ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp)
+                                    .offset(y = (-12).dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        "Transaction saved: Rp ${tx.amount}",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    TextButton(onClick = { onUndoTransaction(space.id) }) {
+                                        Text("Undo", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -519,7 +555,8 @@ fun SavingsPreview() {
                     )
                 ),
                 onInviteClick = {},
-                onAddTransactionClick = {}
+                onAddTransactionClick = {},
+                onUndoTransaction = {}
             )
         }
     }

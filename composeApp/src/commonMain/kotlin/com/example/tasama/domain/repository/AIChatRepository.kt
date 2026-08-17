@@ -7,5 +7,6 @@ interface AIChatRepository {
     fun getMessages(): Flow<List<ChatMessage>>
     suspend fun getMoreMessages(limit: Int, beforeTimestamp: Long): List<ChatMessage>
     suspend fun saveMessage(message: ChatMessage)
+    suspend fun deleteMessages(messageIds: List<String>)
     suspend fun clearHistory()
 }

@@ -9,5 +9,6 @@ data class SavingsUiState(
     val showInviteMemberDialog: Boolean = false,
     val showAddTransactionDialog: Boolean = false,
     val selectedSpaceId: String? = null,
+    val lastTransaction: com.example.tasama.domain.model.SavingsTransaction? = null,
     val error: String? = null
 )

@@ -127,7 +127,58 @@ fun ChatListScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     // AI Advisor at the very top
                     item {
-                        AIAdvisorItem(onClick = onAIClick)
+                        var showMenu by remember { mutableStateOf(false) }
+                        var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+                        Box {
+                            AIAdvisorItem(
+                                onClick = onAIClick,
+                                onLongClick = { if (!uiState.isSelectionMode) showMenu = true }
+                            )
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Hapus Chat") },
+                                    onClick = {
+                                        showMenu = false
+                                        showDeleteConfirmation = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        if (showDeleteConfirmation) {
+                            AlertDialog(
+                                onDismissRequest = { showDeleteConfirmation = false },
+                                title = { Text("Hapus Chat Sir Quack?") },
+                                text = { Text("Semua riwayat percakapan dengan Sir Quack akan dihapus. Riwayat transaksi tabungan Anda akan tetap aman.") },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            viewModel.clearAIChatHistory()
+                                            showDeleteConfirmation = false
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Text("Hapus")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDeleteConfirmation = false }) {
+                                        Text("Batal")
+                                    }
+                                }
+                            )
+                        }
+
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             thickness = 0.5.dp,
@@ -276,11 +327,19 @@ fun ChatListScreen(
 }
 
 @Composable
-fun AIAdvisorItem(onClick: () -> Unit) {
+fun AIAdvisorItem(
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongClick() }
+                )
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

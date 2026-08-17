@@ -22,6 +22,7 @@ class SavingsViewModel(
     val uiState = _uiState.asStateFlow()
 
     private var dataJob: Job? = null
+    private var lastTxJob: Job? = null
 
     init {
         observeUserSession()
@@ -115,10 +116,32 @@ class SavingsViewModel(
 
     fun onAddTransactionClick(spaceId: String) {
         _uiState.update { it.copy(showAddTransactionDialog = true, selectedSpaceId = spaceId) }
+        observeLastTransaction(spaceId)
+    }
+
+    private fun observeLastTransaction(spaceId: String) {
+        lastTxJob?.cancel()
+        lastTxJob = viewModelScope.launch {
+            repository.getTransactions(spaceId).collect { transactions ->
+                _uiState.update { it.copy(lastTransaction = transactions.firstOrNull()) }
+            }
+        }
     }
 
     fun onDismissAddTransaction() {
-        _uiState.update { it.copy(showAddTransactionDialog = false, selectedSpaceId = null) }
+        _uiState.update { it.copy(showAddTransactionDialog = false, selectedSpaceId = null, lastTransaction = null) }
+        lastTxJob?.cancel()
+    }
+
+    fun undoLastTransaction(spaceId: String) {
+        val lastTx = _uiState.value.lastTransaction ?: return
+        viewModelScope.launch {
+            try {
+                repository.deleteTransaction(spaceId, lastTx.id)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to undo transaction") }
+            }
+        }
     }
 
     fun addTransaction(amount: Double, type: TransactionType, note: String) {

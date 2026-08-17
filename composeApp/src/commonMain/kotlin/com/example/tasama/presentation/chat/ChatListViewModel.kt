@@ -2,6 +2,7 @@ package com.example.tasama.presentation.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.model.ChatChannel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 
 class ChatListViewModel(
     private val repository: ChatRepository,
+    private val aiChatRepository: AIChatRepository,
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
@@ -234,6 +236,12 @@ class ChatListViewModel(
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message, contactToDelete = null) }
             }
+        }
+    }
+
+    fun clearAIChatHistory() {
+        viewModelScope.launch {
+            aiChatRepository.clearHistory()
         }
     }
 

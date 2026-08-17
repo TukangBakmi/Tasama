@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.flow.filterNotNull
@@ -103,11 +104,58 @@ fun AIScreen(
                             )
                         }
                     },
+                    actions = {
+                        var showMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Savings Space")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            uiState.savingsSpaces.forEach { space ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(space.icon)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(space.name)
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.setActiveSpace(space.id)
+                                        showMenu = false
+                                    },
+                                    trailingIcon = {
+                                        if (uiState.activeSpaceId == space.id) {
+                                            RadioButton(selected = true, onClick = null)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
+                
+                // Active Space Indicator
+                uiState.savingsSpaces.find { it.id == uiState.activeSpaceId }?.let { activeSpace ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Aktif di: ${activeSpace.icon} ${activeSpace.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 HorizontalDivider(
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)

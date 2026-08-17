@@ -22,8 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tasama.domain.model.Collaborator
-import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.model.SavingsSpace
+import com.example.tasama.domain.model.SavingsSpaceType
+import com.example.tasama.domain.model.TransactionType
 import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -47,10 +48,10 @@ fun SavingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Savings Goals", fontWeight = FontWeight.Bold) },
+                title = { Text("Savings Spaces", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { viewModel.onAddGoalClick() }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Goal")
+                    IconButton(onClick = { viewModel.onAddSpaceClick() }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Space")
                     }
                 }
             )
@@ -60,40 +61,41 @@ fun SavingsScreen(
         SavingsContent(
             uiState = uiState,
             onInviteClick = { viewModel.onInviteClick(it) },
-            onContributeClick = { viewModel.onContributeClick(it) },
+            onAddTransactionClick = { viewModel.onAddTransactionClick(it) },
             modifier = Modifier.padding(paddingValues)
         )
 
-        if (uiState.showAddGoalDialog) {
-            AddGoalDialog(
-                onDismiss = { viewModel.onDismissAddGoal() },
-                onConfirm = { title, target, emoji ->
-                    viewModel.addGoal(
-                        SavingsGoal(
-                            title = title,
+        if (uiState.showAddSpaceDialog) {
+            AddSpaceDialog(
+                onDismiss = { viewModel.onDismissAddSpace() },
+                onConfirm = { name, target, icon, type ->
+                    viewModel.addSpace(
+                        SavingsSpace(
+                            name = name,
                             targetAmount = target,
-                            emoji = emoji
+                            icon = icon,
+                            type = type
                         )
                     )
-                    viewModel.onDismissAddGoal()
+                    viewModel.onDismissAddSpace()
                 }
             )
         }
 
-        if (uiState.showInviteCollaboratorDialog) {
-            InviteCollaboratorDialog(
+        if (uiState.showInviteMemberDialog) {
+            InviteMemberDialog(
                 onDismiss = { viewModel.onDismissInvite() },
                 onConfirm = { email ->
-                    viewModel.inviteCollaborator(email)
+                    viewModel.inviteMember(email)
                 }
             )
         }
 
-        if (uiState.showContributeDialog) {
-            ContributeDialog(
-                onDismiss = { viewModel.onDismissContribute() },
-                onConfirm = { amount ->
-                    viewModel.contribute(amount)
+        if (uiState.showAddTransactionDialog) {
+            AddTransactionDialog(
+                onDismiss = { viewModel.onDismissAddTransaction() },
+                onConfirm = { amount, type, note ->
+                    viewModel.addTransaction(amount, type, note)
                 }
             )
         }
@@ -104,72 +106,41 @@ fun SavingsScreen(
 fun SavingsContent(
     uiState: SavingsUiState,
     onInviteClick: (String) -> Unit,
-    onContributeClick: (String) -> Unit,
+    onAddTransactionClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        items(uiState.savingsGoals) { goal ->
-            SavingsGoalItem(
-                goal = goal,
-                onInviteClick = { onInviteClick(goal.id) },
-                onContributeClick = { onContributeClick(goal.id) }
-            )
+    if (uiState.savingsSpaces.isEmpty() && !uiState.isLoading) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No savings spaces yet. Create one!", style = MaterialTheme.typography.bodyLarge)
         }
-    }
-}
-
-@Preview
-@Composable
-fun SavingsPreview() {
-    MaterialTheme {
-        Surface {
-            SavingsContent(
-                uiState = SavingsUiState(
-                    savingsGoals = listOf(
-                        SavingsGoal(
-                            id = "1",
-                            title = "New Car",
-                            targetAmount = 50000000.0,
-                            currentAmount = 15000000.0,
-                            emoji = "🚗",
-                            isShared = true,
-                            collaborators = listOf(
-                                Collaborator("1", "You"),
-                                Collaborator("2", "Wife")
-                            )
-                        ),
-                        SavingsGoal(
-                            id = "2",
-                            title = "Japan Trip",
-                            targetAmount = 30000000.0,
-                            currentAmount = 25000000.0,
-                            emoji = "🗾"
-                        )
-                    )
-                ),
-                onInviteClick = {},
-                onContributeClick = {}
-            )
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(uiState.savingsSpaces) { space ->
+                SavingsSpaceItem(
+                    space = space,
+                    onInviteClick = { onInviteClick(space.id) },
+                    onAddTransactionClick = { onAddTransactionClick(space.id) }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SavingsGoalItem(
-    goal: SavingsGoal,
+fun SavingsSpaceItem(
+    space: SavingsSpace,
     onInviteClick: () -> Unit,
-    onContributeClick: () -> Unit
+    onAddTransactionClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val progress = if (goal.targetAmount > 0) {
-        (goal.currentAmount / goal.targetAmount).toFloat().coerceIn(0f, 1f)
-    } else {
-        0f
-    }
+    val progress = space.targetAmount?.let { target ->
+        if (target > 0) (space.balance / target).toFloat().coerceIn(0f, 1f) else 0f
+    } ?: 0f
+    
     val animatedProgress by animateFloatAsState(targetValue = progress)
 
     Card(
@@ -198,17 +169,22 @@ fun SavingsGoalItem(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(goal.emoji, fontSize = 24.sp)
+                        Text(space.icon, fontSize = 24.sp)
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = goal.title,
+                            text = space.name,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        if (goal.isShared) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val typeLabel = when (space.type) {
+                                SavingsSpaceType.PERSONAL -> "Personal"
+                                SavingsSpaceType.COUPLE -> "Couple"
+                                SavingsSpaceType.GROUP -> "Group"
+                            }
+                            if (space.type != SavingsSpaceType.PERSONAL) {
                                 Icon(
                                     Icons.Default.Group,
                                     contentDescription = null,
@@ -216,47 +192,51 @@ fun SavingsGoalItem(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    "Shared Goal",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
                             }
+                            Text(
+                                typeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
                 
                 Row {
-                    IconButton(onClick = onContributeClick) {
+                    IconButton(onClick = onAddTransactionClick) {
                         Icon(
                             Icons.Default.Add,
-                            contentDescription = "Contribute",
+                            contentDescription = "Add Transaction",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(onClick = onInviteClick) {
-                        Icon(
-                            Icons.Default.PersonAdd,
-                            contentDescription = "Invite Collaborator",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    if (space.type != SavingsSpaceType.PERSONAL) {
+                        IconButton(onClick = onInviteClick) {
+                            Icon(
+                                Icons.Default.PersonAdd,
+                                contentDescription = "Invite Member",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-            )
+            if (space.targetAmount != null) {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -264,86 +244,76 @@ fun SavingsGoalItem(
             ) {
                 Column {
                     Text(
-                        "Saved",
+                        "Balance",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        formatCurrency(goal.currentAmount),
+                        formatCurrency(space.balance),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "Target",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        formatCurrency(goal.targetAmount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                if (space.targetAmount != null) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            "Target",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            formatCurrency(space.targetAmount),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
             
             if (expanded) {
-                if (goal.contributions.isNotEmpty()) {
+                if (space.members.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Recent Contributions",
+                        "Members",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    goal.contributions.takeLast(3).reversed().forEach { contribution ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(contribution.userName, style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                "+ ${formatCurrency(contribution.amount)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
-                            )
-                        }
-                    }
-                }
-
-                if (goal.isShared && goal.collaborators.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Collaborators:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Row {
-                            goal.collaborators.forEachIndexed { index, collaborator ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .offset(x = (index * -8).dp)
-                                        .border(1.5.dp, Color.White, CircleShape)
-                                        .background(
-                                            MaterialTheme.colorScheme.secondary,
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        collaborator.name.take(1),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondary
-                                    )
-                                }
+                    Row {
+                        space.members.forEachIndexed { index, member ->
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .offset(x = (index * -8).dp)
+                                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.secondaryContainer,
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    member.name.take(1),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                             }
                         }
                     }
+                }
+                
+                if (space.description.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Description",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        space.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -351,42 +321,63 @@ fun SavingsGoalItem(
 }
 
 @Composable
-fun AddGoalDialog(
+fun AddSpaceDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, String) -> Unit
+    onConfirm: (String, Double?, String, SavingsSpaceType) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
-    var emoji by remember { mutableStateOf("💰") }
+    var icon by remember { mutableStateOf("💰") }
+    var type by remember { mutableStateOf(SavingsSpaceType.PERSONAL) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Savings Goal") },
+        title = { Text("Create Savings Space") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Goal Title") },
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Space Name") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = target,
                     onValueChange = { target = it },
-                    label = { Text("Target Amount") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Target Amount (Optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    )
                 )
                 OutlinedTextField(
-                    value = emoji,
-                    onValueChange = { emoji = it },
-                    label = { Text("Emoji") },
+                    value = icon,
+                    onValueChange = { icon = it },
+                    label = { Text("Icon (Emoji)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                Text("Space Type", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SavingsSpaceType.entries.forEach { spaceType ->
+                        FilterChip(
+                            selected = type == spaceType,
+                            onClick = { type = spaceType },
+                            label = { Text(spaceType.name) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(title, target.toDoubleOrNull() ?: 0.0, emoji) }) {
-                Text("Add")
+            Button(
+                onClick = { onConfirm(name, target.toDoubleOrNull(), icon, type) },
+                enabled = name.isNotBlank()
+            ) {
+                Text("Create")
             }
         },
         dismissButton = {
@@ -398,7 +389,7 @@ fun AddGoalDialog(
 }
 
 @Composable
-fun InviteCollaboratorDialog(
+fun InviteMemberDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
@@ -406,7 +397,7 @@ fun InviteCollaboratorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Invite Collaborator") },
+        title = { Text("Invite Member") },
         text = {
             Column {
                 Text("Enter the email address of the person you want to invite.")
@@ -415,12 +406,15 @@ fun InviteCollaboratorDialog(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email Address") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
+                    )
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(email) }) {
+            Button(onClick = { onConfirm(email) }, enabled = email.isNotBlank()) {
                 Text("Invite")
             }
         },
@@ -433,19 +427,32 @@ fun InviteCollaboratorDialog(
 }
 
 @Composable
-fun ContributeDialog(
+fun AddTransactionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (Double) -> Unit
+    onConfirm: (Double, TransactionType, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(TransactionType.INCOME) }
+    var note by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Contribution") },
+        title = { Text("Add Transaction") },
         text = {
-            Column {
-                Text("How much would you like to contribute to this goal?")
-                Spacer(modifier = Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TransactionType.entries.forEach { transType ->
+                        FilterChip(
+                            selected = type == transType,
+                            onClick = { type = transType },
+                            label = { Text(transType.name) }
+                        )
+                    }
+                }
+                
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
@@ -455,11 +462,21 @@ fun ContributeDialog(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                     )
                 )
+                
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Note (Optional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(amount.toDoubleOrNull() ?: 0.0) }) {
-                Text("Contribute")
+            Button(
+                onClick = { onConfirm(amount.toDoubleOrNull() ?: 0.0, type, note) },
+                enabled = amount.isNotBlank()
+            ) {
+                Text("Add")
             }
         },
         dismissButton = {
@@ -473,4 +490,37 @@ fun ContributeDialog(
 private fun formatCurrency(amount: Double): String {
     val parts = amount.toLong().toString().reversed().chunked(3)
     return "Rp " + parts.joinToString(".").reversed()
+}
+
+@Preview
+@Composable
+fun SavingsPreview() {
+    MaterialTheme {
+        Surface {
+            SavingsContent(
+                uiState = SavingsUiState(
+                    savingsSpaces = listOf(
+                        SavingsSpace(
+                            id = "1",
+                            name = "New Car",
+                            targetAmount = 50000000.0,
+                            balance = 15000000.0,
+                            icon = "🚗",
+                            type = SavingsSpaceType.COUPLE
+                        ),
+                        SavingsSpace(
+                            id = "2",
+                            name = "Japan Trip",
+                            targetAmount = 30000000.0,
+                            balance = 25000000.0,
+                            icon = "🗾",
+                            type = SavingsSpaceType.PERSONAL
+                        )
+                    )
+                ),
+                onInviteClick = {},
+                onAddTransactionClick = {}
+            )
+        }
+    }
 }

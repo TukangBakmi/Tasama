@@ -1,13 +1,13 @@
 package com.example.tasama.presentation.savings
 
-import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.model.SavingsSpace
 
 data class SavingsUiState(
-    val savingsGoals: List<SavingsGoal> = emptyList(),
+    val savingsSpaces: List<SavingsSpace> = emptyList(),
     val isLoading: Boolean = false,
-    val showAddGoalDialog: Boolean = false,
-    val showInviteCollaboratorDialog: Boolean = false,
-    val showContributeDialog: Boolean = false,
-    val selectedGoalId: String? = null,
+    val showAddSpaceDialog: Boolean = false,
+    val showInviteMemberDialog: Boolean = false,
+    val showAddTransactionDialog: Boolean = false,
+    val selectedSpaceId: String? = null,
     val error: String? = null
 )

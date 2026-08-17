@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GroqRequest(
-    val model: String = "llama-3.1-8b-instant",
+    val model: String = "openai/gpt-oss-20b",
     val messages: List<GroqMessage>,
     val temperature: Double = 0.7,
     @SerialName("max_completion_tokens")

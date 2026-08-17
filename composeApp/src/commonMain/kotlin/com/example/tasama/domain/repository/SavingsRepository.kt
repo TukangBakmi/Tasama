@@ -1,13 +1,16 @@
 package com.example.tasama.domain.repository
 
-import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.model.SavingsSpace
+import com.example.tasama.domain.model.SavingsTransaction
 import kotlinx.coroutines.flow.Flow
 
 interface SavingsRepository {
-    fun getSavingsGoals(): Flow<List<SavingsGoal>>
-    suspend fun addSavingsGoal(goal: SavingsGoal)
-    suspend fun updateSavingsGoal(goal: SavingsGoal)
-    suspend fun deleteSavingsGoal(id: String)
-    suspend fun inviteByEmail(goalId: String, email: String)
-    suspend fun contribute(goalId: String, amount: Double)
+    fun getSavingsSpaces(): Flow<List<SavingsSpace>>
+    fun getSavingsSpace(id: String): Flow<SavingsSpace?>
+    fun getTransactions(spaceId: String): Flow<List<SavingsTransaction>>
+    suspend fun createSavingsSpace(space: SavingsSpace): String
+    suspend fun updateSavingsSpace(space: SavingsSpace)
+    suspend fun deleteSavingsSpace(id: String)
+    suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction)
+    suspend fun inviteMember(spaceId: String, email: String)
 }

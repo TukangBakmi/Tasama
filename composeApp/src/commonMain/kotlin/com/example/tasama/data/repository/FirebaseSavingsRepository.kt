@@ -1,33 +1,30 @@
 package com.example.tasama.data.repository
 
-import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.model.*
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.firestore.Direction
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
 class FirebaseSavingsRepository(
     private val authRepository: AuthRepository
 ) : SavingsRepository {
     private val firestore = Firebase.firestore
-    private val collection = firestore.collection("savings_goals")
+    private val spacesCollection = firestore.collection("savings_spaces")
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun getSavingsGoals(): Flow<List<SavingsGoal>> {
+    override fun getSavingsSpaces(): Flow<List<SavingsSpace>> {
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
-                collection.snapshots.map { snapshot ->
+                spacesCollection.snapshots.map { snapshot ->
                     snapshot.documents
-                        .map { it.data<SavingsGoal>() }
-                        .filter { it.userId == uid || it.collaboratorIds.contains(uid) }
+                        .map { it.data<SavingsSpace>() }
+                        .filter { it.memberIds.contains(uid) }
                 }.catch { e ->
                     println("Firestore Savings Error: ${e.message}")
                     emit(emptyList())
@@ -36,77 +33,108 @@ class FirebaseSavingsRepository(
         }
     }
 
-    override suspend fun addSavingsGoal(goal: SavingsGoal) {
-        val userId = authRepository.getCurrentUserId() ?: return
-        val now = Clock.System.now().toEpochMilliseconds()
-        val id = goal.id.ifEmpty { "goal_$now" }
-        val doc = collection.document(id)
-        val finalGoal = goal.copy(id = id, userId = userId)
-        doc.set(finalGoal)
+    override fun getSavingsSpace(id: String): Flow<SavingsSpace?> {
+        return spacesCollection.document(id).snapshots.map { it.data<SavingsSpace>() }
     }
 
-    override suspend fun updateSavingsGoal(goal: SavingsGoal) {
-        val userId = authRepository.getCurrentUserId() ?: return
-        if (goal.id.isNotEmpty()) {
-            collection.document(goal.id).set(goal.copy(userId = userId))
-        }
-    }
-
-    override suspend fun deleteSavingsGoal(id: String) {
-        collection.document(id).delete()
-    }
-
-    override suspend fun inviteByEmail(goalId: String, email: String) {
-        try {
-            val userSnapshot = firestore.collection("users")
-                .where { "email" equalTo email }
-                .get()
-            
-            val userDoc = userSnapshot.documents.firstOrNull() ?: return
-            val userIdToAdd = userDoc.id
-            val userName = userDoc.data<com.example.tasama.domain.model.User>().name
-            
-            val goalDoc = collection.document(goalId)
-            val goal = goalDoc.get().data<SavingsGoal>()
-            
-            if (!goal.collaboratorIds.contains(userIdToAdd)) {
-                val updatedCollaborators = goal.collaboratorIds + userIdToAdd
-                val updatedCollaboratorList = goal.collaborators + com.example.tasama.domain.model.Collaborator(userIdToAdd, userName)
-                goalDoc.set(goal.copy(
-                    collaboratorIds = updatedCollaborators, 
-                    collaborators = updatedCollaboratorList,
-                    isShared = true
-                ))
+    override fun getTransactions(spaceId: String): Flow<List<SavingsTransaction>> {
+        return spacesCollection.document(spaceId).collection("transactions")
+            .orderBy("timestamp", Direction.DESCENDING)
+            .snapshots.map { snapshot ->
+                snapshot.documents.map { it.data<SavingsTransaction>() }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
-    override suspend fun contribute(goalId: String, amount: Double) {
+    override suspend fun createSavingsSpace(space: SavingsSpace): String {
+        val uid = authRepository.getCurrentUserId() ?: throw Exception("Not authenticated")
+        val user = authRepository.getUser(uid) ?: throw Exception("User not found")
+        val now = Clock.System.now().toEpochMilliseconds()
+        val id = "space_$now"
+        
+        val initialMember = SavingsMember(
+            userId = uid,
+            name = user.name,
+            avatarUrl = user.avatarUrl,
+            role = MemberRole.OWNER
+        )
+
+        val finalSpace = space.copy(
+            id = id,
+            ownerId = uid,
+            memberIds = listOf(uid),
+            members = listOf(initialMember),
+            createdAt = now,
+            updatedAt = now
+        )
+        
+        spacesCollection.document(id).set(finalSpace)
+        return id
+    }
+
+    override suspend fun updateSavingsSpace(space: SavingsSpace) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        spacesCollection.document(space.id).set(space.copy(updatedAt = now))
+    }
+
+    override suspend fun deleteSavingsSpace(id: String) {
+        spacesCollection.document(id).delete()
+    }
+
+    override suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction) {
         val uid = authRepository.getCurrentUserId() ?: return
         val userName = authRepository.getUserName(uid) ?: "User"
+        val now = Clock.System.now().toEpochMilliseconds()
         
-        try {
-            val goalDoc = collection.document(goalId)
-            val goal = goalDoc.get().data<SavingsGoal>()
+        val transactionId = transaction.id.ifEmpty { "tx_$now" }
+        val transRef = spacesCollection.document(spaceId).collection("transactions").document(transactionId)
+        
+        val finalTransaction = transaction.copy(
+            id = transactionId,
+            spaceId = spaceId,
+            userId = uid,
+            userName = userName,
+            timestamp = now
+        )
+        
+        firestore.runTransaction {
+            val spaceDoc = spacesCollection.document(spaceId)
+            val snapshot = get(spaceDoc)
+            val space = snapshot.data<SavingsSpace>()
+            val newBalance = if (finalTransaction.type == TransactionType.INCOME) {
+                space.balance + finalTransaction.amount
+            } else {
+                space.balance - finalTransaction.amount
+            }
             
-            val newContribution = com.example.tasama.domain.model.Contribution(
-                userId = uid,
-                userName = userName,
-                amount = amount,
-                timestamp = Clock.System.now().toEpochMilliseconds()
+            set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
+            set(transRef, finalTransaction)
+        }
+    }
+
+    override suspend fun inviteMember(spaceId: String, email: String) {
+        val userSnapshot = firestore.collection("users")
+            .where { "email" equalTo email }
+            .get()
+        
+        val userDoc = userSnapshot.documents.firstOrNull() ?: throw Exception("User not found")
+        val userToAdd = userDoc.data<User>()
+        
+        val spaceDoc = spacesCollection.document(spaceId)
+        val space = spaceDoc.get().data<SavingsSpace>()
+        
+        if (!space.memberIds.contains(userToAdd.id)) {
+            val updatedMemberIds = space.memberIds + userToAdd.id
+            val updatedMembers = space.members + SavingsMember(
+                userId = userToAdd.id,
+                name = userToAdd.name,
+                avatarUrl = userToAdd.avatarUrl,
+                role = MemberRole.MEMBER
             )
-            
-            val updatedContributions = goal.contributions + newContribution
-            val updatedAmount = goal.currentAmount + amount
-            
-            goalDoc.set(goal.copy(
-                currentAmount = updatedAmount,
-                contributions = updatedContributions
+            spaceDoc.set(space.copy(
+                memberIds = updatedMemberIds,
+                members = updatedMembers,
+                updatedAt = Clock.System.now().toEpochMilliseconds()
             ))
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }

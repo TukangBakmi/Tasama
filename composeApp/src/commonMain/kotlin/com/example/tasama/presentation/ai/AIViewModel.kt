@@ -5,11 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.data.remote.GroqService
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
-import com.example.tasama.domain.model.Transaction
+import com.example.tasama.domain.model.SavingsTransaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
-import com.example.tasama.domain.repository.TransactionRepository
+import com.example.tasama.domain.repository.SavingsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +25,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlin.time.Clock
 
 class AIViewModel(
-    private val repository: TransactionRepository,
+    private val savingsRepository: SavingsRepository,
     private val aiChatRepository: AIChatRepository,
     private val groqService: GroqService,
     private val authRepository: AuthRepository
@@ -48,9 +48,27 @@ class AIViewModel(
                     _uiState.value = AIUiState()
                 } else {
                     observeMessages()
+                    observeSavingsSpaces()
                 }
             }
         }
+    }
+
+    private fun observeSavingsSpaces() {
+        viewModelScope.launch {
+            savingsRepository.getSavingsSpaces().collect { spaces ->
+                _uiState.update { state ->
+                    state.copy(
+                        savingsSpaces = spaces,
+                        activeSpaceId = state.activeSpaceId ?: spaces.firstOrNull()?.id
+                    )
+                }
+            }
+        }
+    }
+
+    fun setActiveSpace(spaceId: String) {
+        _uiState.update { it.copy(activeSpaceId = spaceId) }
     }
 
     private fun observeMessages() {
@@ -156,55 +174,47 @@ class AIViewModel(
     }
 
     private fun processAIResponse(userText: String) {
+        val activeSpace = _uiState.value.savingsSpaces.find { it.id == _uiState.value.activeSpaceId }
+        val spaceName = activeSpace?.name ?: "Personal"
+        val membersList = activeSpace?.members?.joinToString(", ") { it.name } ?: "Anda"
+
         viewModelScope.launch {
             val prompt = """
                 Anda adalah Sir Quack, asisten keuangan pribadi yang cerdas dan ramah dalam aplikasi Tasama. 
-                Tugas Anda adalah memparsing input pengguna menjadi satu atau lebih transaksi keuangan dalam format JSON.
+                Anda saat ini berada di dalam Savings Space: "$spaceName".
+                Anggota yang ada di space ini: $membersList.
 
-                ATURAN PARSING:
-                1. FORMAT INCOME: "[Nama] [Amount] [Note (opsional)]"
-                   - Nama Pengguna WAJIB ada di depan.
-                   - Urutan: Nama -> Nominal -> Catatan.
-                   - Contoh: "Budi 100k nabung" -> Category: Budi, Type: INCOME, Amount: 100000, Note: nabung.
+                Tugas Anda adalah:
+                1. Membantu pengguna mencatat transaksi keuangan (nabung/pengeluaran).
+                2. Menjawab pertanyaan umum atau sekadar mengobrol santai (casual chat).
+                3. Selalu bersikap ramah dan menggunakan persona bebek yang cerdas (Sir Quack).
 
-                2. FORMAT EXPENSE: "[Amount] [Note]"
-                   - Urutan: Nominal -> Catatan.
-                   - Nominal WAJIB di depan Catatan.
-                   - Contoh: "20k kopi" -> Category: General, Type: EXPENSE, Amount: 20000, Note: kopi.
-
-                3. FORMAT EXPENSE PRIBADI: "[Nama] [Amount] [Note]"
-                   - JIKA Nama disebutkan di awal (misal: "Budi 50k bakso"):
-                     ARTINYA Budi mengeluarkan uang pribadi untuk pengeluaran bersama.
-                     WAJIB BUAT 2 TRANSAKSI SEKALIGUS:
-                     a. Type: INCOME, Category: [Nama], Amount: [Amount], Note: "nabung"
-                     b. Type: EXPENSE, Category: "General", Amount: [Amount], Note: [Note]
-
-                PENTING:
-                - Jika input hanya "income [amount]" tanpa menyebutkan Nama, set "is_transaction" ke false.
-                - Jangan pernah menebak nama jika tidak ada.
-                - Jika "is_transaction" false, beri tahu pengguna bahwa nama atau urutan nominal harus benar.
-
-                KATEGORI KHUSUS:
-                - Bunga: "Bunga [Amount]" -> Category: "Bunga", Type: INCOME, Note: "bunga"
-                - Cashback: "Cashback [Amount]" -> Category: "Cashback", Type: INCOME, Note: "cashback"
+                ATURAN TRANSAKSI:
+                - Jika pengguna ingin menabung (income): "[Nama] [Amount] [Note (opsional)]"
+                  Contoh: "Budi 100k nabung" -> Type: INCOME, Amount: 100000, Note: nabung.
+                - Jika pengguna ingin mencatat pengeluaran (expense): "[Amount] [Note]"
+                  Contoh: "20k kopi" -> Type: EXPENSE, Amount: 20000, Note: kopi.
+                - Jika menyebut nama di awal untuk pengeluaran (misal: "Budi 50k bakso"), artinya Budi menabung dulu lalu dipakai belanja. Buat 2 transaksi:
+                  a. Type: INCOME, Category: Budi, Amount: 50000, Note: nabung
+                  b. Type: EXPENSE, Category: General, Amount: 50000, Note: bakso
 
                 KONVERSI NOMINAL:
-                - "k" = x1.000, "jt" = x1.000.000 (contoh: 100k -> 100000, 1.5jt -> 1500000).
+                - "k" = x1.000, "jt" = x1.000.000.
 
-                WAJIB merespons HANYA dengan format JSON yang valid. Jangan berikan teks pembuka atau penutup di luar blok JSON.
+                OUTPUT FORMAT (JSON):
+                Jika terdeteksi niat transaksi, isi `is_transaction: true`. Jika hanya chat biasa, isi `is_transaction: false`.
                 {
-                  "is_transaction": true,
+                  "is_transaction": boolean,
                   "transactions": [
                     {
                       "type": "INCOME" | "EXPENSE",
                       "amount": number,
-                      "category": "string (Nama atau Kategori)",
+                      "category": "string (Nama anggota atau 'General')",
                       "note": "string"
                     }
                   ],
-                  "reply": "Kalimat konfirmasi ramah yang diawali dengan 'Transaksi berhasil dicatat! ' diikuti detail singkat (Nama, Nominal, dan Catatan)."
+                  "reply": "Respon Anda (Konfirmasi transaksi atau jawaban chat santai)"
                 }
-                Jika bukan perintah transaksi (seperti menyapa atau obrolan lain) atau format salah, set "is_transaction" ke false, "transactions" ke [], dan isi "reply" dengan jawaban normal atau petunjuk Anda.
 
                 INPUT USER: "$userText"
             """.trimIndent()
@@ -216,10 +226,11 @@ class AIViewModel(
 
     private suspend fun handleAIResponse(response: String) {
         val now = Clock.System.now().toEpochMilliseconds()
+        val activeSpaceId = _uiState.value.activeSpaceId
+        val userId = authRepository.getCurrentUserId() ?: ""
         var finalReply = response
 
         try {
-            // Cek apakah response mengandung JSON
             val jsonStart = response.indexOf("{")
             val jsonEnd = response.lastIndexOf("}")
             
@@ -228,25 +239,28 @@ class AIViewModel(
                 val jsonElement = Json.parseToJsonElement(jsonStr).jsonObject
                 
                 val isTransaction = jsonElement["is_transaction"]?.jsonPrimitive?.booleanOrNull ?: false
-                if (isTransaction) {
+                if (isTransaction && activeSpaceId != null) {
                     val transactionsArray = jsonElement["transactions"]?.jsonArray
                     transactionsArray?.forEachIndexed { index, item ->
                         val data = item.jsonObject
                         val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
                         val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
-                        val amount = data["amount"]?.jsonPrimitive?.longOrNull ?: 0L
+                        val amount = data["amount"]?.jsonPrimitive?.longOrNull?.toDouble() ?: 0.0
                         val category = data["category"]?.jsonPrimitive?.content ?: "General"
                         val note = data["note"]?.jsonPrimitive?.content ?: ""
 
-                        // Simpan ke Firestore
-                        repository.addTransaction(
-                            Transaction(
+                        // Simpan ke Savings Space
+                        savingsRepository.addTransaction(
+                            spaceId = activeSpaceId,
+                            transaction = SavingsTransaction(
                                 id = "ai_${now}_$index",
+                                spaceId = activeSpaceId,
+                                userId = userId,
+                                userName = category, // In this context, category often stores the name
                                 amount = amount,
                                 type = type,
-                                category = category,
                                 note = note,
-                                createdAt = now
+                                timestamp = now
                             )
                         )
                     }

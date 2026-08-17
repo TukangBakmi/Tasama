@@ -2,7 +2,9 @@ package com.example.tasama.presentation.savings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tasama.domain.model.SavingsGoal
+import com.example.tasama.domain.model.SavingsSpace
+import com.example.tasama.domain.model.SavingsTransaction
+import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import kotlinx.coroutines.Job
@@ -42,10 +44,10 @@ class SavingsViewModel(
         dataJob?.cancel()
         dataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            repository.getSavingsGoals().collect { goals ->
+            repository.getSavingsSpaces().collect { spaces ->
                 _uiState.update { 
                     it.copy(
-                        savingsGoals = goals,
+                        savingsSpaces = spaces,
                         isLoading = false
                     )
                 }
@@ -53,80 +55,92 @@ class SavingsViewModel(
         }
     }
 
-    fun addGoal(goal: SavingsGoal) {
+    fun addSpace(space: SavingsSpace) {
         viewModelScope.launch {
             try {
-                repository.addSavingsGoal(goal)
+                repository.createSavingsSpace(space)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to add goal") }
+                _uiState.update { it.copy(error = e.message ?: "Failed to create space") }
             }
         }
     }
 
-    fun updateGoal(goal: SavingsGoal) {
+    fun updateSpace(space: SavingsSpace) {
         viewModelScope.launch {
             try {
-                repository.updateSavingsGoal(goal)
+                repository.updateSavingsSpace(space)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to update goal") }
+                _uiState.update { it.copy(error = e.message ?: "Failed to update space") }
             }
         }
     }
 
-    fun deleteGoal(id: String) {
+    fun deleteSpace(id: String) {
         viewModelScope.launch {
             try {
-                repository.deleteSavingsGoal(id)
+                repository.deleteSavingsSpace(id)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to delete goal") }
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete space") }
             }
         }
     }
 
-    fun onAddGoalClick() {
-        _uiState.update { it.copy(showAddGoalDialog = true) }
+    fun onAddSpaceClick() {
+        _uiState.update { it.copy(showAddSpaceDialog = true) }
     }
 
-    fun onDismissAddGoal() {
-        _uiState.update { it.copy(showAddGoalDialog = false) }
+    fun onDismissAddSpace() {
+        _uiState.update { it.copy(showAddSpaceDialog = false) }
     }
 
-    fun onInviteClick(goalId: String) {
-        _uiState.update { it.copy(showInviteCollaboratorDialog = true, selectedGoalId = goalId) }
+    fun onInviteClick(spaceId: String) {
+        _uiState.update { it.copy(showInviteMemberDialog = true, selectedSpaceId = spaceId) }
     }
 
     fun onDismissInvite() {
-        _uiState.update { it.copy(showInviteCollaboratorDialog = false, selectedGoalId = null) }
+        _uiState.update { it.copy(showInviteMemberDialog = false, selectedSpaceId = null) }
     }
 
-    fun inviteCollaborator(email: String) {
-        val goalId = _uiState.value.selectedGoalId ?: return
+    fun inviteMember(email: String) {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
         viewModelScope.launch {
             try {
-                repository.inviteByEmail(goalId, email)
+                repository.inviteMember(spaceId, email)
                 onDismissInvite()
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to invite collaborator") }
+                _uiState.update { it.copy(error = e.message ?: "Failed to invite member") }
             }
         }
     }
 
-    fun onContributeClick(goalId: String) {
-        _uiState.update { it.copy(showContributeDialog = true, selectedGoalId = goalId) }
+    fun onAddTransactionClick(spaceId: String) {
+        _uiState.update { it.copy(showAddTransactionDialog = true, selectedSpaceId = spaceId) }
     }
 
-    fun onDismissContribute() {
-        _uiState.update { it.copy(showContributeDialog = false, selectedGoalId = null) }
+    fun onDismissAddTransaction() {
+        _uiState.update { it.copy(showAddTransactionDialog = false, selectedSpaceId = null) }
     }
 
-    fun contribute(amount: Double) {
-        val goalId = _uiState.value.selectedGoalId ?: return
+    fun addTransaction(amount: Double, type: TransactionType, note: String) {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
+        val userId = authRepository.getCurrentUserId() ?: ""
+        
         viewModelScope.launch {
             try {
-                repository.contribute(goalId, amount)
-                onDismissContribute()
+                repository.addTransaction(
+                    spaceId = spaceId,
+                    transaction = SavingsTransaction(
+                        spaceId = spaceId,
+                        userId = userId,
+                        amount = amount,
+                        type = type,
+                        note = note,
+                        timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                    )
+                )
+                onDismissAddTransaction()
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to add contribution") }
+                _uiState.update { it.copy(error = e.message ?: "Failed to add transaction") }
             }
         }
     }

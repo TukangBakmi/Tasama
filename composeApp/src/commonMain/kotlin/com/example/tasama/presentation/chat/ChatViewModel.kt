@@ -254,6 +254,17 @@ class ChatViewModel(
         }
     }
 
+    fun restoreMessages(messageIds: List<String>) {
+        val channelId = currentChannelId ?: return
+        viewModelScope.launch {
+            try {
+                repository.restoreMessages(channelId, messageIds)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
     fun getSelectedMessagesText(): String {
         val state = _uiState.value
         val selectedIds = state.selectedMessageIds

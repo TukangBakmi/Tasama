@@ -59,6 +59,7 @@ fun AIScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -130,12 +131,32 @@ fun AIScreen(
                                 val textToCopy = viewModel.getSelectedMessagesText()
                                 if (textToCopy.isNotEmpty()) {
                                     clipboardManager.setText(AnnotatedString(textToCopy))
+                                    val count = uiState.selectedMessageIds.size
+                                    val message = if (count == 1) "Message copied" else "$count messages copied"
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(message)
+                                    }
                                 }
                                 viewModel.clearSelection()
                             }) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy Selected")
                             }
-                            IconButton(onClick = { viewModel.deleteSelectedMessages() }) {
+                            IconButton(onClick = {
+                                val selectedIds = uiState.selectedMessageIds.toList()
+                                val selectedMessages = uiState.messages.filter { it.id in selectedIds }
+                                val count = selectedIds.size
+                                viewModel.deleteSelectedMessages()
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = if (count == 1) "Message deleted for me" else "$count messages deleted for me",
+                                        actionLabel = "UNDO",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        viewModel.restoreMessages(selectedMessages)
+                                    }
+                                }
+                            }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
                             }
                         } else {
@@ -331,7 +352,8 @@ fun AIInput(
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(

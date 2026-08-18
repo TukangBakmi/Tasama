@@ -23,7 +23,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,7 +45,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -81,7 +79,7 @@ fun ChatScreen(
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -218,11 +216,30 @@ fun ChatScreen(
                             IconButton(onClick = {
                                 val text = viewModel.getSelectedMessagesText()
                                 clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+                                val count = uiState.selectedMessageIds.size
+                                val message = if (count == 1) "Message copied" else "$count messages copied"
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(message)
+                                }
                                 viewModel.exitSelectionMode()
                             }) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                             }
-                            IconButton(onClick = viewModel::showDeleteConfirmation) {
+                            IconButton(onClick = {
+                                val selectedIds = uiState.selectedMessageIds.toList()
+                                val count = selectedIds.size
+                                viewModel.deleteSelectedMessages()
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = if (count == 1) "Message deleted for me" else "$count messages deleted for me",
+                                        actionLabel = "UNDO",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        viewModel.restoreMessages(selectedIds)
+                                    }
+                                }
+                            }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete")
                             }
                         }
@@ -243,17 +260,15 @@ fun ChatScreen(
             }
         },
         bottomBar = {
-            if (!uiState.isSelectionMode) {
-                ChatInput(
-                    message = uiState.inputText,
-                    onMessageChange = viewModel::onMessageChange,
-                    onSend = viewModel::sendMessage,
-                    replyingToMessage = uiState.replyingToMessage,
-                    onCancelReply = { viewModel.setReplyingTo(null) },
-                    isSending = uiState.isSending,
-                    focusRequester = focusRequester
-                )
-            }
+            ChatInput(
+                message = uiState.inputText,
+                onMessageChange = viewModel::onMessageChange,
+                onSend = viewModel::sendMessage,
+                replyingToMessage = uiState.replyingToMessage,
+                onCancelReply = { viewModel.setReplyingTo(null) },
+                isSending = uiState.isSending,
+                focusRequester = focusRequester
+            )
         },
         contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
@@ -764,13 +779,12 @@ fun ChatInput(
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = 4.dp),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shadowElevation = 1.dp
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Could add emoji picker button here
                         TextField(

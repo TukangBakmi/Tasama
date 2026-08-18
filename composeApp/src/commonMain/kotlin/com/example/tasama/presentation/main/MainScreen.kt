@@ -107,7 +107,15 @@ fun MainScreen(
                         modifier = Modifier
                             .systemBarsPadding()
                             .padding(bottom = 80.dp)
-                    )
+                    ) { data ->
+                        Snackbar(
+                            snackbarData = data,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            actionColor = MaterialTheme.colorScheme.primary,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                        )
+                    }
                 },
                 contentWindowInsets = WindowInsets(0)
             ) { globalPadding ->

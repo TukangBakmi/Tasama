@@ -530,6 +530,12 @@ class AIViewModel(
         }
     }
 
+    fun restoreMessages(messages: List<ChatMessage>) {
+        viewModelScope.launch {
+            aiChatRepository.restoreMessages(messages)
+        }
+    }
+
     fun getSelectedMessagesText(): String {
         val state = _uiState.value
         val selectedIds = state.selectedMessageIds

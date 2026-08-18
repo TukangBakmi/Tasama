@@ -335,6 +335,23 @@ class FirebaseChatRepository(
         }
     }
 
+    override suspend fun restoreMessages(channelId: String, messageIds: List<String>) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val messagesCollection = channelsCollection.document(channelId).collection("messages")
+
+        messageIds.forEach { messageId ->
+            try {
+                val docRef = messagesCollection.document(messageId)
+                val msg = docRef.get().data(ChatMessage.serializer())
+                val newDeletedFor = msg.deletedFor.toMutableList()
+                if (newDeletedFor.contains(uid)) {
+                    newDeletedFor.remove(uid)
+                    docRef.updateFields { "deletedFor" to newDeletedFor }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     override suspend fun getUserName(userId: String): String? {
         return authRepository.getUserName(userId)
     }

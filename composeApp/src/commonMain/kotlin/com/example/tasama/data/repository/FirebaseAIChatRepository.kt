@@ -86,6 +86,19 @@ class FirebaseAIChatRepository(
         }
     }
 
+    override suspend fun restoreMessages(messages: List<ChatMessage>) {
+        try {
+            val userId = authRepository.getCurrentUserId() ?: return
+            messages.forEach { message ->
+                if (message.userId == userId) {
+                    collection.document(message.id).set(message)
+                }
+            }
+        } catch (e: Exception) {
+            println("Firestore restoreMessages error: ${e.message}")
+        }
+    }
+
     override suspend fun clearHistory() {
         try {
             val userId = authRepository.getCurrentUserId() ?: return

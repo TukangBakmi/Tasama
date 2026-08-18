@@ -29,5 +29,6 @@ interface ChatRepository {
     suspend fun markMessageAsRead(channelId: String, messageId: String)
     suspend fun markMessageAsDelivered(channelId: String, messageId: String)
     suspend fun deleteMessages(channelId: String, messageIds: List<String>)
+    suspend fun restoreMessages(channelId: String, messageIds: List<String>)
     suspend fun setActiveChannel(channelId: String?)
 }

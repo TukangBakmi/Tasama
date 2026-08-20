@@ -161,13 +161,8 @@ class FirebaseSavingsRepository(
         }
     }
 
-    override suspend fun inviteMember(spaceId: String, email: String) {
-        val userSnapshot = firestore.collection("users")
-            .where { "email" equalTo email }
-            .get()
-        
-        val userDoc = userSnapshot.documents.firstOrNull() ?: throw Exception("User not found")
-        val userToAdd = userDoc.data<User>()
+    override suspend fun inviteMember(spaceId: String, userId: String) {
+        val userToAdd = authRepository.getUser(userId) ?: throw Exception("User not found")
         
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()

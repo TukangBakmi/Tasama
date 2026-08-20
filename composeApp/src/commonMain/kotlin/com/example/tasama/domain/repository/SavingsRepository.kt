@@ -14,5 +14,5 @@ interface SavingsRepository {
     suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction)
     suspend fun updateTransaction(spaceId: String, transaction: SavingsTransaction)
     suspend fun deleteTransaction(spaceId: String, transactionId: String)
-    suspend fun inviteMember(spaceId: String, email: String)
+    suspend fun inviteMember(spaceId: String, userId: String)
 }

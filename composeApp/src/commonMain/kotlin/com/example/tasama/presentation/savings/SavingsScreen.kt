@@ -6,17 +6,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,10 +88,10 @@ fun SavingsScreen(
 
         if (uiState.showInviteMemberDialog) {
             InviteMemberDialog(
+                uiState = uiState,
                 onDismiss = { viewModel.onDismissInvite() },
-                onConfirm = { email ->
-                    viewModel.inviteMember(email)
-                }
+                onQueryChange = { viewModel.onSearchQueryChange(it) },
+                onInvite = { viewModel.inviteMember(it) }
             )
         }
 
@@ -426,37 +426,131 @@ fun AddSpaceDialog(
 
 @Composable
 fun InviteMemberDialog(
+    uiState: SavingsUiState,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onQueryChange: (String) -> Unit,
+    onInvite: (String) -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Invite Member") },
         text = {
-            Column {
-                Text("Enter the email address of the person you want to invite.")
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email Address") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
-                    )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Search your contacts by name or enter a 12-digit User ID to invite someone new.",
+                    style = MaterialTheme.typography.bodySmall
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextField(
+                        value = uiState.searchQuery,
+                        onValueChange = onQueryChange,
+                        label = { Text("Name or User ID") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        trailingIcon = {
+                            if (uiState.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChange("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    )
+                    if (uiState.searchQuery.length == 12 && uiState.searchQuery.all { it.isDigit() }) {
+                        IconButton(
+                            onClick = { onQueryChange(uiState.searchQuery) },
+                            enabled = !uiState.isSearching
+                        ) {
+                            if (uiState.isSearching) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = "Search ID")
+                            }
+                        }
+                    }
+                }
+
+                uiState.searchedUser?.let { user ->
+                    Card(
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .fillMaxWidth()
+                            .clickable { onInvite(user.id) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            UserAvatar(
+                                user = user,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(user.name, fontWeight = FontWeight.Bold)
+                                Text("Click to invite", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
+                if (uiState.filteredContacts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        if (uiState.searchQuery.isEmpty()) "Suggested Contacts" else "Contacts",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 250.dp)
+                    ) {
+                        items(uiState.filteredContacts.take(15)) { contact ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onInvite(contact.id) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                UserAvatar(
+                                    user = contact,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = contact.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Invite contact",
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                } else if (uiState.searchQuery.isNotEmpty() && !uiState.isSearching && uiState.searchedUser == null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "No contacts found matching \"${uiState.searchQuery}\"",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
             }
         },
-        confirmButton = {
-            Button(onClick = { onConfirm(email) }, enabled = email.isNotBlank()) {
-                Text("Invite")
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Close")
             }
         }
     )

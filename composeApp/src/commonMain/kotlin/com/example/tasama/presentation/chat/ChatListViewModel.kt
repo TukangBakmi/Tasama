@@ -68,7 +68,7 @@ class ChatListViewModel(
             authRepository.getUserFlow(uid).collectLatest { user ->
                 val contactIds = user?.contactIds ?: emptyList()
                 if (contactIds.isEmpty()) {
-                    _uiState.update { it.copy(contacts = emptyList()) }
+                    _uiState.update { it.copy(contacts = emptyList(), filteredContacts = emptyList()) }
                     observeUsersStatus(uiState.value.channels)
                 } else {
                     val contactFlows = contactIds.map { authRepository.getUserFlow(it) }
@@ -76,6 +76,7 @@ class ChatListViewModel(
                         contacts.filterNotNull()
                     }.collect { contactsList ->
                         _uiState.update { it.copy(contacts = contactsList) }
+                        _uiState.update { it.copy(filteredContacts = getRankedContacts()) }
                         observeUsersStatus(uiState.value.channels)
                     }
                 }
@@ -127,35 +128,56 @@ class ChatListViewModel(
     }
 
     fun searchUser(query: String) {
-        if (query.isBlank()) return
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchedUser = null, error = null, filteredContacts = getRankedContacts()) }
+            return
+        }
+        
         val currentUid = repository.getCurrentUserId()
-        _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
-        viewModelScope.launch {
-            try {
-                val userId = if (query.length == 12 && query.all { it.isDigit() }) {
-                    repository.getUserIdFromShortId(query)
-                } else {
-                    query // Assume it might be a full UID for now, or just fallback
-                }
+        val isNumericId = query.length == 12 && query.all { it.isDigit() }
+        
+        // Filter contacts by name in real-time
+        val filtered = uiState.value.contacts.filter { 
+            it.name.contains(query, ignoreCase = true) || it.shortId == query 
+        }
+        _uiState.update { it.copy(filteredContacts = filtered) }
 
-                if (userId != null) {
-                    if (userId == currentUid) {
-                        _uiState.update { it.copy(error = "You cannot chat with yourself", isSearchingUser = false) }
-                        return@launch
-                    }
-                    val name = repository.getUserName(userId)
-                    if (name != null) {
-                        _uiState.update { it.copy(searchedUser = SearchedUser(userId, name), isSearchingUser = false) }
+        if (isNumericId) {
+            _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
+            viewModelScope.launch {
+                try {
+                    val userId = repository.getUserIdFromShortId(query)
+                    if (userId != null) {
+                        if (userId == currentUid) {
+                            _uiState.update { it.copy(error = "You cannot chat with yourself", isSearchingUser = false) }
+                            return@launch
+                        }
+                        val name = repository.getUserName(userId)
+                        if (name != null) {
+                            val user = authRepository.getUser(userId)
+                            _uiState.update { it.copy(searchedUser = SearchedUser(userId, name, user?.avatarUrl), isSearchingUser = false) }
+                        } else {
+                            _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                        }
                     } else {
                         _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
                     }
-                } else {
-                    _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
                 }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
             }
         }
+    }
+
+    private fun getRankedContacts(): List<User> {
+        val channels = uiState.value.channels
+        val contacts = uiState.value.contacts
+        
+        // Simple ranking: contacts who have an existing channel with us come first,
+        // then sorted by last message timestamp if available.
+        return contacts.sortedWith(compareByDescending<User> { contact ->
+            channels.find { it.participantIds.contains(contact.id) }?.lastMessageTimestamp ?: 0L
+        }.thenBy { it.name })
     }
 
     fun deleteChannel(channelId: String) {

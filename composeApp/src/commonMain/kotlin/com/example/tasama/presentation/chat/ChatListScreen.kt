@@ -559,37 +559,47 @@ fun AddContactDialog(
     onDeleteContact: (User) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    
+    // Trigger real-time filtering and 12-digit numeric search
+    LaunchedEffect(query) {
+        onSearch(query)
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Contact") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "Enter the 12-digit User ID or UID of the person you want to chat with.",
+                    "Search your contacts by name or enter a 12-digit User ID to add someone new.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = query,
-                        onValueChange = {
-                            if (it.all { char -> char.isDigit() } && it.length <= 12) {
-                                query = it
-                            }
-                        },
-                        label = { Text("User ID") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        onValueChange = { query = it },
+                        label = { Text("Name or User ID") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
                     )
-                    IconButton(
-                        onClick = { onSearch(query) },
-                        enabled = query.isNotBlank() && !uiState.isSearchingUser
-                    ) {
-                        if (uiState.isSearchingUser) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
+                    if (query.length == 12 && query.all { it.isDigit() }) {
+                        IconButton(
+                            onClick = { onSearch(query) },
+                            enabled = !uiState.isSearchingUser
+                        ) {
+                            if (uiState.isSearchingUser) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = "Search ID")
+                            }
                         }
                     }
                 }
@@ -608,15 +618,18 @@ fun AddContactDialog(
                                 modifier = Modifier.size(40.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(user.name, fontWeight = FontWeight.Bold)
+                            Column {
+                                Text(user.name, fontWeight = FontWeight.Bold)
+                                Text("Click to add contact", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
 
-                if (uiState.contacts.isNotEmpty()) {
+                if (uiState.filteredContacts.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        "Saved Contacts",
+                        if (query.isEmpty()) "Suggested Contacts" else "Contacts",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -624,9 +637,9 @@ fun AddContactDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp)
+                            .heightIn(max = 250.dp)
                     ) {
-                        items(uiState.contacts) { contact ->
+                        items(uiState.filteredContacts.take(15)) { contact ->
                             // Use latest data from channelUsers if available for real-time status
                             val updatedContact = uiState.channelUsers[contact.id] ?: contact
                             Row(
@@ -646,31 +659,35 @@ fun AddContactDialog(
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.weight(1f)
                                 )
-                                IconButton(onClick = { onDeleteContact(updatedContact) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Remove contact",
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                if (query.isEmpty()) {
+                                    IconButton(onClick = { onDeleteContact(updatedContact) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Remove contact",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                } else if (query.isNotEmpty() && !uiState.isSearchingUser && uiState.searchedUser == null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "No contacts found matching \"$query\"",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
         },
-        confirmButton = {
-            Button(
-                onClick = { uiState.searchedUser?.let { onAdd(it.id) } },
-                enabled = uiState.searchedUser != null
-            ) {
-                Text("Add")
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Close")
             }
         }
     )

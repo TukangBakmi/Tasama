@@ -36,9 +36,28 @@ class SavingsViewModel(
                     _uiState.value = SavingsUiState()
                 } else {
                     loadSavings()
+                    loadContacts(uid)
                 }
             }
         }
+    }
+
+    private fun loadContacts(uid: String) {
+        viewModelScope.launch {
+            val user = authRepository.getUser(uid)
+            val contacts = user?.contactIds?.mapNotNull { authRepository.getUser(it) } ?: emptyList()
+            _uiState.update { 
+                it.copy(
+                    contacts = contacts,
+                    filteredContacts = getRankedContacts(contacts)
+                ) 
+            }
+        }
+    }
+
+    private fun getRankedContacts(contacts: List<com.example.tasama.domain.model.User>): List<com.example.tasama.domain.model.User> {
+        // Simple ranking for savings: alphabetical or could be by common space participation
+        return contacts.sortedBy { it.name }
     }
 
     private fun loadSavings() {
@@ -95,18 +114,84 @@ class SavingsViewModel(
     }
 
     fun onInviteClick(spaceId: String) {
-        _uiState.update { it.copy(showInviteMemberDialog = true, selectedSpaceId = spaceId) }
+        _uiState.update { 
+            it.copy(
+                showInviteMemberDialog = true, 
+                selectedSpaceId = spaceId,
+                searchQuery = "",
+                searchedUser = null
+            ) 
+        }
     }
 
     fun onDismissInvite() {
-        _uiState.update { it.copy(showInviteMemberDialog = false, selectedSpaceId = null) }
+        _uiState.update { 
+            it.copy(
+                showInviteMemberDialog = false, 
+                selectedSpaceId = null,
+                searchQuery = "",
+                searchedUser = null
+            ) 
+        }
     }
 
-    fun inviteMember(email: String) {
+    fun onSearchQueryChange(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        
+        val isNumericId = query.length == 12 && query.all { it.isDigit() }
+        
+        // Filter contacts by name in real-time
+        val filtered = uiState.value.contacts.filter { 
+            it.name.contains(query, ignoreCase = true) || it.shortId == query 
+        }
+        _uiState.update { 
+            it.copy(
+                filteredContacts = if (query.isEmpty()) getRankedContacts(uiState.value.contacts) else filtered
+            ) 
+        }
+
+        if (isNumericId) {
+            searchUser(query)
+        } else {
+            _uiState.update { it.copy(searchedUser = null) }
+        }
+    }
+
+    private fun searchUser(shortId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSearching = true) }
+            try {
+                val userId = authRepository.getUserIdFromShortId(shortId)
+                if (userId != null) {
+                    val user = authRepository.getUser(userId)
+                    _uiState.update { it.copy(searchedUser = user, isSearching = false) }
+                } else {
+                    _uiState.update { it.copy(searchedUser = null, isSearching = false) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false, error = "Search failed") }
+            }
+        }
+    }
+
+    fun inviteMember(userId: String) {
         val spaceId = _uiState.value.selectedSpaceId ?: return
+        val currentUserId = authRepository.getCurrentUserId()
+        
+        if (userId == currentUserId) {
+            _uiState.update { it.copy(error = "You cannot invite yourself") }
+            return
+        }
+
+        val space = _uiState.value.savingsSpaces.find { it.id == spaceId }
+        if (space?.memberIds?.contains(userId) == true) {
+            _uiState.update { it.copy(error = "User is already a member") }
+            return
+        }
+
         viewModelScope.launch {
             try {
-                repository.inviteMember(spaceId, email)
+                repository.inviteMember(spaceId, userId)
                 onDismissInvite()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to invite member") }

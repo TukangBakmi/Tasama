@@ -123,3 +123,111 @@ exports.onNotificationCreated = functions.region("asia-southeast2").firestore
         }
         return null;
     });
+
+exports.onSavingsInvitationCreated = functions.region("asia-southeast2").firestore
+    .document("savings_invitations/{invitationId}")
+    .onCreate(async (snapshot, context) => {
+        const invitation = snapshot.data();
+        if (!invitation || invitation.status !== "PENDING") return null;
+
+        const targetUid = invitation.inviteeId;
+        const inviterName = invitation.inviterName;
+        const spaceName = invitation.spaceName;
+
+        try {
+            const userDoc = await admin.firestore().collection("users").doc(targetUid).get();
+            const token = userDoc.data()?.fcmToken;
+
+            if (!token || token.trim() === "") {
+                console.log(`No FCM token for user ${targetUid}`);
+                return null;
+            }
+
+            const payload = {
+                token: token,
+                notification: {
+                    title: "New Savings Invitation",
+                    body: `${inviterName} invited you to join "${spaceName}"`,
+                },
+                data: {
+                    type: "SAVINGS_INVITATION",
+                    spaceId: invitation.spaceId,
+                    invitationId: context.params.invitationId,
+                },
+                android: {
+                    priority: "high",
+                }
+            };
+
+            await admin.messaging().send(payload);
+            console.log(`Invitation notification sent to ${targetUid}`);
+        } catch (error) {
+            console.error("Error sending invitation notification:", error);
+        }
+        return null;
+    });
+
+exports.onSavingsActivityCreated = functions.region("asia-southeast2").firestore
+    .document("savings_spaces/{spaceId}/activities/{activityId}")
+    .onCreate(async (snapshot, context) => {
+        const activity = snapshot.data();
+        if (!activity) return null;
+
+        const spaceId = context.params.spaceId;
+        const actorId = activity.userId;
+        const type = activity.type;
+        const details = activity.details;
+
+        // Only notify for specific activity types
+        const notifyTypes = [
+            "MEMBER_JOINED",
+            "MEMBER_LEFT",
+            "MEMBER_REMOVED",
+            "OWNERSHIP_TRANSFERRED",
+            "TRANSACTION_ADDED"
+        ];
+
+        if (!notifyTypes.includes(type)) return null;
+
+        try {
+            const spaceDoc = await admin.firestore().collection("savings_spaces").doc(spaceId).get();
+            if (!spaceDoc.exists) return null;
+
+            const spaceData = spaceDoc.data();
+            const memberIds = spaceData.memberIds || [];
+            const spaceName = spaceData.name;
+
+            // Recipients are all members except the actor
+            const recipients = memberIds.filter(id => id !== actorId);
+
+            const tasks = recipients.map(async (uid) => {
+                const userDoc = await admin.firestore().collection("users").doc(uid).get();
+                const token = userDoc.data()?.fcmToken;
+                if (!token || token.trim() === "") return null;
+
+                const payload = {
+                    token: token,
+                    notification: {
+                        title: spaceName,
+                        body: `${activity.userName}: ${details}`,
+                    },
+                    data: {
+                        type: "SAVINGS_ACTIVITY",
+                        spaceId: spaceId,
+                        activityType: type,
+                    },
+                    android: {
+                        priority: "high",
+                    }
+                };
+
+                return admin.messaging().send(payload)
+                    .catch(err => console.error(`Error sending activity to ${uid}:`, err));
+            });
+
+            await Promise.all(tasks);
+        } catch (error) {
+            console.error("Error sending activity notifications:", error);
+        }
+        return null;
+    });

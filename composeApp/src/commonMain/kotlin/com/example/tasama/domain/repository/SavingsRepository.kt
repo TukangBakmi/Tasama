@@ -1,7 +1,6 @@
 package com.example.tasama.domain.repository
 
-import com.example.tasama.domain.model.SavingsSpace
-import com.example.tasama.domain.model.SavingsTransaction
+import com.example.tasama.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 interface SavingsRepository {
@@ -14,5 +13,20 @@ interface SavingsRepository {
     suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction)
     suspend fun updateTransaction(spaceId: String, transaction: SavingsTransaction)
     suspend fun deleteTransaction(spaceId: String, transactionId: String)
-    suspend fun inviteMember(spaceId: String, userId: String)
+    
+    // Member Management
+    suspend fun inviteMember(spaceId: String, inviteeId: String)
+    suspend fun cancelInvitation(invitationId: String)
+    suspend fun acceptInvitation(invitationId: String)
+    suspend fun declineInvitation(invitationId: String)
+    fun getPendingInvitations(spaceId: String): Flow<List<SavingsInvitation>>
+    fun getMyInvitations(): Flow<List<SavingsInvitation>>
+    
+    suspend fun removeMember(spaceId: String, userId: String)
+    suspend fun leaveSpace(spaceId: String)
+    suspend fun transferOwnership(spaceId: String, newOwnerId: String)
+    
+    // Activity / History
+    fun getActivityHistory(spaceId: String): Flow<List<SavingsActivity>>
+    suspend fun archiveSpace(spaceId: String)
 }

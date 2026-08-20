@@ -2,9 +2,7 @@ package com.example.tasama.presentation.savings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tasama.domain.model.SavingsSpace
-import com.example.tasama.domain.model.SavingsTransaction
-import com.example.tasama.domain.model.TransactionType
+import com.example.tasama.domain.model.*
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import kotlinx.coroutines.Job
@@ -22,7 +20,11 @@ class SavingsViewModel(
     val uiState = _uiState.asStateFlow()
 
     private var dataJob: Job? = null
-    private var lastTxJob: Job? = null
+    private var detailsJob: Job? = null
+    private var transactionJob: Job? = null
+    private var invitationJob: Job? = null
+    private var activityJob: Job? = null
+    private var myInvitationsJob: Job? = null
 
     init {
         observeUserSession()
@@ -32,14 +34,24 @@ class SavingsViewModel(
         viewModelScope.launch {
             authRepository.userId.collect { uid ->
                 if (uid == null) {
-                    dataJob?.cancel()
+                    cancelAllJobs()
                     _uiState.value = SavingsUiState()
                 } else {
                     loadSavings()
                     loadContacts(uid)
+                    loadMyInvitations()
                 }
             }
         }
+    }
+
+    private fun cancelAllJobs() {
+        dataJob?.cancel()
+        detailsJob?.cancel()
+        transactionJob?.cancel()
+        invitationJob?.cancel()
+        activityJob?.cancel()
+        myInvitationsJob?.cancel()
     }
 
     private fun loadContacts(uid: String) {
@@ -55,8 +67,7 @@ class SavingsViewModel(
         }
     }
 
-    private fun getRankedContacts(contacts: List<com.example.tasama.domain.model.User>): List<com.example.tasama.domain.model.User> {
-        // Simple ranking for savings: alphabetical or could be by common space participation
+    private fun getRankedContacts(contacts: List<User>): List<User> {
         return contacts.sortedBy { it.name }
     }
 
@@ -73,6 +84,61 @@ class SavingsViewModel(
                 }
             }
         }
+    }
+
+    private fun loadMyInvitations() {
+        myInvitationsJob?.cancel()
+        myInvitationsJob = viewModelScope.launch {
+            repository.getMyInvitations().collect { invitations ->
+                _uiState.update { it.copy(myInvitations = invitations) }
+            }
+        }
+    }
+
+    fun onSpaceClick(spaceId: String) {
+        _uiState.update { it.copy(selectedSpaceId = spaceId, showSpaceDetails = true) }
+        loadSpaceDetails(spaceId)
+    }
+
+    private fun loadSpaceDetails(spaceId: String) {
+        detailsJob?.cancel()
+        transactionJob?.cancel()
+        invitationJob?.cancel()
+        activityJob?.cancel()
+
+        detailsJob = viewModelScope.launch {
+            repository.getSavingsSpace(spaceId).collect { space ->
+                if (space == null) {
+                    onDismissSpaceDetails()
+                }
+            }
+        }
+
+        transactionJob = viewModelScope.launch {
+            repository.getTransactions(spaceId).collect { txs ->
+                _uiState.update { it.copy(transactions = txs) }
+            }
+        }
+
+        invitationJob = viewModelScope.launch {
+            repository.getPendingInvitations(spaceId).collect { invs ->
+                _uiState.update { it.copy(pendingInvitations = invs) }
+            }
+        }
+
+        activityJob = viewModelScope.launch {
+            repository.getActivityHistory(spaceId).collect { activities ->
+                _uiState.update { it.copy(activityHistory = activities) }
+            }
+        }
+    }
+
+    fun onDismissSpaceDetails() {
+        _uiState.update { it.copy(showSpaceDetails = false, selectedSpaceId = null) }
+        detailsJob?.cancel()
+        transactionJob?.cancel()
+        invitationJob?.cancel()
+        activityJob?.cancel()
     }
 
     fun addSpace(space: SavingsSpace) {
@@ -99,8 +165,20 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 repository.deleteSavingsSpace(id)
+                onDismissSpaceDetails()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to delete space") }
+            }
+        }
+    }
+
+    fun archiveSpace(id: String) {
+        viewModelScope.launch {
+            try {
+                repository.archiveSpace(id)
+                onDismissSpaceDetails()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to archive space") }
             }
         }
     }
@@ -128,7 +206,6 @@ class SavingsViewModel(
         _uiState.update { 
             it.copy(
                 showInviteMemberDialog = false, 
-                selectedSpaceId = null,
                 searchQuery = "",
                 searchedUser = null
             ) 
@@ -140,7 +217,6 @@ class SavingsViewModel(
         
         val isNumericId = query.length == 12 && query.all { it.isDigit() }
         
-        // Filter contacts by name in real-time
         val filtered = uiState.value.contacts.filter { 
             it.name.contains(query, ignoreCase = true) || it.shortId == query 
         }
@@ -199,34 +275,76 @@ class SavingsViewModel(
         }
     }
 
-    fun onAddTransactionClick(spaceId: String) {
-        _uiState.update { it.copy(showAddTransactionDialog = true, selectedSpaceId = spaceId) }
-        observeLastTransaction(spaceId)
-    }
-
-    private fun observeLastTransaction(spaceId: String) {
-        lastTxJob?.cancel()
-        lastTxJob = viewModelScope.launch {
-            repository.getTransactions(spaceId).collect { transactions ->
-                _uiState.update { it.copy(lastTransaction = transactions.firstOrNull()) }
+    fun cancelInvitation(invitationId: String) {
+        viewModelScope.launch {
+            try {
+                repository.cancelInvitation(invitationId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to cancel invitation") }
             }
         }
+    }
+
+    fun acceptInvitation(invitationId: String) {
+        viewModelScope.launch {
+            try {
+                repository.acceptInvitation(invitationId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to accept invitation") }
+            }
+        }
+    }
+
+    fun declineInvitation(invitationId: String) {
+        viewModelScope.launch {
+            try {
+                repository.declineInvitation(invitationId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to decline invitation") }
+            }
+        }
+    }
+
+    fun removeMember(userId: String) {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
+        viewModelScope.launch {
+            try {
+                repository.removeMember(spaceId, userId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to remove member") }
+            }
+        }
+    }
+
+    fun leaveSpace() {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
+        viewModelScope.launch {
+            try {
+                repository.leaveSpace(spaceId)
+                onDismissSpaceDetails()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to leave space") }
+            }
+        }
+    }
+
+    fun transferOwnership(newOwnerId: String) {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
+        viewModelScope.launch {
+            try {
+                repository.transferOwnership(spaceId, newOwnerId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to transfer ownership") }
+            }
+        }
+    }
+
+    fun onAddTransactionClick(spaceId: String) {
+        _uiState.update { it.copy(showAddTransactionDialog = true, selectedSpaceId = spaceId) }
     }
 
     fun onDismissAddTransaction() {
-        _uiState.update { it.copy(showAddTransactionDialog = false, selectedSpaceId = null, lastTransaction = null) }
-        lastTxJob?.cancel()
-    }
-
-    fun undoLastTransaction(spaceId: String) {
-        val lastTx = _uiState.value.lastTransaction ?: return
-        viewModelScope.launch {
-            try {
-                repository.deleteTransaction(spaceId, lastTx.id)
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to undo transaction") }
-            }
-        }
+        _uiState.update { it.copy(showAddTransactionDialog = false) }
     }
 
     fun addTransaction(amount: Double, type: TransactionType, note: String) {
@@ -242,8 +360,7 @@ class SavingsViewModel(
                         userId = userId,
                         amount = amount,
                         type = type,
-                        note = note,
-                        timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                        note = note
                     )
                 )
                 onDismissAddTransaction()
@@ -253,7 +370,25 @@ class SavingsViewModel(
         }
     }
 
+    fun deleteTransaction(transactionId: String) {
+        val spaceId = _uiState.value.selectedSpaceId ?: return
+        viewModelScope.launch {
+            try {
+                repository.deleteTransaction(spaceId, transactionId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete transaction") }
+            }
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
+
+    fun isOwner(space: SavingsSpace?): Boolean {
+        val uid = authRepository.getCurrentUserId()
+        return space?.ownerId == uid
+    }
+    
+    fun getCurrentUserId(): String? = authRepository.getCurrentUserId()
 }

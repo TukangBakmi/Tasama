@@ -18,17 +18,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.tasama.data.remote.GroqException
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.Instant
 
 class AIViewModel(
     private val savingsRepository: SavingsRepository,
@@ -56,7 +55,7 @@ class AIViewModel(
         settingsJob = viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
                 val createdAt = settings.undoCreatedAt
-                val now = Clock.System.now().toEpochMilliseconds()
+                val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
                 
                 if (createdAt != null && (now - createdAt) < 60000L) {
                     println("DEBUG: Setting undoableTransaction: ${settings.undoTransactionId}, msg: ${settings.undoMessageId}")
@@ -83,7 +82,7 @@ class AIViewModel(
 
     private fun startUndoExpiryTimer(createdAt: Long) {
         undoTimerJob?.cancel()
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
         val remaining = 60000L - (now - createdAt)
         
         if (remaining > 0) {
@@ -151,11 +150,11 @@ class AIViewModel(
                 if (messages.isEmpty()) {
                     // Only save welcome if we are sure there is no history (after initial check)
                     // and not because of a Firestore error
-                    val welcomeMessage = ChatMessage(
+                        val welcomeMessage = ChatMessage(
                         id = "welcome",
                         text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
-                        timestamp = Clock.System.now().toEpochMilliseconds()
+                        timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
@@ -221,7 +220,7 @@ class AIViewModel(
         val trimmedText = _uiState.value.inputText.trim()
         if (trimmedText.isEmpty()) return
 
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
             text = trimmedText,
@@ -239,14 +238,14 @@ class AIViewModel(
                         isTyping = true
                     )
                 }
-                processAIResponse(trimmedText)
+                processAIResponse(trimmedText, userMessage.id)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to send message") }
             }
         }
     }
 
-    private fun processAIResponse(userText: String) {
+    private fun processAIResponse(userText: String, userMessageId: String) {
         val activeSpace = _uiState.value.savingsSpaces.find { it.id == _uiState.value.activeSpaceId }
         val spaceName = activeSpace?.name ?: "Personal"
         val membersList = activeSpace?.members?.joinToString(", ") { it.name } ?: "Anda"
@@ -271,9 +270,9 @@ class AIViewModel(
                 KONVERSI NOMINAL:
                 - "k" = x1.000, "jt" = x1.000.000. (Contoh: "50k" -> 50000, "1.5jt" -> 1500000)
 
-                OUTPUT FORMAT (JSON):
-                Pesan harus mengandung salah satu intent tool call jika terdeteksi niat manipulasi data.
+                PENTING: Gunakan JSON mode. Kembalikan data dalam format JSON yang valid.
                 
+                OUTPUT FORMAT (JSON):
                 {
                   "action": "CREATE_TRANSACTION" | "UPDATE_TRANSACTION" | "DELETE_TRANSACTION" | "NONE",
                   "transactions": [ 
@@ -283,140 +282,166 @@ class AIViewModel(
                      "amount": number (optional),
                      "note": "string (optional)"
                   },
-                  "reply": "Respon awal ke pengguna sebelum aksi dilakukan"
+                  "reply": "Respon ramah Anda ke pengguna (Sir Quack persona)"
                 }
 
                 INFO TRANSAKSI TERAKHIR (Gunakan jika action adalah UPDATE_TRANSACTION atau DELETE_TRANSACTION):
                 ${_uiState.value.lastTransaction?.let { "ID: ${it.id}, Amount: ${it.amount}, Note: ${it.note}" } ?: "Tidak ada transaksi terbaru"}
-                Catatan: Jika user mengoreksi nominal (misal: "salah, harusnya 50k"), gunakan UPDATE_TRANSACTION dengan `amount` baru.
-
+                
                 INPUT USER: "$userText"
             """.trimIndent()
 
-            val responseText = groqService.generateContent(prompt)
-            handleAIResponse(responseText)
+            var retryCount = 0
+            val maxRetries = 2
+            var lastException: Exception? = null
+
+            while (retryCount <= maxRetries) {
+                try {
+                    val responseText = groqService.generateContent(prompt, jsonMode = true)
+                    handleAIResponse(responseText, userMessageId)
+                    return@launch
+                } catch (e: GroqException) {
+                    lastException = e
+                    println("SirQuack: GroqException (Attempt ${retryCount + 1}) - ${e.message}")
+                    
+                    if (e is GroqException.RateLimit || e is GroqException.Server || e is GroqException.Network) {
+                        retryCount++
+                        if (retryCount <= maxRetries) {
+                            delay(1000L * retryCount) // Simple backoff
+                            continue
+                        }
+                    }
+                    break
+                } catch (e: Exception) {
+                    lastException = e
+                    println("SirQuack: Unexpected Error - ${e.message}")
+                    break
+                }
+            }
+
+            val errorMessage = when (lastException) {
+                is GroqException.RateLimit -> "Sir Quack sedang sangat sibuk. Coba lagi sebentar lagi ya, kwek! (Rate Limit)"
+                is GroqException.Timeout -> "Koneksi ke Sir Quack terputus. Pastikan internetmu lancar, kwek!"
+                is GroqException.Auth -> "Kwek! Sir Quack sepertinya kehilangan kunci aksesnya. (Masalah Autentikasi)"
+                is GroqException.Network -> "Sir Quack tidak bisa menjangkau kolam data. Periksa koneksi internetmu, kwek!"
+                is GroqException.Server -> "Sir Quack sedang kurang enak badan di server. Coba lagi nanti ya!"
+                else -> "Ups, ada gangguan teknis saat menghubungi Sir Quack. Coba lagi ya, kwek!"
+            }
+            saveAiMessage(errorMessage)
+            _uiState.update { it.copy(isTyping = false) }
         }
     }
 
-    private suspend fun handleAIResponse(response: String) {
-        val now = Clock.System.now().toEpochMilliseconds()
+    private suspend fun handleAIResponse(response: String, userMessageId: String) {
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
         val activeSpaceId = _uiState.value.activeSpaceId
         val userId = authRepository.getCurrentUserId() ?: ""
         val lastTx = _uiState.value.lastTransaction
-        var finalReply = response
 
         try {
-            val jsonStart = response.indexOf("{")
-            val jsonEnd = response.lastIndexOf("}")
-            
-            if (jsonStart != -1 && jsonEnd != -1) {
-                val jsonStr = response.substring(jsonStart, jsonEnd + 1)
-                val jsonElement = Json.parseToJsonElement(jsonStr).jsonObject
-                
-                val action = jsonElement["action"]?.jsonPrimitive?.content ?: "NONE"
-                val aiReply = jsonElement["reply"]?.jsonPrimitive?.content ?: response
+            val jsonElement = Json.parseToJsonElement(response).jsonObject
+            val action = jsonElement["action"]?.jsonPrimitive?.content ?: "NONE"
+            val aiReply = jsonElement["reply"]?.jsonPrimitive?.content ?: "Kwek! Ada yang bisa Sir Quack bantu?"
 
-                when (action) {
-                    "DELETE_TRANSACTION" -> {
-                        if (activeSpaceId != null && lastTx != null) {
-                            try {
-                                savingsRepository.deleteTransaction(activeSpaceId, lastTx.id)
-                                finalReply = aiReply
-                                saveAiMessage(finalReply)
-                                _uiState.update { 
-                                    if (it.undoableTransaction?.transactionId == lastTx.id) {
-                                        it.copy(undoableTransaction = null, isTyping = false)
-                                    } else it.copy(isTyping = false)
-                                }
-                                return
-                            } catch (e: Exception) {
-                                finalReply = "Gagal membatalkan transaksi: ${e.message}"
+            when (action) {
+                "DELETE_TRANSACTION" -> {
+                    if (activeSpaceId != null && lastTx != null) {
+                        try {
+                            savingsRepository.deleteTransaction(activeSpaceId, lastTx.id)
+                            saveAiMessage(aiReply)
+                            _uiState.update { state ->
+                                if (state.undoableTransaction?.transactionId == lastTx.id) {
+                                    state.copy(undoableTransaction = null, isTyping = false)
+                                } else state.copy(isTyping = false)
                             }
-                        } else {
-                            finalReply = "Tidak ada transaksi terakhir yang bisa dibatalkan."
+                            return
+                        } catch (e: Exception) {
+                            println("SirQuack: Delete Failed - ${e.message}")
+                            saveAiMessage("Maaf kwek, Sir Quack gagal menghapus transaksinya. Coba hapus manual ya.")
                         }
-                    }
-                    "UPDATE_TRANSACTION" -> {
-                        if (activeSpaceId != null && lastTx != null) {
-                            val correctionData = jsonElement["correction_data"]?.jsonObject
-                            val newAmount = correctionData?.get("amount")?.jsonPrimitive?.doubleOrNull ?: lastTx.amount
-                            val newNote = correctionData?.get("note")?.jsonPrimitive?.content ?: lastTx.note
-                            
-                            val newTx = lastTx.copy(amount = newAmount, note = newNote)
-                            
-                            val confirmText = aiReply
-                            
-                            _uiState.update { it.copy(
-                                pendingCorrection = PendingCorrection(lastTx, newTx, confirmText),
-                                isTyping = false
-                            ) }
-                            
-                            saveAiMessage(confirmText)
-                            return 
-                        } else {
-                            finalReply = "Tidak ada transaksi untuk diperbaiki."
-                        }
-                    }
-                    "CREATE_TRANSACTION" -> {
-                        if (activeSpaceId != null) {
-                            val transactionsArray = jsonElement["transactions"]?.jsonArray
-                            var successCount = 0
-                            var lastCreatedTxId: String? = null
-                            
-                            transactionsArray?.forEachIndexed { index, item ->
-                                try {
-                                    val data = item.jsonObject
-                                    val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
-                                    val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
-                                    val amount = data["amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                                    val category = data["category"]?.jsonPrimitive?.content ?: "General"
-                                    val note = data["note"]?.jsonPrimitive?.content ?: ""
-
-                                    val txId = "ai_${Clock.System.now().toEpochMilliseconds()}_$index"
-                                    savingsRepository.addTransaction(
-                                        activeSpaceId,
-                                        SavingsTransaction(
-                                            id = txId,
-                                            spaceId = activeSpaceId,
-                                            userId = userId,
-                                            userName = category,
-                                            amount = amount,
-                                            type = type,
-                                            note = note,
-                                            timestamp = now
-                                        )
-                                    )
-                                    successCount++
-                                    lastCreatedTxId = txId
-                                } catch (_: Exception) {}
-                            }
-                            
-                            if (successCount > 0) {
-                                finalReply = aiReply
-                                val aiMsgId = saveAiMessage(finalReply)
-                                if (lastCreatedTxId != null) {
-                                    startUndoTimer(lastCreatedTxId, activeSpaceId, aiMsgId)
-                                }
-                                _uiState.update { it.copy(isTyping = false) }
-                                return
-                            } else {
-                                finalReply = "Gagal mencatat transaksi."
-                            }
-                        }
-                    }
-                    else -> {
-                        finalReply = aiReply
+                    } else {
+                        saveAiMessage("Kwek? Sir Quack tidak menemukan transaksi terakhir untuk dibatalkan.")
                     }
                 }
-            }
-        } catch (_: Exception) { }
+                "UPDATE_TRANSACTION" -> {
+                    if (activeSpaceId != null && lastTx != null) {
+                        val correctionData = jsonElement["correction_data"]?.jsonObject
+                        val newAmount = correctionData?.get("amount")?.jsonPrimitive?.doubleOrNull ?: lastTx.amount
+                        val newNote = correctionData?.get("note")?.jsonPrimitive?.content ?: lastTx.note
+                        
+                        val newTx = lastTx.copy(amount = newAmount, note = newNote)
+                        
+                        _uiState.update { it.copy(
+                            pendingCorrection = PendingCorrection(lastTx, newTx, aiReply),
+                            isTyping = false
+                        ) }
+                        
+                        saveAiMessage(aiReply)
+                        return 
+                    } else {
+                        saveAiMessage("Tidak ada transaksi yang bisa diperbaiki saat ini, kwek!")
+                    }
+                }
+                "CREATE_TRANSACTION" -> {
+                    if (activeSpaceId != null) {
+                        val transactionsArray = jsonElement["transactions"]?.jsonArray
+                        val successfulTxs = mutableListOf<String>()
+                        
+                        transactionsArray?.forEachIndexed { index, item ->
+                            try {
+                                val data = item.jsonObject
+                                val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
+                                val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
+                                val amount = data["amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                                val category = data["category"]?.jsonPrimitive?.content ?: "General"
+                                val note = data["note"]?.jsonPrimitive?.content ?: ""
 
-        saveAiMessage(finalReply)
+                                // Robust Idempotency: Use userMessageId as part of the transaction ID
+                                val txId = "ai_${userMessageId}_$index"
+                                
+                                savingsRepository.addTransaction(
+                                    activeSpaceId,
+                                    SavingsTransaction(
+                                        id = txId,
+                                        spaceId = activeSpaceId,
+                                        userId = userId,
+                                        userName = category,
+                                        amount = amount,
+                                        type = type,
+                                        note = note,
+                                        timestamp = now
+                                    )
+                                )
+                                successfulTxs.add(txId)
+                            } catch (e: Exception) {
+                                println("SirQuack: Transaction Failed - ${e.message}")
+                            }
+                        }
+                        
+                        if (successfulTxs.isNotEmpty()) {
+                            val aiMsgId = saveAiMessage(aiReply)
+                            startUndoTimer(successfulTxs.last(), activeSpaceId, aiMsgId)
+                            _uiState.update { it.copy(isTyping = false) }
+                            return
+                        } else {
+                            saveAiMessage("Sir Quack gagal mencatat transaksi. Pastikan format nominalnya benar ya, kwek!")
+                        }
+                    }
+                }
+                else -> {
+                    saveAiMessage(aiReply)
+                }
+            }
+        } catch (e: Exception) {
+            println("SirQuack: Response Parsing Failed - ${e.message}")
+            saveAiMessage(response.takeIf { it.isNotBlank() } ?: "Kwek! Sir Quack sedikit bingung. Bisa diulangi?")
+        }
+
         _uiState.update { it.copy(isTyping = false) }
     }
 
     private suspend fun saveAiMessage(text: String): String {
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
         val id = "ai_$now"
         val aiMessage = ChatMessage(
             id = id,
@@ -429,7 +454,7 @@ class AIViewModel(
     }
 
     private fun startUndoTimer(transactionId: String, spaceId: String, messageId: String) {
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
         println("DEBUG: startUndoTimer for msg: $messageId")
         viewModelScope.launch {
             settingsRepository.setUndoTransaction(transactionId, spaceId, messageId, now)
@@ -472,7 +497,7 @@ class AIViewModel(
     fun cancelCorrection() {
         _uiState.update { it.copy(pendingCorrection = null) }
         viewModelScope.launch {
-            val now = Clock.System.now().toEpochMilliseconds()
+            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
             val aiMessage = ChatMessage(
                 id = "ai_$now",
                 text = "Oke, perubahan dibatalkan.",
@@ -480,27 +505,6 @@ class AIViewModel(
                 timestamp = now
             )
             aiChatRepository.saveMessage(aiMessage)
-        }
-    }
-
-    fun undoLastTransaction() {
-        val lastTx = _uiState.value.lastTransaction ?: return
-        val spaceId = _uiState.value.activeSpaceId ?: return
-        
-        viewModelScope.launch {
-            try {
-                savingsRepository.deleteTransaction(spaceId, lastTx.id)
-                
-                val currentUndo = _uiState.value.undoableTransaction
-                if (currentUndo?.transactionId == lastTx.id) {
-                    settingsRepository.setUndoTransaction(null, null, null, null)
-                    _uiState.update { it.copy(undoableTransaction = null) }
-                }
-
-                saveAiMessage("Transaksi Rp${lastTx.amount} berhasil dibatalkan.")
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to undo transaction") }
-            }
         }
     }
 
@@ -547,11 +551,11 @@ class AIViewModel(
             .joinToString("\n") { message ->
                 val instant = Instant.fromEpochMilliseconds(message.timestamp)
                 val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                val month = localDateTime.monthNumber
-                val day = localDateTime.dayOfMonth
+                val month = localDateTime.month.number
+                val day = localDateTime.day
                 val hour = localDateTime.hour.toString().padStart(2, '0')
                 val minute = localDateTime.minute.toString().padStart(2, '0')
-                
+
                 val senderName = if (message.sender == MessageSender.AI) "Sir Quack" else state.currentUserName
                 "[$month/$day, $hour:$minute] $senderName: ${message.text}"
             }

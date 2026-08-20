@@ -7,7 +7,33 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import io.ktor.client.network.sockets.ConnectTimeoutException
+
+@Serializable
+data class GroqResponseFormat(val type: String)
+
+// Extend GroqRequest from GroqModels.kt with response_format if needed, 
+// but since I can't easily extend @Serializable data classes across files with new fields without modifying them,
+// I'll define a local version that matches the API expectations for JSON mode if the base one doesn't have it.
+@Serializable
+data class GroqToolRequest(
+    val messages: List<GroqMessage>,
+    val model: String = "openai/gpt-oss-20b",
+    val temperature: Double = 0.5,
+    val max_tokens: Int = 1024,
+    val response_format: GroqResponseFormat? = null
+)
+
+sealed class GroqException(message: String) : Exception(message) {
+    class Network(message: String) : GroqException(message)
+    class Timeout(message: String) : GroqException(message)
+    class RateLimit(message: String) : GroqException(message)
+    class Auth(message: String) : GroqException(message)
+    class Server(message: String) : GroqException(message)
+    class Unknown(message: String) : GroqException(message)
+}
 
 class GroqService(
     private val apiKey: String
@@ -31,26 +57,48 @@ class GroqService(
         }
     }
 
-    suspend fun generateContent(prompt: String): String {
-        return try {
-            val response: GroqResponse = client.post {
+    suspend fun generateContent(prompt: String, jsonMode: Boolean = false): String {
+        try {
+            val response = client.post {
                 contentType(ContentType.Application.Json)
                 setBody(
-                    GroqRequest(
-                        messages = listOf(
-                            GroqMessage(role = "user", content = prompt)
-                        )
+                    GroqToolRequest(
+                        messages = listOf(GroqMessage(role = "user", content = prompt)),
+                        response_format = if (jsonMode) GroqResponseFormat("json_object") else null
                     )
                 )
-            }.body()
-
-            when {
-                response.error != null -> "API Error: ${response.error.message}"
-                response.choices.isNullOrEmpty() -> "Tidak ada respons dari AI."
-                else -> response.choices.first().message.content
             }
+
+            if (!response.status.isSuccess()) {
+                val errorBody = try { response.body<GroqResponse>().error } catch (_: Exception) { null }
+                val message = errorBody?.message ?: "HTTP ${response.status.value}"
+                
+                when (response.status) {
+                    HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden -> throw GroqException.Auth(message)
+                    HttpStatusCode.TooManyRequests -> throw GroqException.RateLimit(message)
+                    HttpStatusCode.RequestTimeout, HttpStatusCode.GatewayTimeout -> throw GroqException.Timeout(message)
+                    HttpStatusCode.InternalServerError, HttpStatusCode.BadGateway, HttpStatusCode.ServiceUnavailable -> throw GroqException.Server(message)
+                    else -> throw GroqException.Unknown(message)
+                }
+            }
+
+            val groqResponse: GroqResponse = response.body()
+            
+            if (groqResponse.error != null) {
+                throw GroqException.Unknown(groqResponse.error.message ?: "Unknown API error")
+            }
+            
+            return groqResponse.choices?.firstOrNull()?.message?.content 
+                ?: throw GroqException.Unknown("Empty response from AI")
+                
+        } catch (e: HttpRequestTimeoutException) {
+            throw GroqException.Timeout("Request timed out")
+        } catch (e: ConnectTimeoutException) {
+            throw GroqException.Timeout("Connection timed out")
+        } catch (e: GroqException) {
+            throw e
         } catch (e: Exception) {
-            "Error: ${e.message}"
+            throw GroqException.Network(e.message ?: "Network error")
         }
     }
 }

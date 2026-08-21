@@ -56,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import platform.CoreLocation.CLLocationCoordinate2D

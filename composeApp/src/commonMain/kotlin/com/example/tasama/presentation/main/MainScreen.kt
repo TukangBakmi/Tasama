@@ -4,11 +4,9 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -301,7 +299,18 @@ fun MainScreen(
                                                     BottomNavItem.Dashboard -> DashboardScreen(
                                                         onTransactionClick = {})
 
-                                                    BottomNavItem.Savings -> SavingsScreen()
+                                                    BottomNavItem.Savings -> NavHost(
+                                                        navController = rememberNavController(),
+                                                        startDestination = "savings_main"
+                                                    ) {
+                                                        composable("savings_main") {
+                                                            SavingsScreen(
+                                                                onNavigateToDetail = { spaceId: String ->
+                                                                    navController.navigate("savings_detail/$spaceId")
+                                                                }
+                                                            )
+                                                        }
+                                                    }
                                                     BottomNavItem.Chat -> ChatListScreen(
                                                         onChannelClick = { channelId ->
                                                             navController.navigate("chat_room/$channelId")
@@ -418,6 +427,62 @@ fun MainScreen(
                                         uid = userId,
                                         onBackClick = { navController.popBackStack() }
                                     )
+                                }
+
+                                composable(
+                                    route = "savings_detail/{spaceId}",
+                                    enterTransition = {
+                                        slideInVertically(
+                                            initialOffsetY = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    },
+                                    exitTransition = {
+                                        fadeOut(animationSpec = tween(200))
+                                    },
+                                    popEnterTransition = {
+                                        fadeIn(animationSpec = tween(200))
+                                    },
+                                    popExitTransition = {
+                                        slideOutVertically(
+                                            targetOffsetY = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                ) { backStackEntry ->
+                                    val spaceId = backStackEntry.arguments?.getString("spaceId") ?: ""
+                                    val savingsViewModel: com.example.tasama.presentation.savings.SavingsViewModel = koinViewModel()
+                                    
+                                    LaunchedEffect(spaceId) {
+                                        savingsViewModel.loadSpaceDetails(spaceId)
+                                    }
+                                    
+                                    val uiState by savingsViewModel.uiState.collectAsState()
+                                    
+                                    if (uiState.showSpaceDetails && uiState.selectedSpace != null) {
+                                        com.example.tasama.presentation.savings.SpaceDetailsScreen(
+                                            uiState = uiState,
+                                            isOwner = savingsViewModel.isOwner(uiState.selectedSpace),
+                                            currentUserId = savingsViewModel.getCurrentUserId() ?: "",
+                                            onBack = { 
+                                                savingsViewModel.onDismissSpaceDetails()
+                                                navController.popBackStack()
+                                            },
+                                            onAddTransaction = { savingsViewModel.onAddTransactionClick(it) },
+                                            onConfirmAddTransaction = { amount, type, note ->
+                                                savingsViewModel.addTransaction(amount, type, note)
+                                            },
+                                            onDismissAddTransaction = { savingsViewModel.onDismissAddTransaction() },
+                                            onDeleteTransaction = { savingsViewModel.deleteTransaction(it.id) },
+                                            onInvite = { savingsViewModel.onInviteClick(it) },
+                                            onRemoveMember = { savingsViewModel.removeMember(it) },
+                                            onTransferOwnership = { savingsViewModel.transferOwnership(it) },
+                                            onCancelInvitation = { savingsViewModel.cancelInvitation(it) },
+                                            onDelete = { savingsViewModel.deleteSpace(it) },
+                                            onEdit = { savingsViewModel.updateSpace(it) },
+                                            onLeave = { savingsViewModel.leaveSpace() }
+                                        )
+                                    }
                                 }
                             }
                         }

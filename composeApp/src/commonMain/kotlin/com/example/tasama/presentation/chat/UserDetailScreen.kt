@@ -26,7 +26,6 @@ import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.*
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Clock
-import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

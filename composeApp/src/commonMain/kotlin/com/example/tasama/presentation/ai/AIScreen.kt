@@ -34,6 +34,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import com.example.tasama.util.formatCurrency
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import androidx.compose.ui.tooling.preview.Preview
@@ -41,14 +45,14 @@ import org.jetbrains.compose.resources.painterResource
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
 import com.example.tasama.presentation.main.LocalSnackbarHostState
-import kotlin.time.Clock
-import kotlin.time.Instant
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.DatePeriod
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -308,12 +312,69 @@ fun CorrectionPrompt(
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val newTx = pendingCorrection.newTransaction
+                    val oldTx = pendingCorrection.originalTransaction
+                    
                     Text(
-                        text = pendingCorrection.confirmationText,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Konfirmasi Perubahan",
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Old values
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = oldTx.amount.formatCurrency(oldTx.currency),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textDecoration = TextDecoration.LineThrough,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = oldTx.note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            )
+                        }
+                        
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        // New values
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = newTx.amount.formatCurrency(newTx.currency),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = newTx.note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = pendingCorrection.confirmationText,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

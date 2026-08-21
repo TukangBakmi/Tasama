@@ -13,6 +13,7 @@ import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import com.example.tasama.util.formatCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,7 +28,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
+import kotlin.time.Clock
 
 class AIViewModel(
     private val savingsRepository: SavingsRepository,
@@ -55,7 +56,7 @@ class AIViewModel(
         settingsJob = viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
                 val createdAt = settings.undoCreatedAt
-                val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                val now = Clock.System.now().toEpochMilliseconds()
                 
                 if (createdAt != null && (now - createdAt) < 60000L) {
                     println("DEBUG: Setting undoableTransaction: ${settings.undoTransactionId}, msg: ${settings.undoMessageId}")
@@ -82,10 +83,10 @@ class AIViewModel(
 
     private fun startUndoExpiryTimer(createdAt: Long) {
         undoTimerJob?.cancel()
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val remaining = 60000L - (now - createdAt)
         
-        if (remaining > 0) {
+        if (remaining > 0L) {
             undoTimerJob = viewModelScope.launch {
                 delay(remaining)
                 settingsRepository.setUndoTransaction(null, null, null, null)
@@ -138,7 +139,8 @@ class AIViewModel(
         lastTxJob?.cancel()
         lastTxJob = viewModelScope.launch {
             savingsRepository.getTransactions(spaceId).collect { transactions ->
-                _uiState.update { it.copy(lastTransaction = transactions.firstOrNull()) }
+                val last = transactions.sortedByDescending { it.timestamp }.firstOrNull()
+                _uiState.update { it.copy(lastTransaction = last) }
             }
         }
     }
@@ -154,7 +156,7 @@ class AIViewModel(
                         id = "welcome",
                         text = "Halo! Saya adalah Sir Quack. Saya bisa membantu mencatat keuangan Anda di Tasama. Coba ketik 'Budi nabung 100k' atau 'Makan siang 50k'.",
                         sender = MessageSender.AI,
-                        timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                        timestamp = Clock.System.now().toEpochMilliseconds()
                     )
                     aiChatRepository.saveMessage(welcomeMessage)
                 } else {
@@ -220,7 +222,7 @@ class AIViewModel(
         val trimmedText = _uiState.value.inputText.trim()
         if (trimmedText.isEmpty()) return
 
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val userMessage = ChatMessage(
             id = "user_$now",
             text = trimmedText,
@@ -333,7 +335,7 @@ class AIViewModel(
     }
 
     private suspend fun handleAIResponse(response: String, userMessageId: String) {
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val activeSpaceId = _uiState.value.activeSpaceId
         val userId = authRepository.getCurrentUserId() ?: ""
         val lastTx = _uiState.value.lastTransaction
@@ -366,7 +368,9 @@ class AIViewModel(
                 "UPDATE_TRANSACTION" -> {
                     if (activeSpaceId != null && lastTx != null) {
                         val correctionData = jsonElement["correction_data"]?.jsonObject
-                        val newAmount = correctionData?.get("amount")?.jsonPrimitive?.doubleOrNull ?: lastTx.amount
+                        val newAmount: Long = correctionData?.get("amount")?.jsonPrimitive?.content?.let { 
+                            it.toLongOrNull() ?: it.toDoubleOrNull()?.toLong()
+                        } ?: lastTx.amount
                         val newNote = correctionData?.get("note")?.jsonPrimitive?.content ?: lastTx.note
                         
                         val newTx = lastTx.copy(amount = newAmount, note = newNote)
@@ -392,7 +396,9 @@ class AIViewModel(
                                 val data = item.jsonObject
                                 val typeStr = data["type"]?.jsonPrimitive?.content ?: "EXPENSE"
                                 val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
-                                val amount = data["amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                                val amount: Long = data["amount"]?.jsonPrimitive?.content?.let { 
+                                    it.toLongOrNull() ?: it.toDoubleOrNull()?.toLong()
+                                } ?: 0L
                                 val category = data["category"]?.jsonPrimitive?.content ?: "General"
                                 val note = data["note"]?.jsonPrimitive?.content ?: ""
 
@@ -441,7 +447,7 @@ class AIViewModel(
     }
 
     private suspend fun saveAiMessage(text: String): String {
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val id = "ai_$now"
         val aiMessage = ChatMessage(
             id = id,
@@ -454,7 +460,7 @@ class AIViewModel(
     }
 
     private fun startUndoTimer(transactionId: String, spaceId: String, messageId: String) {
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         println("DEBUG: startUndoTimer for msg: $messageId")
         viewModelScope.launch {
             settingsRepository.setUndoTransaction(transactionId, spaceId, messageId, now)
@@ -487,7 +493,8 @@ class AIViewModel(
                 savingsRepository.updateTransaction(spaceId, pending.newTransaction)
                 _uiState.update { it.copy(pendingCorrection = null) }
                 
-                saveAiMessage("Berhasil diperbarui! Transaksi sekarang menjadi Rp${pending.newTransaction.amount}.")
+                val formattedAmount = pending.newTransaction.amount.formatCurrency(pending.newTransaction.currency)
+                saveAiMessage("Berhasil diperbarui! Transaksi sekarang menjadi $formattedAmount.")
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to update transaction") }
             }
@@ -497,7 +504,7 @@ class AIViewModel(
     fun cancelCorrection() {
         _uiState.update { it.copy(pendingCorrection = null) }
         viewModelScope.launch {
-            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+            val now = Clock.System.now().toEpochMilliseconds()
             val aiMessage = ChatMessage(
                 id = "ai_$now",
                 text = "Oke, perubahan dibatalkan.",

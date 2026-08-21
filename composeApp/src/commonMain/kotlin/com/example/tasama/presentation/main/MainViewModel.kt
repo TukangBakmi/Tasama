@@ -6,6 +6,7 @@ import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SettingsRepository
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -87,7 +88,7 @@ class MainViewModel(
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             // Use negative timestamp to signify "explicitly offline" while preserving the time
-            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+            val now = Clock.System.now().toEpochMilliseconds()
             authRepository.updateLastActive(uid, timestamp = now)
         }
     }

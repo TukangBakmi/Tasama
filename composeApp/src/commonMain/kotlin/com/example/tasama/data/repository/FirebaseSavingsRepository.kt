@@ -93,9 +93,9 @@ class FirebaseSavingsRepository(
         
         if (space.ownerId != uid) throw Exception("Only owner can delete the space")
         
-        // Check if there are transactions or balance
-        if (space.balance > 0) {
-            // Suggest archiving instead if there's balance, or just allow deletion but maybe show a warning in UI
+        // Ensure balance is zero before deletion to prevent losing track of funds
+        if (space.balance != 0L) {
+            throw Exception("Cannot delete a space with a non-zero balance. Please withdraw or transfer funds first.")
         }
 
         spacesCollection.document(id).delete()
@@ -159,8 +159,8 @@ class FirebaseSavingsRepository(
                 intermediateBalance - transaction.amount
             }
             
-            set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
-            set(transRef, transaction)
+            set(spaceDoc, space.copy(balance = newBalance, updatedAt = now, currency = space.currency))
+            set(transRef, transaction.copy(currency = space.currency))
         }
     }
 

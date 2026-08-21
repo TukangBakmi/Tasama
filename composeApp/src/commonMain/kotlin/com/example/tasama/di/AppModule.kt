@@ -69,7 +69,7 @@ val appModule = module {
     viewModel { DashboardViewModel(get(), get()) }
     viewModel { TransactionViewModel(get(), get()) }
     viewModel { AIViewModel(get(), get(), get(), get(), get()) }
-    viewModel { SavingsViewModel(get(), get()) }
+    viewModel { SavingsViewModel(get(), get(), get()) }
     viewModel { ChatViewModel(get(), get(), get()) }
     viewModel { ChatListViewModel(get(), get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }

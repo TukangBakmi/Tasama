@@ -34,7 +34,6 @@ import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
 import kotlin.time.Clock
-import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -13,7 +13,8 @@ import kotlinx.coroutines.launch
 
 class SavingsViewModel(
     private val repository: SavingsRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val settingsRepository: com.example.tasama.domain.repository.SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SavingsUiState())
@@ -41,6 +42,11 @@ class SavingsViewModel(
                     loadContacts(uid)
                     loadMyInvitations()
                 }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(userCurrency = settings.currency) }
             }
         }
     }
@@ -96,11 +102,15 @@ class SavingsViewModel(
     }
 
     fun onSpaceClick(spaceId: String) {
-        _uiState.update { it.copy(selectedSpaceId = spaceId, showSpaceDetails = true) }
-        loadSpaceDetails(spaceId)
+        _uiState.update { it.copy(selectedSpaceId = spaceId) }
     }
 
-    private fun loadSpaceDetails(spaceId: String) {
+    fun onSpaceHandled() {
+        _uiState.update { it.copy(selectedSpaceId = null) }
+    }
+
+    fun loadSpaceDetails(spaceId: String) {
+        _uiState.update { it.copy(selectedSpaceId = spaceId, showSpaceDetails = true) }
         detailsJob?.cancel()
         transactionJob?.cancel()
         invitationJob?.cancel()
@@ -347,8 +357,9 @@ class SavingsViewModel(
         _uiState.update { it.copy(showAddTransactionDialog = false) }
     }
 
-    fun addTransaction(amount: Double, type: TransactionType, note: String) {
+    fun addTransaction(amount: Long, type: TransactionType, note: String) {
         val spaceId = _uiState.value.selectedSpaceId ?: return
+        val space = _uiState.value.selectedSpace ?: return
         val userId = authRepository.getCurrentUserId() ?: ""
         
         viewModelScope.launch {
@@ -359,6 +370,7 @@ class SavingsViewModel(
                         spaceId = spaceId,
                         userId = userId,
                         amount = amount,
+                        currency = space.currency,
                         type = type,
                         note = note
                     )

@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tasama.util.formatAmount
+import com.example.tasama.util.formatShortAmount
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.presentation.components.DonutChart
@@ -656,15 +658,7 @@ fun TransactionItem(transaction: Transaction) {
     }
 }
 
-fun Long.formatAmount(): String {
-    return this.toString().reversed().chunked(3).joinToString(".").reversed()
-}
 
-fun Long.formatShortAmount(): String {
-    return if (this >= 1_000_000) "${(this / 100_000) / 10.0}M"
-    else if (this >= 1_000) "${(this / 1_000)}K"
-    else this.toString()
-}
 
 fun getCategoryEmoji(category: String, type: TransactionType): String {
     if (type == TransactionType.INCOME) return "💰"

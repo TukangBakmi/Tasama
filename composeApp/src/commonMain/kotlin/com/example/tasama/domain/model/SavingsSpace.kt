@@ -31,9 +31,10 @@ data class SavingsSpace(
     val ownerId: String = "",
     val memberIds: List<String> = emptyList(),
     val members: List<SavingsMember> = emptyList(),
-    val targetAmount: Double? = null,
+    val targetAmount: Long? = null,
     val targetDate: Long? = null,
-    val balance: Double = 0.0,
+    val balance: Long = 0,
+    val currency: String = "IDR",
     val isArchived: Boolean = false,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
@@ -45,7 +46,8 @@ data class SavingsTransaction(
     val spaceId: String = "",
     val userId: String = "",
     val userName: String = "",
-    val amount: Double = 0.0,
+    val amount: Long = 0,
+    val currency: String = "IDR",
     val type: TransactionType = TransactionType.INCOME,
     val note: String = "",
     val timestamp: Long = 0

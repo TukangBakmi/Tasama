@@ -20,7 +20,8 @@ data class SavingsUiState(
     val contacts: List<User> = emptyList(),
     val filteredContacts: List<User> = emptyList(),
     val isSearching: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val userCurrency: String = "IDR"
 ) {
     val selectedSpace: SavingsSpace? = savingsSpaces.find { it.id == selectedSpaceId }
 }

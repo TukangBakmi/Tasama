@@ -53,6 +53,15 @@ fun SavingsScreen(
             }
     }
 
+    LaunchedEffect(Unit) {
+        snapshotFlow { uiState.successMessage }
+            .filterNotNull()
+            .collect { message ->
+                viewModel.clearSuccessMessage()
+                snackbarHostState.showSnackbar(message)
+            }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -96,14 +105,14 @@ fun SavingsScreen(
                 )
             }
 
-            if (uiState.showInviteMemberDialog) {
-                InviteMemberDialog(
-                    uiState = uiState,
-                    onDismiss = { viewModel.onDismissInvite() },
-                    onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    onInvite = { viewModel.inviteMember(it) }
-                )
-            }
+        if (uiState.showInviteMemberDialog) {
+            InviteMemberDialog(
+                uiState = uiState,
+                onDismiss = { viewModel.onDismissInvite() },
+                onQueryChange = { viewModel.onSearchQueryChange(it) },
+                onInvite = { viewModel.inviteMember(it) }
+            )
+        }
 
             if (uiState.showAddTransactionDialog) {
                 val space = uiState.selectedSpace
@@ -117,8 +126,31 @@ fun SavingsScreen(
                     )
                 }
             }
+
+            if (uiState.showRemovedFromSpaceDialog) {
+                RemovedFromSpaceDialog(
+                    onConfirm = {
+                        viewModel.onRemovedDialogConfirm()
+                        onNavigateToDetail("") // Use this to trigger any necessary navigation cleanup if needed, but onDismiss should handle it
+                    }
+                )
+            }
         }
     }
+}
+
+@Composable
+fun RemovedFromSpaceDialog(onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { }, // Force confirmation
+        title = { Text("Removed from Savings Space") },
+        text = { Text("You no longer have access to this Savings Space.") },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("OK")
+            }
+        }
+    )
 }
 
 @Composable
@@ -704,7 +736,10 @@ fun MembersTab(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(inv.inviteeId) // Ideally fetch name
+                    Column {
+                        Text(inv.inviteeName.ifBlank { "User ${inv.inviteeId.takeLast(4)}" }, fontWeight = FontWeight.Medium)
+                        Text("Pending", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
                     if (isOwner) {
                         TextButton(onClick = { onCancelInvitation(inv.id) }) {
                             Text("Cancel", color = MaterialTheme.colorScheme.error)
@@ -737,18 +772,29 @@ fun MembersTab(
                 
                 if (isOwner && member.userId != currentUserId) {
                     var showMemberOptions by remember { mutableStateOf(false) }
-                    IconButton(onClick = { showMemberOptions = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    DropdownMenu(expanded = showMemberOptions, onDismissRequest = { showMemberOptions = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Transfer Ownership") },
-                            onClick = { onTransfer(member.userId); showMemberOptions = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remove Member", color = MaterialTheme.colorScheme.error) },
-                            onClick = { onRemove(member.userId); showMemberOptions = false }
-                        )
+                    Box {
+                        IconButton(onClick = { showMemberOptions = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = showMemberOptions,
+                            onDismissRequest = { showMemberOptions = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Transfer Ownership") },
+                                onClick = {
+                                    onTransfer(member.userId)
+                                    showMemberOptions = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Remove Member", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    onRemove(member.userId)
+                                    showMemberOptions = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -894,33 +940,60 @@ fun InviteMemberDialog(
                     value = uiState.searchQuery,
                     onValueChange = onQueryChange,
                     label = { Text("Search by name or ID") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                
+
                 if (uiState.isSearching) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
                 }
-                
-                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                    items(uiState.filteredContacts) { contact ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clickable { onInvite(contact.id) }.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            UserAvatar(
-                                user = User(id = contact.id, name = contact.name, avatarUrl = contact.avatarUrl),
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(contact.name)
+
+                if (uiState.searchedUser != null && !uiState.filteredContacts.any { it.id == uiState.searchedUser.id }) {
+                    Text("Found User", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    UserSelectionItem(user = uiState.searchedUser, onSelect = { onInvite(uiState.searchedUser.id) })
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                }
+
+                if (uiState.filteredContacts.isNotEmpty()) {
+                    Text("Suggested Contacts", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(uiState.filteredContacts) { contact ->
+                            UserSelectionItem(user = contact, onSelect = { onInvite(contact.id) })
                         }
                     }
+                } else if (!uiState.isSearching && uiState.searchQuery.isNotEmpty() && uiState.searchedUser == null) {
+                    Text("No users found", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
                 }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
+}
+
+@Composable
+private fun UserSelectionItem(user: User, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onSelect() }
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        UserAvatar(
+            user = user,
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(user.name, fontWeight = FontWeight.Medium)
+            Text("ID: ${user.shortId}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        }
+        Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+    }
 }
 
 @Composable
@@ -971,8 +1044,19 @@ fun AddTransactionDialog(
 
 private fun formatTimestamp(timestamp: Long): String {
     val instant = Instant.fromEpochMilliseconds(timestamp)
-    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-    return "${dateTime.day.toString().padStart(2, '0')}/${dateTime.month.number.toString().padStart(2, '0')}/${dateTime.year} ${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
+    val timeZone = TimeZone.currentSystemDefault()
+    val dateTime = instant.toLocalDateTime(timeZone)
+    val now = Clock.System.now().toLocalDateTime(timeZone)
+    val yesterday = Clock.System.now().minus(24, DateTimeUnit.HOUR).toLocalDateTime(timeZone)
+
+    val dateStr = when {
+        dateTime.date == now.date -> "Today"
+        dateTime.date == yesterday.date -> "Yesterday"
+        else -> "${dateTime.day.toString().padStart(2, '0')}/${dateTime.month.number.toString().padStart(2, '0')}/${dateTime.year}"
+    }
+
+    val timeStr = "${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
+    return "$dateStr $timeStr"
 }
 
 private fun formatNumericInput(input: String): String {

@@ -90,6 +90,12 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                 groupKey = "com.example.tasama.RELATIONSHIP_GROUP",
                 importance = NotificationManager.IMPORTANCE_DEFAULT
             )
+            val SAVINGS = NotificationCategory(
+                id = "savings_updates",
+                name = "Savings Updates",
+                groupKey = "com.example.tasama.SAVINGS_GROUP",
+                importance = NotificationManager.IMPORTANCE_HIGH
+            )
             val GENERAL = NotificationCategory(
                 id = "general_updates",
                 name = "General Updates",
@@ -135,6 +141,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
                     type.startsWith("LOCATION_") -> Categories.LOCATION
                     type.startsWith("PLACE_") || type == "GEOFENCE" -> Categories.PLACES
                     type.startsWith("RELATIONSHIP_") -> Categories.RELATIONSHIP
+                    type.startsWith("SAVINGS_") -> Categories.SAVINGS
                     else -> Categories.GENERAL
                 }
                 scope.launch {
@@ -206,6 +213,11 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             Categories.LOCATION -> "Location Alert"
             Categories.PLACES -> "Place Alert"
             Categories.RELATIONSHIP -> "Relationship Milestone"
+            Categories.SAVINGS -> when {
+                type.contains("INVITE") -> "New Savings Invitation"
+                type.contains("JOIN") -> "Member Joined Space"
+                else -> "Savings Update"
+            }
             else -> category.name
         }
 
@@ -223,6 +235,7 @@ class TasamaMessagingService : FirebaseMessagingService(), KoinComponent {
             val destination = when (category) {
                 Categories.PARTNER, Categories.LOCATION, Categories.RELATIONSHIP -> "partner"
                 Categories.PLACES -> "partner" // Redirect Place Alerts to Partner Map tab
+                Categories.SAVINGS -> "savings"
                 Categories.MESSAGING -> "chat"
                 else -> "dashboard"
             }

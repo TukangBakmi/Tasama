@@ -27,14 +27,17 @@ class FirebaseSavingsRepository(
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
-                spacesCollection.snapshots.map { snapshot ->
-                    snapshot.documents
-                        .map { it.data<SavingsSpace>() }
-                        .filter { it.memberIds.contains(uid) && !it.isArchived }
-                }.catch { e ->
-                    println("Firestore Savings Error: ${e.message}")
-                    emit(emptyList())
-                }
+                spacesCollection
+                    .where(FieldPath("memberIds"), arrayContains = uid)
+                    .snapshots
+                    .map { snapshot ->
+                        snapshot.documents
+                            .map { it.data<SavingsSpace>() }
+                            .filter { !it.isArchived }
+                    }.catch { e ->
+                        println("Firestore Savings Error: ${e.message}")
+                        emit(emptyList())
+                    }
             }
         }
     }
@@ -214,6 +217,7 @@ class FirebaseSavingsRepository(
             inviterId = uid,
             inviterName = userName,
             inviteeId = inviteeId,
+            inviteeName = invitee.name,
             status = InvitationStatus.PENDING,
             timestamp = now
         )
@@ -221,7 +225,15 @@ class FirebaseSavingsRepository(
         invitationsCollection.document(invitationId).set(invitation)
         logActivity(spaceId, uid, userName, SavingsActivityType.INVITATION_SENT, "Invited ${invitee.name}")
         
-        // TODO: Send push notification to invitee
+        // Send notification to invitee
+        authRepository.sendNotification(
+            targetUid = inviteeId,
+            title = "Savings Space Invitation",
+            body = "$userName invited you to join '${space.name}'",
+            type = "SAVINGS_INVITATION",
+            senderName = userName,
+            senderPhoto = authRepository.getUser(uid)?.avatarUrl
+        )
     }
 
     override suspend fun cancelInvitation(invitationId: String) {
@@ -230,24 +242,40 @@ class FirebaseSavingsRepository(
 
     override suspend fun acceptInvitation(invitationId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
-        val user = authRepository.getUser(uid) ?: return
         
         val invRef = invitationsCollection.document(invitationId)
-        val invitation = invRef.get().data<SavingsInvitation>()
-        
-        if (invitation.inviteeId != uid) throw Exception("Unauthorized")
+        var successInfo: Pair<String, String>? = null
         
         firestore.runTransaction {
+            // 1. READ PHASE: All reads must be executed before any writes
+            val invitation = get(invRef).data<SavingsInvitation>()
+            
+            if (invitation.inviteeId != uid) throw Exception("Unauthorized")
+            // Prevent redundant processing if already handled
+            if (invitation.status != InvitationStatus.PENDING) return@runTransaction
+
             val spaceDoc = spacesCollection.document(invitation.spaceId)
             val space = get(spaceDoc).data<SavingsSpace>()
             
+            val inviteeRef = firestore.collection("users").document(uid)
+            val inviteeUser = get(inviteeRef).data<User>()
+            
+            val inviterRef = firestore.collection("users").document(invitation.inviterId)
+            val inviterUser = get(inviterRef).data<User>()
+
+            // 2. WRITE PHASE: All writes must be executed after all reads
+            val now = Clock.System.now().toEpochMilliseconds()
+            
+            // Mark invitation as ACCEPTED
+            update(invRef, "status" to InvitationStatus.ACCEPTED.name)
+            
+            // Add member to Savings Space
             if (!space.memberIds.contains(uid)) {
-                val now = Clock.System.now().toEpochMilliseconds()
                 val updatedMemberIds = space.memberIds + uid
                 val updatedMembers = space.members + SavingsMember(
                     userId = uid,
-                    name = user.name,
-                    avatarUrl = user.avatarUrl,
+                    name = inviteeUser.name,
+                    avatarUrl = inviteeUser.avatarUrl,
                     role = MemberRole.MEMBER,
                     joinedAt = now
                 )
@@ -257,10 +285,24 @@ class FirebaseSavingsRepository(
                     members = updatedMembers,
                     updatedAt = now
                 ))
-                update(invRef, "status" to InvitationStatus.ACCEPTED.name)
             }
+
+            // Add inviter to invitee's contacts (User B adds User A)
+            if (!inviteeUser.contactIds.contains(invitation.inviterId)) {
+                update(inviteeRef, "contactIds" to inviteeUser.contactIds + invitation.inviterId)
+            }
+            
+            // Add invitee to inviter's contacts (User A adds User B - mutual)
+            if (!inviterUser.contactIds.contains(uid)) {
+                update(inviterRef, "contactIds" to inviterUser.contactIds + uid)
+            }
+            
+            successInfo = invitation.spaceId to inviteeUser.name
         }
-        logActivity(invitation.spaceId, uid, user.name, SavingsActivityType.INVITATION_ACCEPTED, "Joined the space")
+
+        successInfo?.let { (spaceId, userName) ->
+            logActivity(spaceId, uid, userName, SavingsActivityType.INVITATION_ACCEPTED, "Joined the space")
+        }
     }
 
     override suspend fun declineInvitation(invitationId: String) {

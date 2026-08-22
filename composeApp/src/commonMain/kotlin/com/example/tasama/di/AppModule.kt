@@ -74,6 +74,6 @@ val appModule = module {
     viewModel { ChatListViewModel(get(), get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
     viewModel { PartnerViewModel(get(), get(), get(), get(), get()) }
-    viewModel { MainViewModel(get(), get(), get()) }
+    viewModel { MainViewModel(get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

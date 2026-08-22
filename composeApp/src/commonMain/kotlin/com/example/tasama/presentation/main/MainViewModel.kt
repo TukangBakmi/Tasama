@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import kotlin.time.Clock
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,6 +26,7 @@ sealed class AuthState {
 class MainViewModel(
     private val authRepository: AuthRepository,
     private val chatRepository: ChatRepository,
+    private val savingsRepository: SavingsRepository,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
@@ -75,6 +77,10 @@ class MainViewModel(
                 flow { emit(false) }
             }
         }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val hasPendingSavingsInvitations: StateFlow<Boolean> = savingsRepository.getMyInvitations()
+        .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun updateActiveStatus() {

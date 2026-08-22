@@ -116,10 +116,28 @@ class SavingsViewModel(
         invitationJob?.cancel()
         activityJob?.cancel()
 
+        val currentUid = authRepository.getCurrentUserId()
+
         detailsJob = viewModelScope.launch {
             repository.getSavingsSpace(spaceId).collect { space ->
-                if (space == null) {
-                    onDismissSpaceDetails()
+                if (space == null || (currentUid != null && !space.memberIds.contains(currentUid))) {
+                    if (_uiState.value.showSpaceDetails && _uiState.value.selectedSpaceId == spaceId) {
+                        _uiState.update { it.copy(showRemovedFromSpaceDialog = true) }
+                        transactionJob?.cancel()
+                        invitationJob?.cancel()
+                        activityJob?.cancel()
+                    }
+                } else {
+                    _uiState.update { state ->
+                        val updatedSpaces = state.savingsSpaces.toMutableList()
+                        val index = updatedSpaces.indexOfFirst { it.id == space.id }
+                        if (index != -1) {
+                            updatedSpaces[index] = space
+                        } else {
+                            updatedSpaces.add(space)
+                        }
+                        state.copy(savingsSpaces = updatedSpaces)
+                    }
                 }
             }
         }
@@ -144,11 +162,15 @@ class SavingsViewModel(
     }
 
     fun onDismissSpaceDetails() {
-        _uiState.update { it.copy(showSpaceDetails = false, selectedSpaceId = null) }
+        _uiState.update { it.copy(showSpaceDetails = false, selectedSpaceId = null, showRemovedFromSpaceDialog = false) }
         detailsJob?.cancel()
         transactionJob?.cancel()
         invitationJob?.cancel()
         activityJob?.cancel()
+    }
+
+    fun onRemovedDialogConfirm() {
+        onDismissSpaceDetails()
     }
 
     fun addSpace(space: SavingsSpace) {
@@ -227,8 +249,9 @@ class SavingsViewModel(
         
         val isNumericId = query.length == 12 && query.all { it.isDigit() }
         
+        // Filter contacts by name or shortId
         val filtered = uiState.value.contacts.filter { 
-            it.name.contains(query, ignoreCase = true) || it.shortId == query 
+            it.name.contains(query, ignoreCase = true) || it.shortId.contains(query)
         }
         _uiState.update { 
             it.copy(
@@ -236,8 +259,14 @@ class SavingsViewModel(
             ) 
         }
 
+        // Only search globally if it's a full 12-digit ID and not already in filtered contacts
         if (isNumericId) {
-            searchUser(query)
+            val alreadyInContacts = filtered.any { it.shortId == query }
+            if (!alreadyInContacts) {
+                searchUser(query)
+            } else {
+                _uiState.update { it.copy(searchedUser = null) }
+            }
         } else {
             _uiState.update { it.copy(searchedUser = null) }
         }
@@ -278,7 +307,18 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 repository.inviteMember(spaceId, userId)
+                
+                // Add to contacts if not already there
+                if (currentUserId != null) {
+                    val isAlreadyContact = _uiState.value.contacts.any { it.id == userId }
+                    if (!isAlreadyContact) {
+                        authRepository.addContact(currentUserId, userId)
+                        loadContacts(currentUserId)
+                    }
+                }
+
                 onDismissInvite()
+                _uiState.update { it.copy(successMessage = "Invitation sent successfully") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to invite member") }
             }
@@ -299,6 +339,11 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 repository.acceptInvitation(invitationId)
+                
+                // Refresh contacts to include the inviter
+                authRepository.getCurrentUserId()?.let { uid ->
+                    loadContacts(uid)
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to accept invitation") }
             }
@@ -395,6 +440,10 @@ class SavingsViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun clearSuccessMessage() {
+        _uiState.update { it.copy(successMessage = null) }
     }
 
     fun isOwner(space: SavingsSpace?): Boolean {

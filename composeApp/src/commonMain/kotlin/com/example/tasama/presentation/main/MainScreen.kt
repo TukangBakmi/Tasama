@@ -35,6 +35,7 @@ import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.partner.PartnerScreen
 import com.example.tasama.presentation.profile.ProfileScreen
 import com.example.tasama.presentation.savings.SavingsScreen
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -170,6 +171,7 @@ fun MainScreen(
                             val hasPartner by viewModel.hasPartner.collectAsState()
                             val unreadCount by viewModel.unreadChannelsCount.collectAsState()
                             val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()
+                            val hasPendingSavingsInvitations by viewModel.hasPendingSavingsInvitations.collectAsState()
                             val lifecycleOwner = LocalLifecycleOwner.current
 
                             LaunchedEffect(lifecycleOwner) {
@@ -248,6 +250,20 @@ fun MainScreen(
                                                                                 ) {
                                                                                     Text(unreadCount.toString())
                                                                                 }
+                                                                            }
+                                                                        ) {
+                                                                            Text(item.emoji)
+                                                                        }
+                                                                    }
+                                                                    BottomNavItem.Savings if hasPendingSavingsInvitations -> {
+                                                                        BadgedBox(
+                                                                            badge = {
+                                                                                Badge(
+                                                                                    modifier = Modifier
+                                                                                        .size(12.dp)
+                                                                                        .offset(x = 4.dp, y = (-4).dp),
+                                                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                                                )
                                                                             }
                                                                         ) {
                                                                             Text(item.emoji)
@@ -482,6 +498,33 @@ fun MainScreen(
                                             onEdit = { savingsViewModel.updateSpace(it) },
                                             onLeave = { savingsViewModel.leaveSpace() }
                                         )
+
+                                        if (uiState.showInviteMemberDialog) {
+                                            com.example.tasama.presentation.savings.InviteMemberDialog(
+                                                uiState = uiState,
+                                                onDismiss = { savingsViewModel.onDismissInvite() },
+                                                onQueryChange = { savingsViewModel.onSearchQueryChange(it) },
+                                                onInvite = { savingsViewModel.inviteMember(it) }
+                                            )
+                                        }
+
+                                        LaunchedEffect(Unit) {
+                                            snapshotFlow { uiState.error }
+                                                .filterNotNull()
+                                                .collect { error ->
+                                                    savingsViewModel.clearError()
+                                                    snackbarHostState.showSnackbar(error)
+                                                }
+                                        }
+
+                                        LaunchedEffect(Unit) {
+                                            snapshotFlow { uiState.successMessage }
+                                                .filterNotNull()
+                                                .collect { message ->
+                                                    savingsViewModel.clearSuccessMessage()
+                                                    snackbarHostState.showSnackbar(message)
+                                                }
+                                        }
                                     }
                                 }
                             }

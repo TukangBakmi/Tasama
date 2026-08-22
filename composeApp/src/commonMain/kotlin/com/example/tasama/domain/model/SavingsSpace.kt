@@ -66,6 +66,7 @@ data class SavingsInvitation(
     val inviterId: String = "",
     val inviterName: String = "",
     val inviteeId: String = "",
+    val inviteeName: String = "",
     val status: InvitationStatus = InvitationStatus.PENDING,
     val timestamp: Long = 0
 )

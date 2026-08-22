@@ -105,14 +105,14 @@ fun SavingsScreen(
                 )
             }
 
-        if (uiState.showInviteMemberDialog) {
-            InviteMemberDialog(
-                uiState = uiState,
-                onDismiss = { viewModel.onDismissInvite() },
-                onQueryChange = { viewModel.onSearchQueryChange(it) },
-                onInvite = { viewModel.inviteMember(it) }
-            )
-        }
+            if (uiState.showInviteMemberDialog) {
+                InviteMemberDialog(
+                    uiState = uiState,
+                    onDismiss = { viewModel.onDismissInvite() },
+                    onQueryChange = { viewModel.onSearchQueryChange(it) },
+                    onInvite = { viewModel.inviteMember(it) }
+                )
+            }
 
             if (uiState.showAddTransactionDialog) {
                 val space = uiState.selectedSpace
@@ -131,7 +131,7 @@ fun SavingsScreen(
                 RemovedFromSpaceDialog(
                     onConfirm = {
                         viewModel.onRemovedDialogConfirm()
-                        onNavigateToDetail("") // Use this to trigger any necessary navigation cleanup if needed, but onDismiss should handle it
+                        onNavigateToDetail("") // This is a bit hacky, but we need to trigger the navigation back
                     }
                 )
             }
@@ -505,13 +505,28 @@ fun SpaceDetailsScreen(
     }
 
     if (showDeleteConfirm) {
+        val isGroup = space.type != SavingsSpaceType.PERSONAL
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete Savings Space?") },
-            text = { Text("All transaction history and progress will be permanently lost.") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This action will permanently delete this Savings Space and all its contribution history.")
+                    if (isGroup) {
+                        Text(
+                            "Warning: This will also remove access and history for all other members.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                Button(onClick = { onDelete(space.id); showDeleteConfirm = false }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
-                    Text("Delete")
+                Button(
+                    onClick = { onDelete(space.id); showDeleteConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete Permanently")
                 }
             },
             dismissButton = {

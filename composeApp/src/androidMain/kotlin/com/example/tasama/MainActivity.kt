@@ -60,8 +60,7 @@ class MainActivity : ComponentActivity() {
         startBatteryMonitoring()
         com.example.tasama.util.initGeocoding(this)
 
-        initialChannelId = intent.getStringExtra("channelId")
-        navigateToTab = intent.getStringExtra("navigate_to")
+        handleIntent(intent)
 
         val googleSignInHelper = GoogleSignInHelper(this)
 
@@ -128,11 +127,27 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
         intent.getStringExtra("channelId")?.let {
             initialChannelId = it
         }
-        intent.getStringExtra("navigate_to")?.let {
-            navigateToTab = it
+
+        val navigateTo = intent.getStringExtra("navigate_to")
+        val type = intent.getStringExtra("type")
+
+        if (navigateTo != null) {
+            navigateToTab = navigateTo
+        } else if (type != null) {
+            // Map FCM type to tab destination if navigate_to is missing (e.g. background notifications)
+            navigateToTab = when {
+                type.startsWith("SAVINGS_") -> "savings"
+                type.startsWith("CHAT_") || intent.hasExtra("channelId") -> "chat"
+                type.startsWith("PARTNER_") || type.startsWith("LOCATION_") || type == "GEOFENCE" -> "partner"
+                else -> null
+            }
         }
     }
 

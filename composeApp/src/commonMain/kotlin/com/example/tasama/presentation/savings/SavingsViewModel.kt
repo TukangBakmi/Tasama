@@ -122,7 +122,14 @@ class SavingsViewModel(
             repository.getSavingsSpace(spaceId).collect { space ->
                 if (space == null || (currentUid != null && !space.memberIds.contains(currentUid))) {
                     if (_uiState.value.showSpaceDetails && _uiState.value.selectedSpaceId == spaceId) {
-                        _uiState.update { it.copy(showRemovedFromSpaceDialog = true) }
+                        // Only show the removed dialog if the user didn't leave/delete voluntarily
+                        if (!_uiState.value.hasLeftSpace) {
+                            _uiState.update { it.copy(showRemovedFromSpaceDialog = true) }
+                        }
+
+                        // Clear details but keep selectedSpaceId for the dialog to know which one was lost
+                        // Actually, we need to stop further updates
+                        detailsJob?.cancel()
                         transactionJob?.cancel()
                         invitationJob?.cancel()
                         activityJob?.cancel()
@@ -162,7 +169,7 @@ class SavingsViewModel(
     }
 
     fun onDismissSpaceDetails() {
-        _uiState.update { it.copy(showSpaceDetails = false, selectedSpaceId = null, showRemovedFromSpaceDialog = false) }
+        _uiState.update { it.copy(showSpaceDetails = false, selectedSpaceId = null, showRemovedFromSpaceDialog = false, hasLeftSpace = false) }
         detailsJob?.cancel()
         transactionJob?.cancel()
         invitationJob?.cancel()
@@ -197,7 +204,7 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 repository.deleteSavingsSpace(id)
-                onDismissSpaceDetails()
+                _uiState.update { it.copy(hasLeftSpace = true) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to delete space") }
             }
@@ -320,6 +327,7 @@ class SavingsViewModel(
                 onDismissInvite()
                 _uiState.update { it.copy(successMessage = "Invitation sent successfully") }
             } catch (e: Exception) {
+                onDismissInvite()
                 _uiState.update { it.copy(error = e.message ?: "Failed to invite member") }
             }
         }
@@ -376,7 +384,7 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 repository.leaveSpace(spaceId)
-                onDismissSpaceDetails()
+                _uiState.update { it.copy(hasLeftSpace = true) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to leave space") }
             }

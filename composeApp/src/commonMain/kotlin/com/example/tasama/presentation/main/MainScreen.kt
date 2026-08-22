@@ -475,6 +475,13 @@ fun MainScreen(
                                     
                                     val uiState by savingsViewModel.uiState.collectAsState()
                                     
+                                    LaunchedEffect(uiState.hasLeftSpace, uiState.showRemovedFromSpaceDialog) {
+                                        if (uiState.hasLeftSpace || (uiState.showRemovedFromSpaceDialog && uiState.showSpaceDetails)) {
+                                            savingsViewModel.onDismissSpaceDetails()
+                                            navController.popBackStack()
+                                        }
+                                    }
+                                    
                                     if (uiState.showSpaceDetails && uiState.selectedSpace != null) {
                                         com.example.tasama.presentation.savings.SpaceDetailsScreen(
                                             uiState = uiState,

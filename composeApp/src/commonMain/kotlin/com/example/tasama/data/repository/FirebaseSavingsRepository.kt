@@ -43,7 +43,9 @@ class FirebaseSavingsRepository(
     }
 
     override fun getSavingsSpace(id: String): Flow<SavingsSpace?> {
-        return spacesCollection.document(id).snapshots.map { it.data<SavingsSpace>() }
+        return spacesCollection.document(id).snapshots.map { snapshot ->
+            if (snapshot.exists) snapshot.data<SavingsSpace>() else null
+        }
     }
 
     override fun getTransactions(spaceId: String): Flow<List<SavingsTransaction>> {
@@ -96,11 +98,6 @@ class FirebaseSavingsRepository(
         
         if (space.ownerId != uid) throw Exception("Only owner can delete the space")
         
-        // Ensure balance is zero before deletion to prevent losing track of funds
-        if (space.balance != 0L) {
-            throw Exception("Cannot delete a space with a non-zero balance. Please withdraw or transfer funds first.")
-        }
-
         spacesCollection.document(id).delete()
     }
 

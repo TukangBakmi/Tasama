@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -558,8 +559,7 @@ fun AddContactDialog(
     onDeleteContact: (User) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    
-    // Trigger real-time filtering and 12-digit numeric search
+
     LaunchedEffect(query) {
         onSearch(query)
     }
@@ -568,126 +568,105 @@ fun AddContactDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Contact") },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Search your contacts by name or enter a 12-digit User ID to add someone new.",
-                    style = MaterialTheme.typography.bodySmall
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Search by name or ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Name or User ID") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { query = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                    )
-                    if (query.length == 12 && query.all { it.isDigit() }) {
-                        IconButton(
-                            onClick = { onSearch(query) },
-                            enabled = !uiState.isSearchingUser
-                        ) {
-                            if (uiState.isSearchingUser) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            } else {
-                                Icon(Icons.Default.Search, contentDescription = "Search ID")
-                            }
-                        }
+
+                if (uiState.isSearchingUser) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     }
                 }
 
                 uiState.searchedUser?.let { user ->
-                    Card(
-                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth().clickable { onAdd(user.id) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            UserAvatar(
-                                user = User(id = user.id, name = user.name, avatarUrl = user.avatarUrl),
-                                modifier = Modifier.size(40.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(user.name, fontWeight = FontWeight.Bold)
-                                Text("Click to add contact", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
+                    if (!uiState.filteredContacts.any { it.id == user.id }) {
+                        Text("Found User", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        ContactSelectionItem(
+                            user = User(id = user.id, name = user.name, avatarUrl = user.avatarUrl),
+                            onSelect = { onAdd(user.id) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     }
                 }
 
                 if (uiState.filteredContacts.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
                     Text(
                         if (query.isEmpty()) "Suggested Contacts" else "Contacts",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 250.dp)
-                    ) {
-                        items(uiState.filteredContacts.take(15)) { contact ->
-                            // Use latest data from channelUsers if available for real-time status
-                            val updatedContact = uiState.channelUsers[contact.id] ?: contact
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onAdd(contact.id) }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                UserAvatar(
-                                    user = updatedContact,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = updatedContact.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (query.isEmpty()) {
-                                    IconButton(onClick = { onDeleteContact(updatedContact) }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Remove contact",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(uiState.filteredContacts) { contact ->
+                            ContactSelectionItem(
+                                user = contact,
+                                onSelect = { onAdd(contact.id) },
+                                onDelete = { onDeleteContact(contact) },
+                                showDelete = query.isEmpty()
+                            )
                         }
                     }
-                } else if (query.isNotEmpty() && !uiState.isSearchingUser && uiState.searchedUser == null) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                } else if (!uiState.isSearchingUser && query.isNotEmpty() && uiState.searchedUser == null) {
                     Text(
-                        "No contacts found matching \"$query\"",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        "No users found",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(8.dp)
                     )
                 }
             }
         },
         confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
+}
+
+@Composable
+private fun ContactSelectionItem(
+    user: User,
+    onSelect: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    showDelete: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onSelect() }
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        UserAvatar(
+            user = user,
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(user.name, fontWeight = FontWeight.Medium)
+            Text("ID: ${user.shortId}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        }
+        if (showDelete && onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Remove contact",
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        } else {
+            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+    }
 }

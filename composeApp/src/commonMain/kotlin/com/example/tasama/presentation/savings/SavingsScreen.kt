@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,12 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.*
+import com.example.tasama.presentation.components.CurrencyVisualTransformation
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.util.formatCurrency
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import kotlin.time.Clock
 import org.koin.compose.viewmodel.koinViewModel
@@ -89,11 +94,12 @@ fun SavingsScreen(
                 AddSpaceDialog(
                     userCurrency = uiState.userCurrency,
                     onDismiss = { viewModel.onDismissAddSpace() },
-                    onConfirm = { name, target, icon, type, desc, currency ->
+                    onConfirm = { name, target, date, icon, type, desc, currency ->
                         viewModel.addSpace(
                             SavingsSpace(
                                 name = name,
                                 targetAmount = target,
+                                targetDate = date,
                                 icon = icon,
                                 type = type,
                                 description = desc,
@@ -160,6 +166,10 @@ fun SavingsContent(
     onAcceptInvite: (String) -> Unit,
     onDeclineInvite: (String) -> Unit
 ) {
+    val groupedSpaces = remember(uiState.savingsSpaces) {
+        uiState.savingsSpaces.groupBy { it.type }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -183,17 +193,14 @@ fun SavingsContent(
             }
         }
 
-        item {
-            Text(
-                "Your Spaces",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        }
-
         if (uiState.savingsSpaces.isEmpty() && !uiState.isLoading) {
             item {
+                Text(
+                    "Your Spaces",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
                     contentAlignment = Alignment.Center
@@ -202,11 +209,32 @@ fun SavingsContent(
                 }
             }
         } else {
-            items(uiState.savingsSpaces) { space ->
-                SavingsSpaceItem(
-                    space = space,
-                    onClick = { onSpaceClick(space.id) }
-                )
+            SavingsSpaceType.entries.forEach { type ->
+                val spacesOfType = groupedSpaces[type] ?: emptyList()
+                if (spacesOfType.isNotEmpty()) {
+                    item(key = "header_$type") {
+                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                            Text(
+                                text = type.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.2.sp
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(top = 4.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                            )
+                        }
+                    }
+                    items(spacesOfType, key = { it.id }) { space ->
+                        SavingsSpaceItem(
+                            space = space,
+                            onClick = { onSpaceClick(space.id) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -235,7 +263,12 @@ fun InvitationItem(
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(invitation.spaceName, fontWeight = FontWeight.Bold)
+                Text(
+                    text = invitation.spaceName,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text("Invited by ${invitation.inviterName}", style = MaterialTheme.typography.bodySmall)
             }
             IconButton(onClick = onAccept) {
@@ -274,7 +307,13 @@ fun SavingsSpaceItem(
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text(space.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(
+                            text = space.name,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         Text(
                             space.balance.formatCurrency(space.currency),
                             style = MaterialTheme.typography.labelSmall,
@@ -336,7 +375,14 @@ fun SpaceDetailsScreen(
     onDeleteTransaction: (SavingsTransaction) -> Unit
 ) {
     val space = uiState.selectedSpace ?: return
-    var tabIndex by remember { mutableStateOf(0) }
+    val isPersonal = space.type == SavingsSpaceType.PERSONAL
+    val tabs = remember(isPersonal) {
+        if (isPersonal) listOf("Overview", "History")
+        else listOf("Overview", "History", "Members")
+    }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
+
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
@@ -354,7 +400,12 @@ fun SpaceDetailsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(space.icon)
                         Spacer(Modifier.width(8.dp))
-                        Text(space.name, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = space.name,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 },
                 navigationIcon = {
@@ -366,9 +417,6 @@ fun SpaceDetailsScreen(
                     if (isOwner) {
                         IconButton(onClick = { showEditDialog = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit")
-                        }
-                        IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.DateRange, contentDescription = "Set Target Date")
                         }
                     }
                 }
@@ -421,17 +469,29 @@ fun SpaceDetailsScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Column(modifier = Modifier.fillMaxSize()) {
-                val isPersonal = space.type == SavingsSpaceType.PERSONAL
-                SecondaryTabRow(selectedTabIndex = tabIndex, containerColor = Color.Transparent) {
-                    Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 }, text = { Text("Overview") })
-                    Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text("History") })
-                    if (!isPersonal) {
-                        Tab(selected = tabIndex == 2, onClick = { tabIndex = 2 }, text = { Text("Members") })
+                SecondaryTabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = Color.Transparent
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            },
+                            text = { Text(title) }
+                        )
                     }
                 }
 
-                Box(modifier = Modifier.weight(1f)) {
-                    when (tabIndex) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f),
+                    beyondViewportPageCount = 2
+                ) { page ->
+                    when (page) {
                         0 -> OverviewTab(
                             space = space,
                             transactions = uiState.transactions,
@@ -497,8 +557,18 @@ fun SpaceDetailsScreen(
             initialSpace = space,
             userCurrency = space.currency,
             onDismiss = { showEditDialog = false },
-            onConfirm = { name, target, icon, type, desc, currency ->
-                onEdit(space.copy(name = name, targetAmount = target, icon = icon, type = type, description = desc, currency = currency))
+            onConfirm = { name, target, date, icon, spaceType, desc, currency ->
+                onEdit(
+                    space.copy(
+                        name = name,
+                        targetAmount = target,
+                        targetDate = date,
+                        icon = icon,
+                        type = spaceType,
+                        description = desc,
+                        currency = currency
+                    )
+                )
                 showEditDialog = false
             }
         )
@@ -603,8 +673,8 @@ fun OverviewTab(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item {
-            if (space.targetAmount != null && space.targetAmount > 0) {
+        if (space.targetAmount != null && space.targetAmount > 0) {
+            item {
                 val progress = (space.balance.toDouble() / space.targetAmount).toFloat().coerceIn(0f, 1f)
                 Column {
                     Row(
@@ -623,12 +693,23 @@ fun OverviewTab(
                                 color = if (daysRemaining < 7) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text(
-                                    text = if (daysRemaining > 0) "$daysRemaining days left" else "Deadline reached",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (daysRemaining < 7) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DateRange,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = if (daysRemaining < 7) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = if (daysRemaining > 0) "$daysRemaining days left" else "Deadline reached",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (daysRemaining < 7) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
                             }
                         }
                     }
@@ -636,11 +717,24 @@ fun OverviewTab(
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(12.dp).clip(CircleShape),
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
-                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(space.balance.formatCurrency(space.currency), fontWeight = FontWeight.Bold)
-                        Text(space.targetAmount.formatCurrency(space.currency), color = Color.Gray)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = space.balance.formatCurrency(space.currency),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Target: ${space.targetAmount.formatCurrency(space.currency)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.Gray
+                        )
                     }
                 }
             }
@@ -847,20 +941,34 @@ fun TransactionListItem(tx: SavingsTransaction, onDelete: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSpaceDialog(
     initialSpace: SavingsSpace? = null,
     userCurrency: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, Long?, String, SavingsSpaceType, String, String) -> Unit
+    onConfirm: (String, Long?, Long?, String, SavingsSpaceType, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf(initialSpace?.name ?: "") }
     var description by remember { mutableStateOf(initialSpace?.description ?: "") }
-    var targetText by remember { mutableStateOf(if (initialSpace?.targetAmount != null) formatNumericInput(initialSpace.targetAmount.toString()) else "") }
+    var targetText by remember { mutableStateOf(initialSpace?.targetAmount?.toString() ?: "") }
     var icon by remember { mutableStateOf(initialSpace?.icon ?: "💰") }
     var type by remember { mutableStateOf(initialSpace?.type ?: SavingsSpaceType.PERSONAL) }
     var currency by remember { mutableStateOf(initialSpace?.currency ?: userCurrency) }
-    
+    var targetDate by remember { mutableStateOf(initialSpace?.targetDate) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = targetDate)
+
+    val targetAmount = parseNumericInput(targetText)
+    val showDueDate = targetAmount != null && targetAmount > 0
+
+    LaunchedEffect(showDueDate) {
+        if (!showDueDate) {
+            targetDate = null
+        }
+    }
+
     val icons = listOf("💰", "🏠", "🚗", "✈️", "🎓", "💍", "🏖️", "🎁", "📱", "💻", "☕", "🎮")
 
     AlertDialog(
@@ -906,15 +1014,47 @@ fun AddSpaceDialog(
                     }
                 }
 
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
                 OutlinedTextField(
                     value = targetText,
-                    onValueChange = { targetText = formatNumericInput(it) },
+                    onValueChange = { targetText = it.filter { c -> c.isDigit() } },
                     label = { Text("Target Amount (Optional)") },
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    visualTransformation = CurrencyVisualTransformation(),
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+                            if (targetDate != null && showDueDate) {
+                                val date = Instant.fromEpochMilliseconds(targetDate!!)
+                                    .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                                Text(
+                                    text = "${date.day.toString().padStart(2, '0')}/${date.month.number.toString().padStart(2, '0')}/${date.year.toString().takeLast(2)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { showDatePicker = true },
+                                enabled = showDueDate
+                            ) {
+                                Icon(
+                                    Icons.Default.DateRange,
+                                    contentDescription = "Set due date",
+                                    tint = if (showDueDate) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
                 )
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description (Optional)") }, modifier = Modifier.fillMaxWidth())
                 
                 if (initialSpace == null) {
                     Text("Space Type", style = MaterialTheme.typography.labelLarge)
@@ -930,13 +1070,47 @@ fun AddSpaceDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onConfirm(name, parseNumericInput(targetText), icon, type, description, currency)
+                        onConfirm(
+                            name.trim(),
+                            targetAmount,
+                            targetDate,
+                            icon,
+                            type,
+                            description.trim(),
+                            currency
+                        )
                     }
                 }
             ) { Text(if (initialSpace == null) "Create" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    targetDate = datePickerState.selectedDateMillis
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = {
+                    Text(
+                        "Set Due Date",
+                        modifier = Modifier.padding(start = 24.dp, top = 24.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -1033,10 +1207,11 @@ fun AddTransactionDialog(
                 }
                 OutlinedTextField(
                     value = amountText,
-                    onValueChange = { amountText = formatNumericInput(it) },
+                    onValueChange = { amountText = it.filter { c -> c.isDigit() } },
                     label = { Text("Amount ($currency)") },
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    visualTransformation = CurrencyVisualTransformation()
                 )
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note (Optional)") }, modifier = Modifier.fillMaxWidth())
             }
@@ -1072,12 +1247,6 @@ private fun formatTimestamp(timestamp: Long): String {
 
     val timeStr = "${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
     return "$dateStr $timeStr"
-}
-
-private fun formatNumericInput(input: String): String {
-    val digits = input.filter { it.isDigit() }
-    if (digits.isEmpty()) return ""
-    return digits.reversed().chunked(3).joinToString(".").reversed()
 }
 
 private fun parseNumericInput(input: String): Long? {

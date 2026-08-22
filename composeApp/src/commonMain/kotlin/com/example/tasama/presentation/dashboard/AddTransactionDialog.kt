@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import com.example.tasama.presentation.components.CurrencyVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
@@ -54,6 +55,7 @@ fun AddTransactionDialog(
                     label = { Text("Amount") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = CurrencyVisualTransformation(),
                     prefix = { Text("Rp ") }
                 )
 

@@ -183,7 +183,12 @@ class SavingsViewModel(
     fun addSpace(space: SavingsSpace) {
         viewModelScope.launch {
             try {
-                repository.createSavingsSpace(space)
+                repository.createSavingsSpace(
+                    space.copy(
+                        name = space.name.trim(),
+                        description = space.description.trim()
+                    )
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to create space") }
             }
@@ -193,7 +198,12 @@ class SavingsViewModel(
     fun updateSpace(space: SavingsSpace) {
         viewModelScope.launch {
             try {
-                repository.updateSavingsSpace(space)
+                repository.updateSavingsSpace(
+                    space.copy(
+                        name = space.name.trim(),
+                        description = space.description.trim()
+                    )
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to update space") }
             }

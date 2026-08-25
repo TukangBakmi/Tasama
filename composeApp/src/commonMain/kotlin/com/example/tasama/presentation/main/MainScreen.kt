@@ -30,6 +30,7 @@ import com.example.tasama.presentation.ai.AIScreen
 import com.example.tasama.presentation.chat.ChatListScreen
 import com.example.tasama.presentation.chat.ChatScreen
 import com.example.tasama.presentation.chat.UserDetailScreen
+import com.example.tasama.presentation.components.AppSnackbar
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.partner.PartnerScreen
@@ -105,15 +106,9 @@ fun MainScreen(
                         hostState = snackbarHostState,
                         modifier = Modifier
                             .systemBarsPadding()
-                            .padding(bottom = 100.dp)
+                            .padding(start = 16.dp, end = 16.dp, bottom = 100.dp)
                     ) { data ->
-                        Snackbar(
-                            snackbarData = data,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            actionColor = MaterialTheme.colorScheme.primary,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                        )
+                        AppSnackbar(snackbarData = data)
                     }
                 },
                 contentWindowInsets = WindowInsets(0)

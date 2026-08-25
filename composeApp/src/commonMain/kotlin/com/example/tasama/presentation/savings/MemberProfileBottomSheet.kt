@@ -14,9 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.SavingsMember
 import com.example.tasama.domain.model.User
+import com.example.tasama.presentation.components.AppSnackbar
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.chat.InfoItem
 
@@ -94,8 +94,10 @@ fun MemberProfileBottomSheet(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
-            )
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+            ) { data ->
+                AppSnackbar(snackbarData = data)
+            }
         }
     }
 }

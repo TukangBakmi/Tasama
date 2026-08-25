@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.util.formatCurrency
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
@@ -73,6 +74,10 @@ fun AIScreen(
                 viewModel.clearError()
                 snackbarHostState.showSnackbar(error)
             }
+    }
+
+    PlatformBackHandler(enabled = uiState.selectedMessageIds.isNotEmpty()) {
+        viewModel.clearSelection()
     }
 
     Scaffold(
@@ -215,15 +220,31 @@ fun AIScreen(
                 // Active Space Indicator
                 uiState.savingsSpaces.find { it.id == uiState.activeSpaceId }?.let { activeSpace ->
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Aktif di: ${activeSpace.icon} ${activeSpace.name}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(Res.drawable.sir_quack),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Saving to: ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${activeSpace.icon} ${activeSpace.name}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
 
@@ -239,6 +260,11 @@ fun AIScreen(
                     pendingCorrection = uiState.pendingCorrection,
                     onConfirm = viewModel::confirmCorrection,
                     onCancel = viewModel::cancelCorrection
+                )
+                SpaceTransactionPrompt(
+                    pending = uiState.pendingSpaceTransaction,
+                    onConfirm = viewModel::confirmSpaceTransaction,
+                    onCancel = viewModel::cancelSpaceTransaction
                 )
                 AIInput(
                     message = uiState.inputText,
@@ -398,6 +424,92 @@ fun CorrectionPrompt(
     }
 }
 
+@Composable
+fun SpaceTransactionPrompt(
+    pending: PendingSpaceTransaction?,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = pending != null,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        if (pending != null) {
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                tonalElevation = 4.dp,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Pindah Space & Simpan?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    pending.transactions.forEach { tx ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val type = if (tx.type.name == "INCOME") "Nabung" else "Pengeluaran"
+                            Text(
+                                text = "${tx.note.ifEmpty { type }} (${pending.spaceName})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                text = tx.amount.formatCurrency(tx.currency),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (tx.type == com.example.tasama.domain.model.TransactionType.INCOME)
+                                    Color(0xFF2E7D32) else Color(0xFFC62828)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Target Space: ${pending.spaceName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onCancel,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
+                        ) {
+                            Text("Batal")
+                        }
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Catat ke ${pending.spaceName}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIInput(
@@ -421,13 +533,12 @@ fun AIInput(
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 4.dp),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shadowElevation = 1.dp
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
                         value = message,

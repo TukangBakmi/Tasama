@@ -14,6 +14,7 @@ data class AIUiState(
     val activeSpaceId: String? = null,
     val lastTransaction: SavingsTransaction? = null,
     val pendingCorrection: PendingCorrection? = null,
+    val pendingSpaceTransaction: PendingSpaceTransaction? = null,
     val selectedMessageIds: Set<String> = emptySet(),
     val currentUserName: String = "User",
     val error: String? = null,
@@ -30,5 +31,12 @@ data class UndoableTransaction(
 data class PendingCorrection(
     val originalTransaction: SavingsTransaction,
     val newTransaction: SavingsTransaction,
+    val confirmationText: String
+)
+
+data class PendingSpaceTransaction(
+    val spaceId: String,
+    val spaceName: String,
+    val transactions: List<SavingsTransaction>,
     val confirmationText: String
 )

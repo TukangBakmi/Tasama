@@ -56,6 +56,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.*
@@ -96,6 +97,10 @@ fun ChatScreen(
 
     LaunchedEffect(channelId) {
         viewModel.setChannel(channelId)
+    }
+
+    PlatformBackHandler(enabled = uiState.isSelectionMode) {
+        viewModel.exitSelectionMode()
     }
 
     LaunchedEffect(Unit) {

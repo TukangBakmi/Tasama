@@ -105,7 +105,7 @@ fun MainScreen(
                         hostState = snackbarHostState,
                         modifier = Modifier
                             .systemBarsPadding()
-                            .padding(bottom = 80.dp)
+                            .padding(bottom = 100.dp)
                     ) { data ->
                         Snackbar(
                             snackbarData = data,
@@ -468,12 +468,15 @@ fun MainScreen(
                                 ) { backStackEntry ->
                                     val spaceId = backStackEntry.arguments?.getString("spaceId") ?: ""
                                     val savingsViewModel: com.example.tasama.presentation.savings.SavingsViewModel = koinViewModel()
+                                    val chatListViewModel: com.example.tasama.presentation.chat.ChatListViewModel = koinViewModel()
                                     
                                     LaunchedEffect(spaceId) {
                                         savingsViewModel.loadSpaceDetails(spaceId)
                                     }
                                     
                                     val uiState by savingsViewModel.uiState.collectAsState()
+                                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                                    val scope = rememberCoroutineScope()
                                     
                                     LaunchedEffect(uiState.hasLeftSpace, uiState.showRemovedFromSpaceDialog) {
                                         if (uiState.hasLeftSpace || (uiState.showRemovedFromSpaceDialog && uiState.showSpaceDetails)) {
@@ -506,7 +509,19 @@ fun MainScreen(
                                             onLeave = { savingsViewModel.leaveSpace() },
                                             onConvertToGroup = { savingsViewModel.onConvertToGroupClick() },
                                             onDismissConvertToGroup = { savingsViewModel.onDismissConvertToGroup() },
-                                            onConfirmConvertToGroup = { savingsViewModel.convertToGroupSpace() }
+                                            onConfirmConvertToGroup = { savingsViewModel.convertToGroupSpace() },
+                                            onMemberClick = { savingsViewModel.onMemberClick(it) },
+                                            onDismissMemberProfile = { savingsViewModel.onDismissMemberProfile() },
+                                            onOpenChat = { otherUserId ->
+                                                chatListViewModel.createChannel(otherUserId) { channelId ->
+                                                    if (channelId != null) {
+                                                        navController.navigate("chat_room/$channelId")
+                                                    }
+                                                }
+                                            },
+                                            onCopyUserId = { userId ->
+                                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(userId))
+                                            }
                                         )
 
                                         if (uiState.showInviteMemberDialog) {

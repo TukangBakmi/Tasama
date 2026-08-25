@@ -1,5 +1,6 @@
 package com.example.tasama.presentation.partner
 
+import androidx.activity.compose.BackHandler
 import android.graphics.Point
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -281,6 +282,10 @@ actual fun MapContent(
         }
     }
 
+    BackHandler(enabled = isPlacementModeEnabled) {
+        isPlacementModeEnabled = false
+    }
+
     // Derived states for real-time intersection and visibility (Optimization: Responsive to Camera Movement)
     val markerData by remember(currentMyLocation, currentPartnerLocation, isTogether, mapSize, density) {
         derivedStateOf {
@@ -428,7 +433,12 @@ actual fun MapContent(
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
-                if (isPlacementModeEnabled) return@GoogleMap
+                if (isPlacementModeEnabled) {
+                    scope.launch {
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLng(latLng))
+                    }
+                    return@GoogleMap
+                }
                 val existingPlace = places.find { place ->
                     calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude)) <= place.radius
                 }
@@ -867,13 +877,22 @@ actual fun MapContent(
                     shadowElevation = 8.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                 ) {
-                    Text(
-                        text = "Move map to set location",
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Move map to set location",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Or long press on the map to place a marker",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
                 }
 
                 Row(

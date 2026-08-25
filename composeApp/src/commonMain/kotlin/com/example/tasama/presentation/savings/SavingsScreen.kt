@@ -376,7 +376,11 @@ fun SpaceDetailsScreen(
     onDeleteTransaction: (SavingsTransaction) -> Unit,
     onConvertToGroup: () -> Unit = {},
     onDismissConvertToGroup: () -> Unit = {},
-    onConfirmConvertToGroup: () -> Unit = {}
+    onConfirmConvertToGroup: () -> Unit = {},
+    onMemberClick: (SavingsMember) -> Unit = {},
+    onDismissMemberProfile: () -> Unit = {},
+    onOpenChat: (String) -> Unit = {},
+    onCopyUserId: (String) -> Unit = {}
 ) {
     val space = uiState.selectedSpace ?: return
     val isPersonal = space.type == SavingsSpaceType.PERSONAL
@@ -546,7 +550,8 @@ fun SpaceDetailsScreen(
                                     onInvite = { onInvite(space.id) },
                                     onRemove = onRemoveMember,
                                     onTransfer = onTransferOwnership,
-                                    onCancelInvitation = onCancelInvitation
+                                    onCancelInvitation = onCancelInvitation,
+                                    onMemberClick = onMemberClick
                                 )
                             }
                         }
@@ -561,6 +566,15 @@ fun SpaceDetailsScreen(
                     onConfirm = onConfirmAddTransaction
                 )
             }
+        }
+
+        if (uiState.selectedMember != null) {
+            MemberProfileBottomSheet(
+                member = uiState.selectedMember,
+                onDismiss = onDismissMemberProfile,
+                onOpenChat = onOpenChat,
+                onCopyUserId = onCopyUserId
+            )
         }
     }
 
@@ -868,7 +882,8 @@ fun MembersTab(
     onInvite: () -> Unit,
     onRemove: (String) -> Unit,
     onTransfer: (String) -> Unit,
-    onCancelInvitation: (String) -> Unit
+    onCancelInvitation: (String) -> Unit,
+    onMemberClick: (SavingsMember) -> Unit = {}
 ) {
     val isCoupleSpace = space.type == SavingsSpaceType.COUPLE
 
@@ -918,8 +933,11 @@ fun MembersTab(
             Text("Members", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
         items(space.members) { member ->
+            val isCurrentUser = member.userId == currentUserId
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !isCurrentUser) { onMemberClick(member) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {

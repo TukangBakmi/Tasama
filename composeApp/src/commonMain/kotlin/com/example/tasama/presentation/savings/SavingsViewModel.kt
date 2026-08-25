@@ -184,10 +184,25 @@ class SavingsViewModel(
     fun addSpace(space: SavingsSpace) {
         viewModelScope.launch {
             try {
+                val currentUserId = authRepository.getCurrentUserId() ?: return@launch
+                val memberIds = if (space.type == SavingsSpaceType.COUPLE) {
+                    val user = authRepository.getUser(currentUserId)
+                    val partnerId = user?.partnerId
+                    if (partnerId != null) {
+                        listOf(currentUserId, partnerId)
+                    } else {
+                        listOf(currentUserId)
+                    }
+                } else {
+                    listOf(currentUserId)
+                }
+
                 repository.createSavingsSpace(
                     space.copy(
                         name = space.name.trim(),
-                        description = space.description.trim()
+                        description = space.description.trim(),
+                        ownerId = currentUserId,
+                        memberIds = memberIds
                     )
                 )
             } catch (e: Exception) {
@@ -517,5 +532,13 @@ class SavingsViewModel(
         return space?.ownerId == uid
     }
     
+    fun onMemberClick(member: SavingsMember) {
+        _uiState.update { it.copy(selectedMember = member) }
+    }
+
+    fun onDismissMemberProfile() {
+        _uiState.update { it.copy(selectedMember = null) }
+    }
+
     fun getCurrentUserId(): String? = authRepository.getCurrentUserId()
 }

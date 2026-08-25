@@ -27,6 +27,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -282,6 +283,7 @@ class AIViewModel(
         val activeSpace = _uiState.value.savingsSpaces.find { it.id == _uiState.value.activeSpaceId }
         val spaceName = activeSpace?.name ?: "Personal"
         val membersList = activeSpace?.members?.joinToString(", ") { it.name } ?: "Anda"
+        val allSpaces = _uiState.value.savingsSpaces.joinToString(", ") { it.name }
 
         viewModelScope.launch {
             val prompt = """
@@ -289,10 +291,17 @@ class AIViewModel(
                 Anda saat ini berada di dalam Savings Space: "$spaceName".
                 Anggota yang ada di space ini: $membersList.
 
+                Daftar semua Savings Space yang tersedia untuk pengguna: $allSpaces.
+
                 Tugas Anda adalah:
                 1. Membantu pengguna mencatat transaksi keuangan (nabung/pengeluaran).
                 2. Menjawab pertanyaan umum atau sekadar mengobrol santai (casual chat).
                 3. Selalu bersikap ramah dan menggunakan persona bebek yang cerdas (Sir Quack).
+
+                DETEKSI SAVINGS SPACE:
+                - Perhatikan apakah pengguna menyebutkan nama Savings Space lain dari daftar di atas dalam pesan mereka.
+                - Jika pengguna menyebutkan nama space (misal: "di Japan", "untuk Nikah"), identifikasi space tersebut.
+                - Jika tidak ada space yang disebutkan, gunakan space saat ini ("$spaceName").
 
                 ATURAN TRANSAKSI:
                 - Jika pengguna ingin menabung (income): Panggil tool `CREATE_TRANSACTION` dengan type INCOME.
@@ -308,6 +317,7 @@ class AIViewModel(
                 OUTPUT FORMAT (JSON):
                 {
                   "action": "CREATE_TRANSACTION" | "UPDATE_TRANSACTION" | "DELETE_TRANSACTION" | "NONE",
+                  "target_space_name": "string (Nama space yang dideteksi, atau null jika tidak ada)",
                   "transactions": [ 
                     { "type": "INCOME"|"EXPENSE", "amount": number, "category": "string", "note": "string" }
                   ],
@@ -374,7 +384,16 @@ class AIViewModel(
         try {
             val jsonElement = Json.parseToJsonElement(response).jsonObject
             val action = jsonElement["action"]?.jsonPrimitive?.content ?: "NONE"
-            val aiReply = jsonElement["reply"]?.jsonPrimitive?.content ?: "Kwek! Ada yang bisa Sir Quack bantu?"
+            val aiReplyRaw = jsonElement["reply"]?.jsonPrimitive?.content ?: "Kwek! Ada yang bisa Sir Quack bantu?"
+            val targetSpaceName = jsonElement["target_space_name"]?.let {
+                if (it is JsonNull) null else it.jsonPrimitive.content
+            }
+            
+            val aiReply = if (targetSpaceName != null && targetSpaceName != "null") {
+                "$aiReplyRaw (Space: $targetSpaceName)"
+            } else {
+                aiReplyRaw
+            }
 
             when (action) {
                 "DELETE_TRANSACTION" -> {
@@ -418,9 +437,25 @@ class AIViewModel(
                     }
                 }
                 "CREATE_TRANSACTION" -> {
-                    if (activeSpaceId != null) {
+                    val targetSpace = if (targetSpaceName != null && targetSpaceName != "null") {
+                        _uiState.value.savingsSpaces.find { 
+                            it.name.equals(targetSpaceName, ignoreCase = true) 
+                        }
+                    } else null
+
+                    // If user mentioned a space that doesn't exist
+                    if (targetSpaceName != null && targetSpaceName != "null" && targetSpace == null) {
+                        saveAiMessage("Kwek! Sir Quack tidak bisa menemukan Savings Space bernama \"$targetSpaceName\". Pastikan namanya benar ya!")
+                        _uiState.update { it.copy(isTyping = false) }
+                        return
+                    }
+
+                    val finalSpaceId = targetSpace?.id ?: activeSpaceId
+                    val finalSpaceName = targetSpace?.name ?: (_uiState.value.savingsSpaces.find { it.id == activeSpaceId }?.name ?: "Unknown")
+
+                    if (finalSpaceId != null) {
                         val transactionsArray = jsonElement["transactions"]?.jsonArray
-                        val successfulTxs = mutableListOf<String>()
+                        val txsToCreate = mutableListOf<SavingsTransaction>()
                         
                         transactionsArray?.forEachIndexed { index, item ->
                             try {
@@ -433,14 +468,12 @@ class AIViewModel(
                                 val category = data["category"]?.jsonPrimitive?.content ?: "General"
                                 val note = data["note"]?.jsonPrimitive?.content ?: ""
 
-                                // Robust Idempotency: Use userMessageId as part of the transaction ID
                                 val txId = "ai_${userMessageId}_$index"
                                 
-                                savingsRepository.addTransaction(
-                                    activeSpaceId,
+                                txsToCreate.add(
                                     SavingsTransaction(
                                         id = txId,
-                                        spaceId = activeSpaceId,
+                                        spaceId = finalSpaceId,
                                         userId = userId,
                                         userName = category,
                                         amount = amount,
@@ -449,20 +482,48 @@ class AIViewModel(
                                         timestamp = now
                                     )
                                 )
-                                successfulTxs.add(txId)
                             } catch (e: Exception) {
-                                println("SirQuack: Transaction Failed - ${e.message}")
+                                println("SirQuack: Transaction Parsing Failed - ${e.message}")
                             }
                         }
                         
-                        if (successfulTxs.isNotEmpty()) {
-                            val aiMsgId = saveAiMessage(aiReply)
-                            startUndoTimer(successfulTxs.last(), activeSpaceId, aiMsgId)
-                            _uiState.update { it.copy(isTyping = false) }
-                            return
-                        } else {
-                            saveAiMessage("Sir Quack gagal mencatat transaksi. Pastikan format nominalnya benar ya, kwek!")
+                        if (txsToCreate.isNotEmpty()) {
+                            // CASE: Explicit space mentioned AND it's different from active space
+                            if (targetSpace != null && targetSpace.id != activeSpaceId) {
+                                val confirmationText = "Kwek! Kamu sedang di space ${_uiState.value.savingsSpaces.find { it.id == activeSpaceId }?.name}, tapi transaksi ini sepertinya untuk $finalSpaceName. Catat ke $finalSpaceName?"
+                                _uiState.update { it.copy(
+                                    pendingSpaceTransaction = PendingSpaceTransaction(
+                                        spaceId = finalSpaceId,
+                                        spaceName = finalSpaceName,
+                                        transactions = txsToCreate,
+                                        confirmationText = confirmationText
+                                    ),
+                                    isTyping = false
+                                ) }
+                                saveAiMessage(confirmationText)
+                                return
+                            }
+
+                            // CASE: Same space or no explicit space mentioned -> Execute immediately
+                            val successfulTxs = mutableListOf<String>()
+                            txsToCreate.forEach { tx ->
+                                try {
+                                    savingsRepository.addTransaction(finalSpaceId, tx)
+                                    successfulTxs.add(tx.id)
+                                } catch (e: Exception) {
+                                    println("SirQuack: Transaction Save Failed - ${e.message}")
+                                }
+                            }
+
+                            if (successfulTxs.isNotEmpty()) {
+                                val aiMsgId = saveAiMessage(aiReply)
+                                startUndoTimer(successfulTxs.last(), finalSpaceId, aiMsgId)
+                                _uiState.update { it.copy(isTyping = false) }
+                                return
+                            }
                         }
+                        
+                        saveAiMessage("Sir Quack gagal mencatat transaksi. Pastikan format nominalnya benar ya, kwek!")
                     }
                 }
                 else -> {
@@ -529,6 +590,35 @@ class AIViewModel(
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to update transaction") }
             }
+        }
+    }
+
+    fun confirmSpaceTransaction() {
+        val pending = _uiState.value.pendingSpaceTransaction ?: return
+        val userId = authRepository.getCurrentUserId() ?: ""
+        
+        viewModelScope.launch {
+            try {
+                pending.transactions.forEach { tx ->
+                    savingsRepository.addTransaction(pending.spaceId, tx.copy(userId = userId))
+                }
+                
+                // Switch active space
+                setActiveSpace(pending.spaceId)
+                
+                _uiState.update { it.copy(pendingSpaceTransaction = null) }
+                
+                saveAiMessage("Kwek! Transaksi berhasil dicatat ke ${pending.spaceName}. Sekarang Sir Quack juga sudah pindah ke space ini!")
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Gagal mencatat transaksi: ${e.message}") }
+            }
+        }
+    }
+
+    fun cancelSpaceTransaction() {
+        _uiState.update { it.copy(pendingSpaceTransaction = null) }
+        viewModelScope.launch {
+            saveAiMessage("Oke kwek! Transaksi dibatalkan.")
         }
     }
 

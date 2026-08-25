@@ -503,7 +503,10 @@ fun MainScreen(
                                             onCancelInvitation = { savingsViewModel.cancelInvitation(it) },
                                             onDelete = { savingsViewModel.deleteSpace(it) },
                                             onEdit = { savingsViewModel.updateSpace(it) },
-                                            onLeave = { savingsViewModel.leaveSpace() }
+                                            onLeave = { savingsViewModel.leaveSpace() },
+                                            onConvertToGroup = { savingsViewModel.onConvertToGroupClick() },
+                                            onDismissConvertToGroup = { savingsViewModel.onDismissConvertToGroup() },
+                                            onConfirmConvertToGroup = { savingsViewModel.convertToGroupSpace() }
                                         )
 
                                         if (uiState.showInviteMemberDialog) {

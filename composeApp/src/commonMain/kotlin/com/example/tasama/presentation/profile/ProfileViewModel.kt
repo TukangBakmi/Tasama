@@ -218,7 +218,7 @@ class ProfileViewModel(
     }
 
     fun onIdCopied() {
-        _uiState.update { it.copy(exportMessage = "ID copied to clipboard") }
+        _uiState.update { it.copy(exportMessage = "User ID copied") }
     }
 
     fun updateTheme(theme: AppTheme) {

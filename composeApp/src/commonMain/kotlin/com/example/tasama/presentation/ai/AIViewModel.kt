@@ -17,6 +17,8 @@ import com.example.tasama.util.formatCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.example.tasama.data.remote.GroqException
@@ -45,10 +47,12 @@ class AIViewModel(
     private var lastTxJob: Job? = null
     private var undoTimerJob: Job? = null
     private var settingsJob: Job? = null
+    private var spacesJob: Job? = null
 
     init {
         observeUserSession()
         observeSettings()
+        observeSavingsSpaces()
     }
 
     private fun observeSettings() {
@@ -118,12 +122,36 @@ class AIViewModel(
     }
 
     private fun observeSavingsSpaces() {
-        viewModelScope.launch {
-            savingsRepository.getSavingsSpaces().collect { spaces ->
+        spacesJob?.cancel()
+        spacesJob = viewModelScope.launch {
+            combine(
+                savingsRepository.getSavingsSpaces(),
+                settingsRepository.settings
+            ) { spaces, settings ->
+                val lastSelectedId = settings.lastAiSelectedSpaceId
+                val resolvedActiveSpaceId = when {
+                    spaces.isEmpty() -> null
+                    lastSelectedId != null && spaces.any { it.id == lastSelectedId } -> lastSelectedId
+                    else -> {
+                        // If lastSelectedId is stale, clean it up
+                        if (lastSelectedId != null) {
+                            viewModelScope.launch {
+                                settingsRepository.updateLastAiSelectedSpaceId(null)
+                            }
+                        }
+                        spaces.firstOrNull()?.id
+                    }
+                }
+                Pair(spaces, resolvedActiveSpaceId)
+            }.collect { (spaces, resolvedActiveSpaceId) ->
                 _uiState.update { state ->
+                    if (resolvedActiveSpaceId != state.activeSpaceId && resolvedActiveSpaceId != null) {
+                        observeLastTransaction(resolvedActiveSpaceId)
+                    }
+
                     state.copy(
                         savingsSpaces = spaces,
-                        activeSpaceId = state.activeSpaceId ?: spaces.firstOrNull()?.id
+                        activeSpaceId = resolvedActiveSpaceId
                     )
                 }
             }
@@ -131,6 +159,9 @@ class AIViewModel(
     }
 
     fun setActiveSpace(spaceId: String) {
+        viewModelScope.launch {
+            settingsRepository.updateLastAiSelectedSpaceId(spaceId)
+        }
         _uiState.update { it.copy(activeSpaceId = spaceId) }
         observeLastTransaction(spaceId)
     }

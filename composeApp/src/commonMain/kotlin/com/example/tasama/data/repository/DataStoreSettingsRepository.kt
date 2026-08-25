@@ -33,6 +33,7 @@ class DataStoreSettingsRepository(
         val UNDO_SPACE_ID = stringPreferencesKey("undo_space_id")
         val UNDO_MESSAGE_ID = stringPreferencesKey("undo_message_id")
         val UNDO_CREATED_AT = longPreferencesKey("undo_created_at")
+        val LAST_AI_SELECTED_SPACE_ID = stringPreferencesKey("last_ai_selected_space_id")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
@@ -53,7 +54,8 @@ class DataStoreSettingsRepository(
             undoTransactionId = preferences[PreferencesKeys.UNDO_TRANSACTION_ID],
             undoSpaceId = preferences[PreferencesKeys.UNDO_SPACE_ID],
             undoMessageId = preferences[PreferencesKeys.UNDO_MESSAGE_ID],
-            undoCreatedAt = preferences[PreferencesKeys.UNDO_CREATED_AT]
+            undoCreatedAt = preferences[PreferencesKeys.UNDO_CREATED_AT],
+            lastAiSelectedSpaceId = preferences[PreferencesKeys.LAST_AI_SELECTED_SPACE_ID]
         )
     }
 
@@ -133,6 +135,13 @@ class DataStoreSettingsRepository(
 
             if (createdAt == null) preferences.remove(PreferencesKeys.UNDO_CREATED_AT)
             else preferences[PreferencesKeys.UNDO_CREATED_AT] = createdAt
+        }
+    }
+
+    override suspend fun updateLastAiSelectedSpaceId(spaceId: String?) {
+        dataStore.edit { preferences ->
+            if (spaceId == null) preferences.remove(PreferencesKeys.LAST_AI_SELECTED_SPACE_ID)
+            else preferences[PreferencesKeys.LAST_AI_SELECTED_SPACE_ID] = spaceId
         }
     }
 }

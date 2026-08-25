@@ -25,4 +25,7 @@ interface SettingsRepository {
 
     // AI Undo persistent state
     suspend fun setUndoTransaction(transactionId: String?, spaceId: String?, messageId: String?, createdAt: Long?)
+
+    // AI Selected Space
+    suspend fun updateLastAiSelectedSpaceId(spaceId: String?)
 }

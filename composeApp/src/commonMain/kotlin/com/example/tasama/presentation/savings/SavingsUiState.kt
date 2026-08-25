@@ -23,8 +23,10 @@ data class SavingsUiState(
     val error: String? = null,
     val successMessage: String? = null,
     val userCurrency: String = "IDR",
+    val currentUser: User? = null,
     val showRemovedFromSpaceDialog: Boolean = false,
-    val hasLeftSpace: Boolean = false
+    val hasLeftSpace: Boolean = false,
+    val showConvertToGroupDialog: Boolean = false
 ) {
     val selectedSpace: SavingsSpace? = savingsSpaces.find { it.id == selectedSpaceId }
 }

@@ -63,6 +63,7 @@ class SavingsViewModel(
     private fun loadContacts(uid: String) {
         viewModelScope.launch {
             val user = authRepository.getUser(uid)
+            _uiState.update { it.copy(currentUser = user) }
             val contacts = user?.contactIds?.mapNotNull { authRepository.getUser(it) } ?: emptyList()
             _uiState.update { 
                 it.copy(
@@ -410,6 +411,53 @@ class SavingsViewModel(
                 _uiState.update { it.copy(error = e.message ?: "Failed to transfer ownership") }
             }
         }
+    }
+
+    fun convertToGroupSpace() {
+        val spaceId = _uiState.value.selectedSpaceId
+        println("DEBUG: Convert to Group - Step 3: User confirmed conversion")
+        println("DEBUG: Convert to Group - Step 5: Savings Space ID: $spaceId")
+        
+        if (spaceId == null) {
+            println("ERROR: Convert to Group - Space ID is NULL")
+            return
+        }
+
+        val currentUserId = getCurrentUserId()
+        println("DEBUG: Convert to Group - Step 4: Current user ID: $currentUserId")
+
+        viewModelScope.launch {
+            try {
+                println("DEBUG: Convert to Group - Step 8: Calling repository.convertToGroupSpace")
+                repository.convertToGroupSpace(spaceId)
+                println("DEBUG: Convert to Group - Step 13: Firestore transaction completed successfully")
+                
+                _uiState.update { it.copy(showConvertToGroupDialog = false) }
+                println("DEBUG: Convert to Group - Step 14: ViewModel state updated (dialog hidden)")
+                
+                // Reload space details to refresh UI
+                loadSpaceDetails(spaceId)
+                println("DEBUG: Convert to Group - Step 15: Navigation/UI refresh triggered via loadSpaceDetails")
+            } catch (e: Exception) {
+                println("ERROR: Convert to Group - Failed at step 8-13: ${e.message}")
+                e.printStackTrace()
+                _uiState.update { it.copy(error = e.message ?: "Failed to convert space", showConvertToGroupDialog = false) }
+            }
+        }
+    }
+
+    fun onConvertToGroupClick() {
+        val space = _uiState.value.selectedSpace
+        println("DEBUG: Convert to Group - Step 1: Convert button clicked")
+        println("DEBUG: Convert to Group - Step 6: Current Savings Space type: ${space?.type}")
+        println("DEBUG: Convert to Group - Step 7: Current user is owner: ${isOwner(space)}")
+        
+        _uiState.update { it.copy(showConvertToGroupDialog = true) }
+        println("DEBUG: Convert to Group - Step 2: Confirmation dialog opened")
+    }
+
+    fun onDismissConvertToGroup() {
+        _uiState.update { it.copy(showConvertToGroupDialog = false) }
     }
 
     fun onAddTransactionClick(spaceId: String) {

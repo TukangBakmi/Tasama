@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
+import com.example.tasama.presentation.main.LocalSnackbarHostState
+import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Clock
@@ -37,6 +39,8 @@ fun UserDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val otherUser = uiState.otherUser
     val clipboardManager = LocalClipboardManager.current
+    val snackbarHostState = LocalSnackbarHostState.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(uid) {
         viewModel.observeOtherUserStatus(uid)
@@ -110,6 +114,9 @@ fun UserDetailScreen(
                         value = otherUser.shortId,
                         onTrailingIconClick = {
                             clipboardManager.setText(AnnotatedString(otherUser.shortId))
+                            scope.launch {
+                                snackbarHostState.showSnackbar("User ID copied")
+                            }
                         },
                         trailingIcon = Icons.Default.ContentCopy
                     )

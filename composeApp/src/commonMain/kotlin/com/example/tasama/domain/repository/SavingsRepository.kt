@@ -26,6 +26,9 @@ interface SavingsRepository {
     suspend fun leaveSpace(spaceId: String)
     suspend fun transferOwnership(spaceId: String, newOwnerId: String)
     
+    // Conversion
+    suspend fun convertToGroupSpace(spaceId: String)
+    
     // Activity / History
     fun getActivityHistory(spaceId: String): Flow<List<SavingsActivity>>
     suspend fun archiveSpace(spaceId: String)

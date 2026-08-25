@@ -62,19 +62,41 @@ class FirebaseSavingsRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         val id = "space_$now"
         
-        val initialMember = SavingsMember(
+        val members = mutableListOf<SavingsMember>()
+        val memberIds = mutableListOf<String>()
+
+        // Add creator as owner/member
+        memberIds.add(uid)
+        members.add(SavingsMember(
             userId = uid,
             name = user.name,
             avatarUrl = user.avatarUrl,
             role = MemberRole.OWNER,
             joinedAt = now
-        )
+        ))
+
+        // Special logic for COUPLE type
+        if (space.type == SavingsSpaceType.COUPLE) {
+            val partnerId = user.partnerId ?: throw Exception("Partner required for Couple Space")
+            val partner = authRepository.getUser(partnerId) ?: throw Exception("Partner not found")
+            
+            if (!memberIds.contains(partnerId)) {
+                memberIds.add(partnerId)
+                members.add(SavingsMember(
+                    userId = partnerId,
+                    name = partner.name,
+                    avatarUrl = partner.avatarUrl,
+                    role = MemberRole.OWNER, // Both are owners/full access
+                    joinedAt = now
+                ))
+            }
+        }
 
         val finalSpace = space.copy(
             id = id,
             ownerId = uid,
-            memberIds = listOf(uid),
-            members = listOf(initialMember),
+            memberIds = memberIds,
+            members = members,
             createdAt = now,
             updatedAt = now
         )
@@ -401,6 +423,55 @@ class FirebaseSavingsRepository(
         
         val newOwnerName = authRepository.getUserName(newOwnerId) ?: "User"
         logActivity(spaceId, currentUid, authRepository.getUserName(currentUid) ?: "Owner", SavingsActivityType.OWNERSHIP_TRANSFERRED, "Transferred ownership to $newOwnerName")
+    }
+
+    override suspend fun convertToGroupSpace(spaceId: String) {
+        val uid = authRepository.getCurrentUserId() ?: throw Exception("Not authenticated")
+        val userName = authRepository.getUserName(uid) ?: "User"
+        val spaceDoc = spacesCollection.document(spaceId)
+        
+        println("DEBUG: Convert to Group - Step 8: Firestore transaction started for spaceId: $spaceId")
+        
+        try {
+            firestore.runTransaction {
+                val spaceSnapshot = get(spaceDoc)
+                if (!spaceSnapshot.exists) {
+                    println("ERROR: Convert to Group - Step 9: Space document does not exist!")
+                    throw Exception("Space not found")
+                }
+                
+                val space = spaceSnapshot.data<SavingsSpace>()
+                println("DEBUG: Convert to Group - Step 9: Savings Space document read successfully: ${space.name}")
+                
+                if (space.ownerId != uid) {
+                    println("ERROR: Convert to Group - Step 10: Validation failed. Current user $uid is not owner ${space.ownerId}")
+                    throw Exception("Only owner can convert the space")
+                }
+                
+                if (space.type != SavingsSpaceType.PERSONAL) {
+                    println("ERROR: Convert to Group - Step 10: Validation failed. Space type is ${space.type}, expected PERSONAL")
+                    throw Exception("Only Personal spaces can be converted to Group")
+                }
+                
+                println("DEBUG: Convert to Group - Step 10: Validation passed")
+                
+                val now = Clock.System.now().toEpochMilliseconds()
+                println("DEBUG: Convert to Group - Step 11: Firestore update started")
+                
+                update(spaceDoc, 
+                    "type" to SavingsSpaceType.GROUP.name,
+                    "updatedAt" to now
+                )
+                println("DEBUG: Convert to Group - Step 12: Type changed from PERSONAL to GROUP in transaction")
+            }
+        } catch (e: Exception) {
+            println("ERROR: Convert to Group - Firestore transaction failed: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
+        
+        println("DEBUG: Convert to Group - Step 13: Logging activity")
+        logActivity(spaceId, uid, userName, SavingsActivityType.SPACE_UPDATED, "Converted Personal Space to Group Space")
     }
 
     override fun getActivityHistory(spaceId: String): Flow<List<SavingsActivity>> {

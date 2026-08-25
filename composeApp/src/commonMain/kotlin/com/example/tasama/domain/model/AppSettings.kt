@@ -29,5 +29,8 @@ data class AppSettings(
     val undoTransactionId: String? = null,
     val undoSpaceId: String? = null,
     val undoMessageId: String? = null,
-    val undoCreatedAt: Long? = null
+    val undoCreatedAt: Long? = null,
+
+    // AI Selected Space
+    val lastAiSelectedSpaceId: String? = null
 )

@@ -43,7 +43,7 @@ fun SavingsScreen(
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
 
     LaunchedEffect(uiState.selectedSpaceId) {
-        if (uiState.selectedSpaceId != null) {
+        if (uiState.selectedSpaceId != null && !uiState.showSpaceDetails) {
             onNavigateToDetail(uiState.selectedSpaceId!!)
             viewModel.onSpaceHandled()
         }
@@ -93,6 +93,7 @@ fun SavingsScreen(
             if (uiState.showAddSpaceDialog) {
                 AddSpaceDialog(
                     userCurrency = uiState.userCurrency,
+                    hasPartner = uiState.currentUser?.partnerId != null,
                     onDismiss = { viewModel.onDismissAddSpace() },
                     onConfirm = { name, target, date, icon, type, desc, currency ->
                         viewModel.addSpace(
@@ -372,10 +373,15 @@ fun SpaceDetailsScreen(
     onRemoveMember: (String) -> Unit,
     onTransferOwnership: (String) -> Unit,
     onCancelInvitation: (String) -> Unit,
-    onDeleteTransaction: (SavingsTransaction) -> Unit
+    onDeleteTransaction: (SavingsTransaction) -> Unit,
+    onConvertToGroup: () -> Unit = {},
+    onDismissConvertToGroup: () -> Unit = {},
+    onConfirmConvertToGroup: () -> Unit = {}
 ) {
     val space = uiState.selectedSpace ?: return
     val isPersonal = space.type == SavingsSpaceType.PERSONAL
+    val isCouple = space.type == SavingsSpaceType.COUPLE
+    
     val tabs = remember(isPersonal) {
         if (isPersonal) listOf("Overview", "History")
         else listOf("Overview", "History", "Members")
@@ -392,6 +398,9 @@ fun SpaceDetailsScreen(
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = space.targetDate
     )
+
+    // Override isOwner for Couple Spaces so both users see owner actions
+    val effectiveIsOwner = isOwner || (isCouple && space.memberIds.contains(currentUserId))
 
     Scaffold(
         topBar = {
@@ -414,9 +423,35 @@ fun SpaceDetailsScreen(
                     }
                 },
                 actions = {
-                    if (isOwner) {
-                        IconButton(onClick = { showEditDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    if (effectiveIsOwner) {
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit Space") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        showEditDialog = true
+                                    }
+                                )
+                                if (isPersonal) {
+                                    DropdownMenuItem(
+                                        text = { Text("Convert to Group") },
+                                        leadingIcon = { Icon(Icons.Default.Group, contentDescription = null) },
+                                        onClick = {
+                                            showMenu = false
+                                            onConvertToGroup()
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -432,7 +467,7 @@ fun SpaceDetailsScreen(
                     modifier = Modifier.padding(16.dp).navigationBarsPadding(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (isOwner) {
+                    if (effectiveIsOwner) {
                         OutlinedButton(
                             onClick = { showDeleteConfirm = true },
                             modifier = Modifier.weight(1f),
@@ -505,7 +540,7 @@ fun SpaceDetailsScreen(
                             if (!isPersonal) {
                                 MembersTab(
                                     space = space,
-                                    isOwner = isOwner,
+                                    isOwner = effectiveIsOwner,
                                     currentUserId = currentUserId,
                                     pendingInvitations = uiState.pendingInvitations,
                                     onInvite = { onInvite(space.id) },
@@ -556,6 +591,7 @@ fun SpaceDetailsScreen(
         AddSpaceDialog(
             initialSpace = space,
             userCurrency = space.currency,
+            hasPartner = uiState.currentUser?.partnerId != null,
             onDismiss = { showEditDialog = false },
             onConfirm = { name, target, date, icon, spaceType, desc, currency ->
                 onEdit(
@@ -655,6 +691,24 @@ fun SpaceDetailsScreen(
                     showDeleteTransactionConfirm = false
                     transactionToDelete = null
                 }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (uiState.showConvertToGroupDialog) {
+        AlertDialog(
+            onDismissRequest = { onDismissConvertToGroup() },
+            title = { Text("Convert to Group Savings?") },
+            text = { Text("Your existing savings balance, contribution history, target, due date, and other Savings Space data will be preserved. After conversion, you can invite other members to this Savings Space.") },
+            confirmButton = {
+                Button(onClick = onConfirmConvertToGroup) {
+                    Text("Convert")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onDismissConvertToGroup() }) {
                     Text("Cancel")
                 }
             }
@@ -816,12 +870,14 @@ fun MembersTab(
     onTransfer: (String) -> Unit,
     onCancelInvitation: (String) -> Unit
 ) {
+    val isCoupleSpace = space.type == SavingsSpaceType.COUPLE
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        if (isOwner) {
+        if (isOwner && !isCoupleSpace) {
             item {
                 Button(
                     onClick = onInvite,
@@ -879,7 +935,7 @@ fun MembersTab(
                     }
                 }
                 
-                if (isOwner && member.userId != currentUserId) {
+                if (isOwner && member.userId != currentUserId && !isCoupleSpace) {
                     var showMemberOptions by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { showMemberOptions = true }) {
@@ -946,6 +1002,7 @@ fun TransactionListItem(tx: SavingsTransaction, onDelete: () -> Unit) {
 fun AddSpaceDialog(
     initialSpace: SavingsSpace? = null,
     userCurrency: String,
+    hasPartner: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (String, Long?, Long?, String, SavingsSpaceType, String, String) -> Unit
 ) {
@@ -1060,8 +1117,27 @@ fun AddSpaceDialog(
                     Text("Space Type", style = MaterialTheme.typography.labelLarge)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SavingsSpaceType.entries.forEach { spaceType ->
-                            FilterChip(selected = type == spaceType, onClick = { type = spaceType }, label = { Text(spaceType.name) })
+                            val isCouple = spaceType == SavingsSpaceType.COUPLE
+                            val enabled = !isCouple || hasPartner
+                            
+                            FilterChip(
+                                selected = type == spaceType,
+                                onClick = { 
+                                    if (enabled) {
+                                        type = spaceType
+                                    }
+                                },
+                                label = { Text(spaceType.name) },
+                                enabled = enabled
+                            )
                         }
+                    }
+                    if (!hasPartner) {
+                        Text(
+                            "Link a partner first to use Couple Savings",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

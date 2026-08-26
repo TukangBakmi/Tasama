@@ -47,7 +47,7 @@ val appModule = module {
     }
 
     single<PresenceRepository> {
-        FirebasePresenceRepository()
+        FirebasePresenceRepository(get())
     }
 
     single<AuthRepository> {

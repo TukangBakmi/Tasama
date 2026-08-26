@@ -34,6 +34,7 @@ class DataStoreSettingsRepository(
         val UNDO_MESSAGE_ID = stringPreferencesKey("undo_message_id")
         val UNDO_CREATED_AT = longPreferencesKey("undo_created_at")
         val LAST_AI_SELECTED_SPACE_ID = stringPreferencesKey("last_ai_selected_space_id")
+        val DEVICE_ID = stringPreferencesKey("device_id")
     }
 
     override val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
@@ -143,5 +144,14 @@ class DataStoreSettingsRepository(
             if (spaceId == null) preferences.remove(PreferencesKeys.LAST_AI_SELECTED_SPACE_ID)
             else preferences[PreferencesKeys.LAST_AI_SELECTED_SPACE_ID] = spaceId
         }
+    }
+
+    override suspend fun getDeviceId(): String {
+        return dataStore.edit { preferences ->
+            if (preferences[PreferencesKeys.DEVICE_ID] == null) {
+                preferences[PreferencesKeys.DEVICE_ID] =
+                    (1..16).map { "0123456789abcdef".random() }.joinToString("")
+            }
+        }.let { it[PreferencesKeys.DEVICE_ID] ?: "" }
     }
 }

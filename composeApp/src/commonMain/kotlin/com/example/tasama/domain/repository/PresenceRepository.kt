@@ -14,6 +14,11 @@ interface PresenceRepository {
     fun startMonitoring(uid: String)
 
     /**
+     * Set the foreground status of the app for the current user.
+     */
+    fun setForeground(uid: String, isForeground: Boolean)
+
+    /**
      * Stop monitoring and clean up resources.
      */
     fun stopMonitoring()

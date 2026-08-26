@@ -38,6 +38,13 @@ class MainViewModel(
         observeAuthState()
     }
 
+    fun setForeground(isForeground: Boolean) {
+        val uid = authRepository.getCurrentUserId()
+        if (uid != null) {
+            presenceRepository.setForeground(uid, isForeground)
+        }
+    }
+
     private fun observeAuthState() {
         viewModelScope.launch {
             authRepository.userId.collectLatest { uid ->

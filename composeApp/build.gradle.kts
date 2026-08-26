@@ -47,6 +47,7 @@ kotlin {
             implementation(libs.google.maps)
             implementation(libs.firebase.messaging.android)
             implementation(libs.glide)
+            implementation(libs.androidx.lifecycle.process)
         }
         commonMain.dependencies {
             implementation(libs.filekit.compose)

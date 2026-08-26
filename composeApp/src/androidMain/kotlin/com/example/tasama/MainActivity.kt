@@ -20,9 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.tasama.auth.GoogleSignInHelper
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.model.User
+import com.example.tasama.presentation.main.MainViewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -33,9 +37,18 @@ class MainActivity : ComponentActivity() {
     
     private val authRepository: AuthRepository by inject()
     private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by inject()
+    private val mainViewModel: MainViewModel by inject()
 
     private var initialChannelId by mutableStateOf<String?>(null)
     private var navigateToTab by mutableStateOf<String?>(null)
+
+    private val lifecycleObserver = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_START -> mainViewModel.setForeground(true)
+            Lifecycle.Event.ON_STOP -> mainViewModel.setForeground(false)
+            else -> {}
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -51,6 +64,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
 
         FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
             android.util.Log.d("TasamaFCM", "Current token: $token")

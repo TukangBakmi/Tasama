@@ -28,4 +28,7 @@ interface SettingsRepository {
 
     // AI Selected Space
     suspend fun updateLastAiSelectedSpaceId(spaceId: String?)
+
+    // Device ID for presence
+    suspend fun getDeviceId(): String
 }

@@ -2,10 +2,12 @@ package com.example.tasama.presentation.chat
 
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.PresenceState
 
 data class ChatListUiState(
     val channels: List<ChatChannel> = emptyList(),
     val channelUsers: Map<String, User> = emptyMap(),
+    val userPresence: Map<String, PresenceState> = emptyMap(),
     val contacts: List<User> = emptyList(),
     val filteredContacts: List<User> = emptyList(),
     val isLoading: Boolean = false,

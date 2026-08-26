@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.PresenceState
+import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.*
 import kotlinx.datetime.number
@@ -46,13 +48,9 @@ fun ChatListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
     var showAddContactDialog by remember { mutableStateOf(false) }
-    
-    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(30000) // Update every 30 seconds
-            now = Clock.System.now().toEpochMilliseconds()
-        }
+
+    PlatformBackHandler(enabled = uiState.isSelectionMode) {
+        viewModel.toggleSelectionMode(false)
     }
 
     LaunchedEffect(Unit) {
@@ -205,13 +203,14 @@ fun ChatListScreen(
                         items(displayItems, key = { it.third }) { (user, channel, _) ->
                             var showMenu by remember { mutableStateOf(false) }
                             val isSelected = uiState.selectedChannelIds.contains(channel.id)
+                            val presence = user?.id?.let { uiState.userPresence[it] } ?: PresenceState.Offline(0L)
 
                             Box {
                                 ChannelItem(
                                     channel = channel,
                                     currentUserId = viewModel.currentUserId,
                                     otherUser = user,
-                                    now = now,
+                                    presence = presence,
                                     isSelected = isSelected,
                                     isSelectionMode = uiState.isSelectionMode,
                                     onClick = {
@@ -388,7 +387,7 @@ fun ChannelItem(
     channel: ChatChannel?, 
     currentUserId: String?, 
     otherUser: User?,
-    now: Long,
+    presence: PresenceState,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     onClick: () -> Unit,
@@ -428,10 +427,7 @@ fun ChannelItem(
             )
             
             // Online status indicator
-            val isOnline = remember(otherUser?.lastActive, now) {
-                val lastActive = otherUser?.lastActive ?: 0L
-                lastActive != 0L && (now - lastActive < 30000)
-            }
+            val isOnline = presence is PresenceState.Online
             
             Box(
                 modifier = Modifier

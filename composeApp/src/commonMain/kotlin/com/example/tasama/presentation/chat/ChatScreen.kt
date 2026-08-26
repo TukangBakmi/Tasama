@@ -56,14 +56,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
+import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,44 +143,45 @@ fun ChatScreen(
                                         maxLines = 1
                                     )
 
-                                    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+                                    var nowTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
                                     LaunchedEffect(Unit) {
                                         while (true) {
                                             kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
-                                            now = Clock.System.now().toEpochMilliseconds()
+                                            nowTime = Clock.System.now().toEpochMilliseconds()
                                         }
                                     }
 
-                                    val statusText = remember(uiState.otherUser, now) {
-                                        val lastActive = uiState.otherUser?.lastActive ?: 0L
-                                        if (lastActive == 0L) return@remember ""
-                                        if (now - lastActive < 30000) {
-                                            "online"
-                                        } else {
-                                            try {
-                                                val instant = Instant.fromEpochMilliseconds(lastActive)
-                                                val tz = TimeZone.currentSystemDefault()
-                                                val lastActiveDateTime = instant.toLocalDateTime(tz)
-                                                val nowDateTime = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz)
+                                    val statusText = remember(uiState.presence, nowTime) {
+                                        when (val presence = uiState.presence) {
+                                            is PresenceState.Online -> "online"
+                                            is PresenceState.Offline -> {
+                                                val lastSeen = presence.lastSeen
+                                                if (lastSeen == 0L) return@remember ""
+                                                try {
+                                                    val instant = Instant.fromEpochMilliseconds(lastSeen)
+                                                    val tz = TimeZone.currentSystemDefault()
+                                                    val lastActiveDateTime = instant.toLocalDateTime(tz)
+                                                    val nowDateTime = Instant.fromEpochMilliseconds(nowTime).toLocalDateTime(tz)
 
-                                                val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+                                                    val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
 
-                                                when (lastActiveDateTime.date) {
-                                                    nowDateTime.date -> {
-                                                        "last seen today at $timeStr"
+                                                    when (lastActiveDateTime.date) {
+                                                        nowDateTime.date -> {
+                                                            "last seen today at $timeStr"
+                                                        }
+                                                        nowDateTime.date.minus(DatePeriod(days = 1)) -> {
+                                                            "last seen yesterday at $timeStr"
+                                                        }
+                                                        else -> {
+                                                            val day = lastActiveDateTime.day.toString().padStart(2, '0')
+                                                            val month = lastActiveDateTime.month.number.toString().padStart(2, '0')
+                                                            val year = lastActiveDateTime.year
+                                                            "last seen $day/$month/$year"
+                                                        }
                                                     }
-                                                    nowDateTime.date.minus(DatePeriod(days = 1)) -> {
-                                                        "last seen yesterday at $timeStr"
-                                                    }
-                                                    else -> {
-                                                        val day = lastActiveDateTime.day.toString().padStart(2, '0')
-                                                        val month = lastActiveDateTime.month.number.toString().padStart(2, '0')
-                                                        val year = lastActiveDateTime.year
-                                                        "last seen $day/$month/$year"
-                                                    }
+                                                } catch (_: Exception) {
+                                                    "offline"
                                                 }
-                                            } catch (_: Exception) {
-                                                "offline"
                                             }
                                         }
                                     }

@@ -9,6 +9,8 @@ import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.PresenceRepository
+import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
@@ -38,6 +40,7 @@ data class PartnerUiState(
     val weatherInfo: com.example.tasama.domain.model.WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
+    val partnerPresence: PresenceState = PresenceState.Offline(0L),
     val settings: AppSettings = AppSettings()
 )
 
@@ -46,13 +49,15 @@ class PartnerViewModel(
     private val placeRepository: PlaceRepository,
     private val directionsRepository: DirectionsRepository,
     private val weatherRepository: WeatherRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val presenceRepository: PresenceRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
 
     private var settingsJob: Job? = null
     private var partnerObservationJob: Job? = null
+    private var presenceObservationJob: Job? = null
     private var placesObservationJob: Job? = null
     private var currentUserJob: Job? = null
     private var distanceJob: Job? = null
@@ -93,12 +98,14 @@ class PartnerViewModel(
 
     private fun stopAllActivities() {
         partnerObservationJob?.cancel()
+        presenceObservationJob?.cancel()
         placesObservationJob?.cancel()
         distanceJob?.cancel()
         weatherJob?.cancel()
         _uiState.update {
             it.copy(
                 partner = null,
+                partnerPresence = PresenceState.Offline(0L),
                 places = emptyList(),
                 distanceInfo = null,
                 weatherInfo = null
@@ -134,9 +141,11 @@ class PartnerViewModel(
     private suspend fun handlePartnerAndRequests(user: User) {
         if (user.partnerId != null) {
             observePartner(user.partnerId)
+            observePresence(user.partnerId)
             _uiState.update { it.copy(isLinked = true, pendingRequestFrom = null, pendingRequestTo = null) }
         } else {
-            _uiState.update { it.copy(partner = null, isLinked = false) }
+            _uiState.update { it.copy(partner = null, partnerPresence = PresenceState.Offline(0L), isLinked = false) }
+            presenceObservationJob?.cancel()
 
             if (user.partnerRequestFrom != null) {
                 val requester = authRepository.getUser(user.partnerRequestFrom)
@@ -189,6 +198,16 @@ class PartnerViewModel(
                         checkAndFetchDistance()
                     }
                 }
+        }
+    }
+
+    private fun observePresence(userId: String) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
+        presenceObservationJob?.cancel()
+        presenceObservationJob = viewModelScope.launch {
+            presenceRepository.getPresence(userId).collect { presence ->
+                _uiState.update { it.copy(partnerPresence = presence) }
+            }
         }
     }
 

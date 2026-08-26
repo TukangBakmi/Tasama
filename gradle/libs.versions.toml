@@ -72,6 +72,7 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 firebase-auth = { module = "dev.gitlive:firebase-auth", version.ref = "firebase-gitlive" }
 firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "firebase-gitlive" }
 firebase-storage = { module = "dev.gitlive:firebase-storage", version.ref = "firebase-gitlive" }
+firebase-database = { module = "dev.gitlive:firebase-database", version.ref = "firebase-gitlive" }
 firebase-messaging = { module = "dev.gitlive:firebase-messaging", version.ref = "firebase-messaging" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }

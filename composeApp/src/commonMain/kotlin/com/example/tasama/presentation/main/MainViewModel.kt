@@ -5,11 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
-import kotlin.time.Clock
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -27,10 +28,27 @@ class MainViewModel(
     private val authRepository: AuthRepository,
     private val chatRepository: ChatRepository,
     private val savingsRepository: SavingsRepository,
+    private val presenceRepository: PresenceRepository,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+
+    init {
+        observeAuthState()
+    }
+
+    private fun observeAuthState() {
+        viewModelScope.launch {
+            authRepository.userId.collectLatest { uid ->
+                if (uid != null) {
+                    presenceRepository.startMonitoring(uid)
+                } else {
+                    presenceRepository.stopMonitoring()
+                }
+            }
+        }
+    }
 
     val unreadChannelsCount: StateFlow<Int> = combine(
         authRepository.userId,
@@ -82,20 +100,4 @@ class MainViewModel(
     val hasPendingSavingsInvitations: StateFlow<Boolean> = savingsRepository.getMyInvitations()
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    fun updateActiveStatus() {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            authRepository.updateLastActive(uid)
-        }
-    }
-
-    fun setOffline() {
-        val uid = authRepository.getCurrentUserId() ?: return
-        viewModelScope.launch {
-            // Use negative timestamp to signify "explicitly offline" while preserving the time
-            val now = Clock.System.now().toEpochMilliseconds()
-            authRepository.updateLastActive(uid, timestamp = now)
-        }
-    }
 }

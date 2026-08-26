@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.User
 import kotlinx.coroutines.Job
@@ -12,13 +13,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatListViewModel(
     private val repository: ChatRepository,
     private val aiChatRepository: AIChatRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val presenceRepository: PresenceRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatListUiState())
@@ -27,6 +30,7 @@ class ChatListViewModel(
     private var dataJob: Job? = null
     private var usersJob: Job? = null
     private var contactsJob: Job? = null
+    private var presenceJob: Job? = null
 
     val currentUserId: String?
         get() = repository.getCurrentUserId()
@@ -42,6 +46,7 @@ class ChatListViewModel(
                     dataJob?.cancel()
                     usersJob?.cancel()
                     contactsJob?.cancel()
+                    presenceJob?.cancel()
                     _uiState.value = ChatListUiState()
                 } else {
                     loadChannels()
@@ -106,6 +111,24 @@ class ChatListViewModel(
                 users.filterNotNull().associateBy { it.id }
             }.collect { usersMap ->
                 _uiState.update { it.copy(channelUsers = usersMap) }
+                observePresence(usersMap.keys)
+            }
+        }
+    }
+
+    private fun observePresence(userIds: Set<String>) {
+        presenceJob?.cancel()
+        if (userIds.isEmpty()) return
+
+        presenceJob = viewModelScope.launch {
+            val presenceFlows = userIds.map { uid ->
+                presenceRepository.getPresence(uid)
+            }
+
+            combine(presenceFlows) { presenceList ->
+                userIds.zip(presenceList).toMap()
+            }.collect { presenceMap ->
+                _uiState.update { it.copy(userPresence = presenceMap) }
             }
         }
     }

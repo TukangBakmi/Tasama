@@ -17,7 +17,6 @@ data class User(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val lastLocationUpdate: Long? = null,
-    val lastActive: Long? = null,
     val batteryLevel: Float? = null,
     val isCharging: Boolean? = null,
     val connectionType: String? = null, // "Wi-Fi", "Cellular", "Offline"

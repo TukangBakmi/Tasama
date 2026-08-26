@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.coroutines.launch
@@ -86,20 +87,12 @@ fun UserDetailScreen(
                         fontWeight = FontWeight.Bold
                     )
                     
-                    // Status Section
-                    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-                    LaunchedEffect(Unit) {
-                        while (true) {
-                            kotlinx.coroutines.delay(30000)
-                            now = Clock.System.now().toEpochMilliseconds()
-                        }
-                    }
-
-                    val lastActive = otherUser.lastActive ?: 0L
-                    val isOnline = lastActive != 0L && (now - lastActive < 30000)
+                    val presence = uiState.presence
+                    val isOnline = presence is PresenceState.Online
+                    val lastSeen = (presence as? PresenceState.Offline)?.lastSeen ?: 0L
                     
                     Text(
-                        text = if (isOnline) "Online" else getStatusText(lastActive),
+                        text = if (isOnline) "Online" else getStatusText(lastSeen),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )

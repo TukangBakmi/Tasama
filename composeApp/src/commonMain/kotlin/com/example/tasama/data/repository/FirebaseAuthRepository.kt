@@ -210,7 +210,6 @@ class FirebaseAuthRepository : AuthRepository {
                 "speed" to speed
                 "accuracy" to accuracy
                 "lastLocationUpdate" to timestamp
-                "lastActive" to timestamp
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -221,11 +220,9 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateBatteryLevel(uid: String, level: Float, isCharging: Boolean) {
         try {
-            val timestamp = Clock.System.now().toEpochMilliseconds()
             firestore.collection("users").document(uid).updateFields {
                 "batteryLevel" to level
                 "isCharging" to isCharging
-                "lastActive" to timestamp
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -234,20 +231,8 @@ class FirebaseAuthRepository : AuthRepository {
 
     override suspend fun updateConnectionType(uid: String, type: String) {
         try {
-            val timestamp = Clock.System.now().toEpochMilliseconds()
             firestore.collection("users").document(uid).updateFields {
                 "connectionType" to type
-                "lastActive" to timestamp
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    override suspend fun updateLastActive(uid: String, timestamp: Long?) {
-        try {
-            firestore.collection("users").document(uid).updateFields {
-                "lastActive" to (timestamp ?: Clock.System.now().toEpochMilliseconds())
             }
         } catch (e: Exception) {
             e.printStackTrace()

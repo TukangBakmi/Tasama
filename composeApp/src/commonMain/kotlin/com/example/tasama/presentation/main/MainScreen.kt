@@ -102,11 +102,23 @@ fun MainScreen(
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Scaffold(
                 snackbarHost = {
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
+                    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
+                    val snackbarBottomPadding = when {
+                        currentRoute == "tabs" && !isKeyboardVisible -> 100.dp
+                        currentRoute?.startsWith("chat_room") == true && !isKeyboardVisible -> 100.dp
+                        currentRoute == "ai_chat" && !isKeyboardVisible -> 100.dp
+                        else -> 16.dp
+                    }
+
                     SnackbarHost(
                         hostState = snackbarHostState,
                         modifier = Modifier
-                            .systemBarsPadding()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 100.dp)
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(bottom = snackbarBottomPadding)
                     ) { data ->
                         AppSnackbar(snackbarData = data)
                     }
@@ -168,27 +180,6 @@ fun MainScreen(
                             val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()
                             val hasPendingSavingsInvitations by viewModel.hasPendingSavingsInvitations.collectAsState()
                             val lifecycleOwner = LocalLifecycleOwner.current
-
-                            LaunchedEffect(lifecycleOwner) {
-                                lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                                    while (true) {
-                                        viewModel.updateActiveStatus()
-                                        kotlinx.coroutines.delay(30000) // Heartbeat every 30 seconds
-                                    }
-                                }
-                            }
-
-                            DisposableEffect(lifecycleOwner) {
-                                val observer = LifecycleEventObserver { _, event ->
-                                    if (event == Lifecycle.Event.ON_PAUSE) {
-                                        viewModel.setOffline()
-                                    }
-                                }
-                                lifecycleOwner.lifecycle.addObserver(observer)
-                                onDispose {
-                                    lifecycleOwner.lifecycle.removeObserver(observer)
-                                }
-                            }
 
                             NavHost(
                                 navController = navController,

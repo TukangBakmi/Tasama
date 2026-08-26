@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.PresenceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,7 @@ import kotlinx.datetime.Instant
 class ChatViewModel(
     private val repository: ChatRepository,
     private val authRepository: AuthRepository,
+    private val presenceRepository: PresenceRepository,
     private val notificationService: com.example.tasama.domain.service.NotificationService
 ) : ViewModel() {
 
@@ -28,6 +30,7 @@ class ChatViewModel(
     private var channelInfoJob: Job? = null
 
     private var otherUserJob: Job? = null
+    private var presenceJob: Job? = null
 
     private val _isResumed = MutableStateFlow(false)
 
@@ -66,6 +69,7 @@ class ChatViewModel(
                     messagesJob?.cancel()
                     channelInfoJob?.cancel()
                     otherUserJob?.cancel()
+                    presenceJob?.cancel()
                     _uiState.value = ChatUiState()
                     currentChannelId = null
                 }
@@ -119,8 +123,18 @@ class ChatViewModel(
                     val otherParticipantId = ch.participantIds.find { it != currentUserId }
                     if (otherParticipantId != null) {
                         observeOtherUserStatus(otherParticipantId)
+                        observePresence(otherParticipantId)
                     }
                 }
+            }
+        }
+    }
+
+    private fun observePresence(userId: String) {
+        presenceJob?.cancel()
+        presenceJob = viewModelScope.launch {
+            presenceRepository.getPresence(userId).collect { presence ->
+                _uiState.update { it.copy(presence = presence) }
             }
         }
     }
@@ -132,6 +146,7 @@ class ChatViewModel(
                 _uiState.update { it.copy(otherUser = user) }
             }
         }
+        observePresence(userId)
     }
 
     private fun markAsRead(channelId: String) {

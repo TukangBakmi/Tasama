@@ -2,6 +2,7 @@ package com.example.tasama.presentation.chat
 
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.PresenceState
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -10,6 +11,7 @@ data class ChatUiState(
     val hasMoreMessages: Boolean = true,
     val channelName: String = "Chat",
     val otherUser: User? = null,
+    val presence: PresenceState = PresenceState.Offline(0L),
     val selectedMessageIds: Set<String> = emptySet(),
     val isSelectionMode: Boolean = false,
     val showDeleteConfirmation: Boolean = false,

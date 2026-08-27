@@ -3,7 +3,7 @@ package com.example.tasama.domain.repository
 import com.example.tasama.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
-interface SavingsRepository {
+interface SavingsRepository : SessionCleanupRepository {
     fun getSavingsSpaces(): Flow<List<SavingsSpace>>
     fun getSavingsSpace(id: String): Flow<SavingsSpace?>
     fun getTransactions(spaceId: String): Flow<List<SavingsTransaction>>

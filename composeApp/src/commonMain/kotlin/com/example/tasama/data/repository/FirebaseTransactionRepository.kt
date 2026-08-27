@@ -6,34 +6,46 @@ import com.example.tasama.domain.repository.TransactionRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FirebaseTransactionRepository(
     private val authRepository: AuthRepository
 ) : TransactionRepository {
     private val firestore = Firebase.firestore
     private val collection = firestore.collection("transactions")
 
+    override suspend fun cleanup() {
+        println("DEBUG: Cleaning up FirebaseTransactionRepository")
+        // No long-running jobs to clean up
+    }
+
     override suspend fun getTransactions(): List<Transaction> {
         val userId = authRepository.getCurrentUserId() ?: return emptyList()
         return try {
             collection.where { "userId" equalTo userId }.get().documents.map { it.data() }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e.message?.contains("permission", ignoreCase = true) == true) {
+                println("DEBUG: [TX] getTransactions: Permission denied (expected during logout)")
+            }
             emptyList()
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getTransactionsFlow(): Flow<List<Transaction>> {
         return authRepository.userId.flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
                 collection.where { "userId" equalTo uid }.snapshots.map { snapshot ->
-                    snapshot.documents.map { it.data() }
+                    snapshot.documents.map { it.data<Transaction>() }
+                }.catch { e ->
+                    if (e.message?.contains("permission", ignoreCase = true) == true) {
+                        println("DEBUG: [TX] getTransactionsFlow: Permission denied (expected during logout)")
+                    } else {
+                        println("ERROR: [TX] getTransactionsFlow error: ${e.message}")
+                    }
+                    emit(emptyList())
                 }
             }
         }

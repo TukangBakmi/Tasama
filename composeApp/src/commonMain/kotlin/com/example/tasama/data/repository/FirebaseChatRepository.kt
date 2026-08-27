@@ -9,6 +9,8 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
@@ -22,7 +24,11 @@ class FirebaseChatRepository(
 ) : ChatRepository {
     private val firestore = Firebase.firestore
     private val channelsCollection = firestore.collection("chat_channels")
-    private val repositoryScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+
+    override suspend fun cleanup() {
+        println("DEBUG: [SESSION] Cleaning up FirebaseChatRepository")
+        // No longer managing its own scope, tied to sessionScope
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getChannels(): Flow<List<ChatChannel>> {
@@ -39,63 +45,93 @@ class FirebaseChatRepository(
                             }
                             .sortedByDescending { it.lastMessageTimestamp }
                     }
-                    .catch { emit(emptyList()) }
+                    .catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [CHAT] Permission denied in getChannels (expected during logout)")
+                        } else {
+                            println("ERROR: [CHAT] Error in getChannels: ${e.message}")
+                        }
+                        emit(emptyList())
+                    }
             }
         }
     }
 
     override fun getChannel(channelId: String): Flow<ChatChannel?> {
-        return channelsCollection.document(channelId).snapshots
-            .map { 
-                if (it.exists) it.data(ChatChannel.serializer()) else null
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(null)
+            else {
+                channelsCollection.document(channelId).snapshots
+                    .map { 
+                        if (it.exists) it.data(ChatChannel.serializer()) else null
+                    }
+                    .catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [CHAT] Permission denied in getChannel (expected during logout)")
+                        } else {
+                            println("ERROR: [CHAT] Error in getChannel: ${e.message}")
+                        }
+                        emit(null)
+                    }
             }
-            .catch { emit(null) }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getMessages(channelId: String): Flow<List<ChatMessage>> {
-        val uid = authRepository.getCurrentUserId() ?: return flowOf(emptyList())
-        val channelRef = channelsCollection.document(channelId)
-        
-        return channelRef.snapshots.flatMapLatest { channelSnapshot ->
-            val channel = try { channelSnapshot.data(ChatChannel.serializer()) } catch (e: Exception) { null }
-            val deletedAt = channel?.deletedAt?.get(uid) ?: 0L
-            
-            channelRef.collection("messages")
-                .where { "timestamp" greaterThan deletedAt }
-                .orderBy("timestamp", direction = Direction.DESCENDING)
-                .limit(20)
-                .snapshots()
-                .map { snapshot ->
-                    snapshot.documents.map { doc ->
-                        val msg = doc.data(ChatMessage.serializer())
-                        
-                        // Auto-update deliveredTo when fetched by recipient
-                        if (msg.userId != uid && !msg.deliveredTo.containsKey(uid)) {
-                            repositoryScope.launch {
-                                try {
-                                    val now = Clock.System.now().toEpochMilliseconds()
-                                    doc.reference.updateFields {
-                                        "deliveredTo.$uid" to now
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(emptyList())
+            else {
+                val channelRef = channelsCollection.document(channelId)
+                
+                channelRef.snapshots.flatMapLatest { channelSnapshot ->
+                    val channel = try { channelSnapshot.data(ChatChannel.serializer()) } catch (e: Exception) { null }
+                    val deletedAt = channel?.deletedAt?.get(uid) ?: 0L
+                    
+                    channelRef.collection("messages")
+                        .where { "timestamp" greaterThan deletedAt }
+                        .orderBy("timestamp", direction = Direction.DESCENDING)
+                        .limit(20)
+                        .snapshots()
+                        .map { snapshot ->
+                            snapshot.documents.map { doc ->
+                                val msg = doc.data(ChatMessage.serializer())
+                                
+                                // Auto-update deliveredTo when fetched by recipient
+                                if (msg.userId != uid && !msg.deliveredTo.containsKey(uid)) {
+                                    authRepository.sessionScope.launch {
+                                        try {
+                                            val now = Clock.System.now().toEpochMilliseconds()
+                                            doc.reference.updateFields {
+                                                "deliveredTo.$uid" to now
+                                            }
+                                            
+                                            // Update channel's lastMessageDeliveredTo if this is the last message
+                                            val channelData = channelRef.get().data(ChatChannel.serializer())
+                                            if (channelData.lastMessageId == msg.id) {
+                                                channelRef.updateFields {
+                                                    "lastMessageDeliveredTo.$uid" to now
+                                                }
+                                            }
+                                        } catch (_: Exception) {}
                                     }
-                                    
-                                    // Update channel's lastMessageDeliveredTo if this is the last message
-                                    val channelData = channelRef.get().data(ChatChannel.serializer())
-                                    if (channelData.lastMessageId == msg.id) {
-                                        channelRef.updateFields {
-                                            "lastMessageDeliveredTo.$uid" to now
-                                        }
-                                    }
-                                } catch (_: Exception) {}
-                            }
-                        }
+                                }
 
-                        msg.copy(isFromMe = msg.userId == uid)
+                                msg.copy(isFromMe = msg.userId == uid)
+                            }
+                            .filter { !it.deletedFor.contains(uid) }
+                            .sortedBy { it.timestamp }
+                        }
+                }.catch { e ->
+                    if (e.message?.contains("permission", ignoreCase = true) == true) {
+                        println("DEBUG: [CHAT] Permission denied in getMessages (expected during logout)")
+                    } else {
+                        println("ERROR: [CHAT] Error in getMessages: ${e.message}")
                     }
-                    .filter { !it.deletedFor.contains(uid) }
-                    .sortedBy { it.timestamp }
+                    emit(emptyList())
                 }
-        }.catch { emit(emptyList()) }
+            }
+        }
     }
 
     override suspend fun getMoreMessages(channelId: String, limit: Int, beforeTimestamp: Long): List<ChatMessage> {

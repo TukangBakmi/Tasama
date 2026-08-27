@@ -7,7 +7,7 @@ sealed class PresenceState {
     data class Offline(val lastSeen: Long) : PresenceState()
 }
 
-interface PresenceRepository {
+interface PresenceRepository : SessionCleanupRepository {
     /**
      * Start monitoring the current user's connection status and updating their presence.
      */

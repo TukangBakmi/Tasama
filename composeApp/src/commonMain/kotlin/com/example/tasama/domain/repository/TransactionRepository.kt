@@ -4,7 +4,7 @@ import com.example.tasama.domain.model.Transaction
 
 import kotlinx.coroutines.flow.Flow
 
-interface TransactionRepository {
+interface TransactionRepository : SessionCleanupRepository {
 
     suspend fun getTransactions(): List<Transaction>
 

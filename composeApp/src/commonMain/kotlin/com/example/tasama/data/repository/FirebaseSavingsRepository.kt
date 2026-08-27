@@ -22,6 +22,12 @@ class FirebaseSavingsRepository(
     private fun activitiesCollection(spaceId: String) = 
         spacesCollection.document(spaceId).collection("activities")
 
+    override suspend fun cleanup() {
+        println("DEBUG: Cleaning up FirebaseSavingsRepository")
+        // SavingsRepository currently only uses flow-based snapshots which 
+        // will be automatically cancelled when the collecting scope is cancelled.
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getSavingsSpaces(): Flow<List<SavingsSpace>> {
         return authRepository.userId.flatMapLatest { uid ->
@@ -42,18 +48,44 @@ class FirebaseSavingsRepository(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getSavingsSpace(id: String): Flow<SavingsSpace?> {
-        return spacesCollection.document(id).snapshots.map { snapshot ->
-            if (snapshot.exists) snapshot.data<SavingsSpace>() else null
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(null)
+            else {
+                spacesCollection.document(id).snapshots.map { snapshot ->
+                    if (snapshot.exists) snapshot.data<SavingsSpace>() else null
+                }.catch { e ->
+                    if (e.message?.contains("permission", ignoreCase = true) == true) {
+                        println("DEBUG: [SAVINGS] Permission denied in getSavingsSpace (expected during logout)")
+                    } else {
+                        println("ERROR: [SAVINGS] Error in getSavingsSpace: ${e.message}")
+                    }
+                    emit(null)
+                }
+            }
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getTransactions(spaceId: String): Flow<List<SavingsTransaction>> {
-        return spacesCollection.document(spaceId).collection("transactions")
-            .orderBy("timestamp", Direction.DESCENDING)
-            .snapshots.map { snapshot ->
-                snapshot.documents.map { it.data<SavingsTransaction>() }
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(emptyList())
+            else {
+                spacesCollection.document(spaceId).collection("transactions")
+                    .orderBy("timestamp", Direction.DESCENDING)
+                    .snapshots.map { snapshot ->
+                        snapshot.documents.map { it.data<SavingsTransaction>() }
+                    }.catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [SAVINGS] Permission denied in getTransactions (expected during logout)")
+                        } else {
+                            println("ERROR: [SAVINGS] Error in getTransactions: ${e.message}")
+                        }
+                        emit(emptyList())
+                    }
             }
+        }
     }
 
     override suspend fun createSavingsSpace(space: SavingsSpace): String {
@@ -335,13 +367,26 @@ class FirebaseSavingsRepository(
         logActivity(invitation.spaceId, uid, authRepository.getUserName(uid) ?: "User", SavingsActivityType.INVITATION_DECLINED, "Declined invitation")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getPendingInvitations(spaceId: String): Flow<List<SavingsInvitation>> {
-        return invitationsCollection
-            .where("spaceId", spaceId)
-            .where("status", InvitationStatus.PENDING.name)
-            .snapshots.map { snapshot ->
-                snapshot.documents.map { it.data<SavingsInvitation>() }
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(emptyList())
+            else {
+                invitationsCollection
+                    .where("spaceId", spaceId)
+                    .where("status", InvitationStatus.PENDING.name)
+                    .snapshots.map { snapshot ->
+                        snapshot.documents.map { it.data<SavingsInvitation>() }
+                    }.catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [SAVINGS] Permission denied in getPendingInvitations (expected during logout)")
+                        } else {
+                            println("ERROR: [SAVINGS] Error in getPendingInvitations: ${e.message}")
+                        }
+                        emit(emptyList())
+                    }
             }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -354,6 +399,13 @@ class FirebaseSavingsRepository(
                     .where("status", InvitationStatus.PENDING.name)
                     .snapshots.map { snapshot ->
                         snapshot.documents.map { it.data<SavingsInvitation>() }
+                    }.catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [SAVINGS] Permission denied in getMyInvitations (expected during logout)")
+                        } else {
+                            println("ERROR: [SAVINGS] Error in getMyInvitations: ${e.message}")
+                        }
+                        emit(emptyList())
                     }
             }
         }
@@ -474,12 +526,25 @@ class FirebaseSavingsRepository(
         logActivity(spaceId, uid, userName, SavingsActivityType.SPACE_UPDATED, "Converted Personal Space to Group Space")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getActivityHistory(spaceId: String): Flow<List<SavingsActivity>> {
-        return activitiesCollection(spaceId)
-            .orderBy("timestamp", Direction.DESCENDING)
-            .snapshots.map { snapshot ->
-                snapshot.documents.map { it.data<SavingsActivity>() }
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) flowOf(emptyList())
+            else {
+                activitiesCollection(spaceId)
+                    .orderBy("timestamp", Direction.DESCENDING)
+                    .snapshots.map { snapshot ->
+                        snapshot.documents.map { it.data<SavingsActivity>() }
+                    }.catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [SAVINGS] Permission denied in getActivityHistory (expected during logout)")
+                        } else {
+                            println("ERROR: [SAVINGS] Error in getActivityHistory: ${e.message}")
+                        }
+                        emit(emptyList())
+                    }
             }
+        }
     }
 
     override suspend fun archiveSpace(spaceId: String) {

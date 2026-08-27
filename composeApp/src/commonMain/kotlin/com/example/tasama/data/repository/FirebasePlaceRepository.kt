@@ -1,26 +1,48 @@
 package com.example.tasama.data.repository
 
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
-class FirebasePlaceRepository : PlaceRepository {
+@OptIn(ExperimentalCoroutinesApi::class)
+class FirebasePlaceRepository(
+    private val authRepository: AuthRepository
+) : PlaceRepository {
     private val firestore = Firebase.firestore
 
+    override suspend fun cleanup() {
+        println("DEBUG: Cleaning up FirebasePlaceRepository")
+    }
+
     override fun getPlaces(relationshipId: String): Flow<List<Place>> {
-        return firestore.collection("places")
-            .where { "relationshipId" equalTo relationshipId }
-            .snapshots
-            .map { snapshot ->
-                snapshot.documents.map { doc ->
-                    val place: Place = doc.data()
-                    place.copy(id = doc.id)
-                }
+        return authRepository.userId.flatMapLatest { uid ->
+            if (uid == null) {
+                flowOf(emptyList())
+            } else {
+                firestore.collection("places")
+                    .where { "relationshipId" equalTo relationshipId }
+                    .snapshots
+                    .map { snapshot ->
+                        snapshot.documents.map { doc ->
+                            val place: Place = doc.data()
+                            place.copy(id = doc.id)
+                        }
+                    }
+                    .catch { e ->
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [PLACE] getPlaces: Permission denied (expected during logout)")
+                        } else {
+                            println("ERROR: [PLACE] getPlaces error: ${e.message}")
+                        }
+                        emit(emptyList())
+                    }
             }
+        }
     }
 
     override suspend fun addPlace(place: Place): Result<Unit> {

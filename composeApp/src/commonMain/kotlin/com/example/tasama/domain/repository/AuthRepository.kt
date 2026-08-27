@@ -1,10 +1,14 @@
 package com.example.tasama.domain.repository
 
 import com.example.tasama.domain.model.User
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 interface AuthRepository {
     val userId: Flow<String?>
+    val isLoggingOut: StateFlow<Boolean>
+    val sessionScope: CoroutineScope
     suspend fun signInAnonymously()
     suspend fun signUp(email: String, password: String, name: String)
     suspend fun signIn(email: String, password: String)
@@ -34,6 +38,7 @@ interface AuthRepository {
     suspend fun cancelPartnerRequest(uid: String): Result<Unit>
     suspend fun unlinkPartner(uid: String): Result<Unit>
     suspend fun updateAnniversaryDate(uid: String, date: Long): Result<Unit>
+    suspend fun cleanupRepositories()
     suspend fun sendNotification(
         targetUid: String,
         title: String,

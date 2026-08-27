@@ -47,15 +47,23 @@ val appModule = module {
     }
 
     single<PresenceRepository> {
-        FirebasePresenceRepository(get())
+        FirebasePresenceRepository(get(), get())
     }
 
     single<AuthRepository> {
-        FirebaseAuthRepository()
+        FirebaseAuthRepository(
+            lazy { get() },
+            lazy { get() },
+            lazy { get() },
+            lazy { get() },
+            lazy { get() },
+            lazy { get() },
+            lazy { get() }
+        )
     }
 
     single<PlaceRepository> {
-        FirebasePlaceRepository()
+        FirebasePlaceRepository(get())
     }
 
     single<WeatherRepository> {
@@ -70,7 +78,7 @@ val appModule = module {
         FirebaseAIChatRepository(get())
     }
 
-    single { GeofenceMonitor(get(), get(), MainScope()) }
+    single { GeofenceMonitor(lazy { get<AuthRepository>() }, get(), MainScope()) }
 
     viewModel { DashboardViewModel(get(), get()) }
     viewModel { TransactionViewModel(get(), get()) }
@@ -80,6 +88,6 @@ val appModule = module {
     viewModel { ChatListViewModel(get(), get(), get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
     viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get()) }
-    viewModel { MainViewModel(get(), get(), get(), get(), get()) }
+    viewModel { MainViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

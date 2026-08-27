@@ -1,19 +1,47 @@
 package com.example.tasama.data.repository
 
 import com.example.tasama.domain.model.User
-import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.*
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
 import dev.gitlive.firebase.storage.storage
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
-class FirebaseAuthRepository : AuthRepository {
+@OptIn(ExperimentalCoroutinesApi::class)
+class FirebaseAuthRepository(
+    private val chatRepository: Lazy<ChatRepository>,
+    private val savingsRepository: Lazy<SavingsRepository>,
+    private val transactionRepository: Lazy<TransactionRepository>,
+    private val presenceRepository: Lazy<PresenceRepository>,
+    private val aiChatRepository: Lazy<AIChatRepository>,
+    private val placeRepository: Lazy<PlaceRepository>,
+    private val geofenceMonitor: Lazy<com.example.tasama.domain.service.GeofenceMonitor>
+) : AuthRepository {
     private val auth = Firebase.auth
     private val firestore = Firebase.firestore
+    private val repositoryScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var _sessionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    override val sessionScope: CoroutineScope get() = _sessionScope
 
-    override val userId: Flow<String?> = auth.authStateChanged.map { it?.uid }
+    private val _userId = MutableStateFlow<String?>(null)
+    private val _isLoggingOut = MutableStateFlow(false)
+    override val isLoggingOut = _isLoggingOut.asStateFlow()
+
+    override val userId: Flow<String?> = combine(_userId, _isLoggingOut) { uid, loggingOut ->
+        if (loggingOut) null else uid
+    }.distinctUntilChanged()
+
+    init {
+        repositoryScope.launch {
+            auth.authStateChanged.collect { user ->
+                println("DEBUG: [AUTH] AuthState changed: ${user?.uid}")
+                _userId.value = user?.uid
+            }
+        }
+    }
 
     override suspend fun signInAnonymously() {
         try {
@@ -70,12 +98,59 @@ class FirebaseAuthRepository : AuthRepository {
         }
     }
 
+    override suspend fun cleanupRepositories() {
+        presenceRepository.value.cleanup()
+        chatRepository.value.cleanup()
+        savingsRepository.value.cleanup()
+        transactionRepository.value.cleanup()
+        aiChatRepository.value.cleanup()
+        placeRepository.value.cleanup()
+        geofenceMonitor.value.cleanup()
+    }
+
     override suspend fun signOut() {
+        println("DEBUG: [SESSION] Logout started")
+        _isLoggingOut.value = true
         val uid = auth.currentUser?.uid
         if (uid != null) {
-            updateFcmToken(uid, null)
+            try {
+                println("DEBUG: [SESSION] Updating FCM token to null for $uid")
+                updateFcmToken(uid, null)
+            } catch (e: Exception) {
+                println("DEBUG: [SESSION] Failed to update FCM token: ${e.message}")
+            }
         }
-        auth.signOut()
+
+        // 1. Cancel all user-scoped collectors by cancelling the session scope
+        println("DEBUG: [SESSION] Cancelling Firestore listeners (via sessionScope)")
+        _sessionScope.cancel()
+        
+        // 2. Coordinate cleanup of all repositories (RTDB, Presence, etc.)
+        println("DEBUG: [SESSION] Calling cleanupRepositories()")
+        cleanupRepositories()
+        
+        // 3. Create a new session scope for the next user
+        _sessionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        
+        // 4. Manually emit null to signal any remaining observers to stop
+        println("DEBUG: [SESSION] Emitting null to userId flow")
+        _userId.value = null
+
+        // 5. Delay to ensure all listeners are removed and flows are cancelled
+        println("DEBUG: [SESSION] Delaying to allow async cleanup and listener removal")
+        kotlinx.coroutines.delay(500)
+        println("DEBUG: [SESSION] Firestore listeners cancelled")
+
+        // 6. Actual Firebase signOut
+        try {
+            println("DEBUG: [SESSION] Signing out Firebase Auth")
+            auth.signOut()
+            println("DEBUG: [SESSION] Sign out completed")
+        } catch (e: Exception) {
+            println("DEBUG: [SESSION] Firebase auth.signOut() failed: ${e.message}")
+        } finally {
+            _isLoggingOut.value = false
+        }
     }
 
     override suspend fun sendPasswordResetEmail(email: String) {
@@ -149,6 +224,13 @@ class FirebaseAuthRepository : AuthRepository {
             } catch (_: Exception) {
                 null
             }
+        }.catch { e ->
+            if (e.message?.contains("permission", ignoreCase = true) == true) {
+                println("DEBUG: [AUTH] getUserFlow: Permission denied for $uid (expected during logout)")
+            } else {
+                println("ERROR: [AUTH] getUserFlow error for $uid: ${e.message}")
+            }
+            emit(null)
         }
     }
 

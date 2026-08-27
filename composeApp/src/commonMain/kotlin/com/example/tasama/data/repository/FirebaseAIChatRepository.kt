@@ -19,6 +19,11 @@ class FirebaseAIChatRepository(
     private val firestore = Firebase.firestore
     private val collection = firestore.collection("ai_chat_history")
 
+    override suspend fun cleanup() {
+        println("DEBUG: Cleaning up FirebaseAIChatRepository")
+        // No long-running jobs to clean up
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getMessages(): Flow<List<ChatMessage>> {
         return authRepository.userId.flatMapLatest { uid ->
@@ -33,7 +38,11 @@ class FirebaseAIChatRepository(
                             .sortedBy { it.timestamp }
                     }
                     .catch { e ->
-                        println("Firestore Error: ${e.message}")
+                        if (e.message?.contains("permission", ignoreCase = true) == true) {
+                            println("DEBUG: [AI] Permission denied in getMessages (expected during logout)")
+                        } else {
+                            println("ERROR: [AI] Error in getMessages: ${e.message}")
+                        }
                         emit(emptyList())
                     }
             }

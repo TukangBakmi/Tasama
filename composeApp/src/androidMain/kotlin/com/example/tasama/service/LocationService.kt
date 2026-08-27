@@ -38,10 +38,10 @@ class LocationService : Service() {
     private val authRepository: AuthRepository by inject()
     private val placeRepository: PlaceRepository by inject()
     private val settingsRepository: SettingsRepository by inject()
+    private val geofenceMonitor: GeofenceMonitor by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
-    private var geofenceMonitor: GeofenceMonitor? = null
     private var partnerObservationJob: Job? = null
     private var settingsObservationJob: Job? = null
     private var lastPartnerData: User? = null
@@ -71,8 +71,7 @@ class LocationService : Service() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
-        geofenceMonitor = GeofenceMonitor(authRepository, placeRepository, serviceScope)
-        geofenceMonitor?.startMonitoring()
+        geofenceMonitor.startMonitoring()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {

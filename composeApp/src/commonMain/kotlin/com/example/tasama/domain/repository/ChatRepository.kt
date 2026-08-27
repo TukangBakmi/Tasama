@@ -4,7 +4,7 @@ import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.ChatMessage
 import kotlinx.coroutines.flow.Flow
 
-interface ChatRepository {
+interface ChatRepository : SessionCleanupRepository {
     fun getChannels(): Flow<List<ChatChannel>>
     fun getChannel(channelId: String): Flow<ChatChannel?>
     fun getMessages(channelId: String): Flow<List<ChatMessage>>

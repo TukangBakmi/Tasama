@@ -8,6 +8,7 @@ import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
+import com.example.tasama.domain.service.GeofenceMonitor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -29,6 +30,7 @@ class MainViewModel(
     private val chatRepository: ChatRepository,
     private val savingsRepository: SavingsRepository,
     private val presenceRepository: PresenceRepository,
+    private val geofenceMonitor: GeofenceMonitor,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
@@ -50,6 +52,7 @@ class MainViewModel(
             authRepository.userId.collectLatest { uid ->
                 if (uid != null) {
                     presenceRepository.startMonitoring(uid)
+                    geofenceMonitor.startMonitoring()
                 } else {
                     presenceRepository.stopMonitoring()
                 }

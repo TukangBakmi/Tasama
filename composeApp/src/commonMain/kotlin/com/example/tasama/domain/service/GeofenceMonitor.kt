@@ -4,29 +4,39 @@ import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.PlaceRepository
+import com.example.tasama.domain.repository.SessionCleanupRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.math.*
 
 class GeofenceMonitor(
-    private val authRepository: AuthRepository,
+    private val authRepository: Lazy<AuthRepository>,
     private val placeRepository: PlaceRepository,
     private val scope: CoroutineScope
-) {
+) : SessionCleanupRepository {
     private val userStates = mutableMapOf<String, MutableMap<String, Boolean>>() // userId -> {placeId -> isInside}
     private var monitoringJob: Job? = null
+
+    override suspend fun cleanup() {
+        println("DEBUG: Cleaning up GeofenceMonitor - cancelling monitoring job")
+        monitoringJob?.cancel()
+        monitoringJob = null
+        userStates.clear()
+    }
 
     fun startMonitoring() {
         if (monitoringJob != null) return
         monitoringJob = scope.launch {
-            authRepository.userId.filterNotNull().collectLatest { currentUserId ->
-                monitorLocalUserOnly(currentUserId)
+            authRepository.value.userId.collectLatest { currentUserId ->
+                if (currentUserId != null) {
+                    monitorLocalUserOnly(currentUserId)
+                }
             }
         }
     }
 
     private suspend fun monitorLocalUserOnly(currentUserId: String) {
-        authRepository.getUserFlow(currentUserId).collectLatest { me ->
+        authRepository.value.getUserFlow(currentUserId).collectLatest { me ->
             if (me == null) return@collectLatest
             val partnerId = me.partnerId
             
@@ -88,7 +98,7 @@ class GeofenceMonitor(
 
     private fun sendPushNotification(targetUserId: String, message: String) {
         scope.launch {
-            authRepository.sendNotification(
+            authRepository.value.sendNotification(
                 targetUid = targetUserId,
                 title = "Place Update",
                 body = message,

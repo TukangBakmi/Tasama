@@ -6,6 +6,7 @@ data class LoginUiState(
     val name: String = "",
     val isRegister: Boolean = false,
     val isLoading: Boolean = false,
+    val isGoogleLoading: Boolean = false,
     val error: String? = null,
     val isLoggedIn: Boolean = false
 )

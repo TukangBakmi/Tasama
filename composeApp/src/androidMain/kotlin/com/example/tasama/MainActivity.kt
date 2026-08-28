@@ -32,12 +32,14 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.android.inject
+import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
     
     private val authRepository: AuthRepository by inject()
     private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by inject()
     private val mainViewModel: MainViewModel by inject()
+    private val loginViewModel: com.example.tasama.presentation.login.LoginViewModel by viewModel()
 
     private var initialChannelId by mutableStateOf<String?>(null)
     private var navigateToTab by mutableStateOf<String?>(null)
@@ -119,19 +121,42 @@ class MainActivity : ComponentActivity() {
                 onChannelNavigated = { initialChannelId = null },
                 onTabNavigated = { navigateToTab = null },
                 onGoogleSignInClick = {
+                    println("[GOOGLE] MainActivity onGoogleSignInClick triggered. VM: ${loginViewModel.hashCode()}")
+                    if (loginViewModel.uiState.value.isGoogleLoading) {
+                        println("[GOOGLE] Already loading, ignoring click")
+                        return@App
+                    }
+
                     scope.launch {
-                        android.util.Log.d("GoogleSignIn", "Sign-in button clicked")
-                        val idToken = googleSignInHelper.signIn()
-                        if (idToken != null) {
-                            android.util.Log.d("GoogleSignIn", "Got ID Token, signing into Firebase...")
-                            try {
-                                authRepository.signInWithGoogle(idToken)
-                                android.util.Log.d("GoogleSignIn", "Firebase Sign-In Successful")
-                            } catch (e: Exception) {
-                                android.util.Log.e("GoogleSignIn", "Firebase Sign-In Failed", e)
+                        println("[GOOGLE] Setting loading = true")
+                        loginViewModel.setGoogleLoading(true)
+                        println("[GOOGLE] current uiState.isGoogleLoading = ${loginViewModel.uiState.value.isGoogleLoading}")
+                        
+                        println("[GOOGLE] Launching googleSignInHelper.signIn()")
+                        try {
+                            val idToken = googleSignInHelper.signIn()
+                            if (idToken != null) {
+                                println("[GOOGLE] Got ID Token, signing into Firebase...")
+                                try {
+                                    authRepository.signInWithGoogle(idToken)
+                                    println("[GOOGLE] Firebase Sign-In Successful")
+                                    loginViewModel.setGoogleLoading(false)
+                                } catch (e: Exception) {
+                                    println("[GOOGLE] Firebase Sign-In Failed: ${e.message}")
+                                    loginViewModel.setLoginError("Google Sign-In failed. Please try again.")
+                                }
+                            } else {
+                                println("[GOOGLE] sign-in cancelled or failed (idToken is null)")
+                                loginViewModel.setGoogleLoading(false)
                             }
-                        } else {
-                            android.util.Log.e("GoogleSignIn", "Failed to get ID Token (idToken is null)")
+                        } catch (e: Exception) {
+                            println("[GOOGLE] Error during sign in process: ${e.message}")
+                            val errorMessage = if (e.message?.contains("internet connection", ignoreCase = true) == true) {
+                                e.message
+                            } else {
+                                "Google Sign-In failed. Please try again."
+                            }
+                            loginViewModel.setLoginError(errorMessage)
                         }
                     }
                 }

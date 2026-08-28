@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +44,9 @@ fun LoginScreen(
     onGoogleSignInClick: () -> Unit = {},
     onLoginSuccess: () -> Unit
 ) {
+    println("[GOOGLE] LoginScreen recomposing. VM: ${viewModel.hashCode()}")
     val uiState by viewModel.uiState.collectAsState()
+    println("[GOOGLE] LoginScreen uiState.isGoogleLoading = ${uiState.isGoogleLoading}")
     val pagerState = rememberPagerState(pageCount = { 2 })
     val focusManager = LocalFocusManager.current
 
@@ -344,6 +347,7 @@ fun LoginScreen(
                                     .fillMaxWidth()
                                     .height(50.dp),
                                 shape = RoundedCornerShape(12.dp),
+                                enabled = !uiState.isLoading && !uiState.isGoogleLoading,
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = MaterialTheme.colorScheme.onSurface
                                 )
@@ -352,9 +356,17 @@ fun LoginScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    Text("G", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Continue with Google")
+                                    if (uiState.isGoogleLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text("G", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text("Continue with Google")
+                                    }
                                 }
                             }
                         }
@@ -363,6 +375,33 @@ fun LoginScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        if (uiState.isGoogleLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                    .pointerInput(Unit) {},
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 4.dp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Signing in with Google...",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
     }
 }

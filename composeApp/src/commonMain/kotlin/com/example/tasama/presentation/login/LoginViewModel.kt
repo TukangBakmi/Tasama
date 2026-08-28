@@ -12,6 +12,10 @@ class LoginViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
+    init {
+        println("[GOOGLE] LoginViewModel initialized: ${this.hashCode()}")
+    }
+
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -136,5 +140,23 @@ class LoginViewModel(
 
     fun resetState() {
         _uiState.value = LoginUiState()
+    }
+
+    fun setGoogleLoading(isLoading: Boolean) {
+        println("[GOOGLE] setGoogleLoading($isLoading) for VM: ${this.hashCode()}")
+        _uiState.update { 
+            val newState = it.copy(isGoogleLoading = isLoading, error = if (isLoading) null else it.error)
+            println("[GOOGLE] LoginUiState isGoogleLoading = ${newState.isGoogleLoading}")
+            newState
+        }
+    }
+
+    fun setLoginError(error: String?) {
+        println("[GOOGLE] setLoginError($error) for VM: ${this.hashCode()}")
+        _uiState.update { 
+            val newState = it.copy(error = error, isGoogleLoading = false)
+            println("[GOOGLE] LoginUiState loginError = ${newState.error}")
+            newState
+        }
     }
 }

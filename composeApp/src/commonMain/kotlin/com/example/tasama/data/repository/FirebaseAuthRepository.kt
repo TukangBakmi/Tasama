@@ -81,20 +81,28 @@ class FirebaseAuthRepository(
     }
 
     override suspend fun signInWithGoogle(idToken: String) {
-        val credential = dev.gitlive.firebase.auth.GoogleAuthProvider.credential(idToken, null)
-        val result = auth.signInWithCredential(credential)
-        val user = result.user
-        if (user != null) {
-            val doc = firestore.collection("users").document(user.uid).get()
-            if (!doc.exists) {
-                val userData = User(
-                    id = user.uid,
-                    shortId = generateShortId(),
-                    email = user.email ?: "",
-                    name = user.displayName ?: "User"
-                )
-                firestore.collection("users").document(user.uid).set(userData)
+        println("[GOOGLE] FirebaseAuthRepository.signInWithGoogle called")
+        try {
+            val credential = dev.gitlive.firebase.auth.GoogleAuthProvider.credential(idToken, null)
+            val result = auth.signInWithCredential(credential)
+            val user = result.user
+            println("[GOOGLE] Firebase signInWithCredential successful. User UID: ${user?.uid}")
+            if (user != null) {
+                val doc = firestore.collection("users").document(user.uid).get()
+                if (!doc.exists) {
+                    println("[GOOGLE] Creating new user document in Firestore")
+                    val userData = User(
+                        id = user.uid,
+                        shortId = generateShortId(),
+                        email = user.email ?: "",
+                        name = user.displayName ?: "User"
+                    )
+                    firestore.collection("users").document(user.uid).set(userData)
+                }
             }
+        } catch (e: Exception) {
+            println("[GOOGLE] Firebase signInWithCredential failed: ${e.message}")
+            throw e
         }
     }
 

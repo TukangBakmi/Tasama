@@ -35,8 +35,12 @@ filekit = "0.8.8"
 coil3 = "3.5.0"
 glide = "4.16.0"
 firebase-messaging-android = "24.1.1"
+androidx-core-splashscreen = "1.0.1"
+androidx-appcompat = "1.7.0"
 
 [libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-core-splashscreen" }
 glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
 androidx-auth-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidx-auth-credentials" }
 androidx-auth-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidx-auth-play-services" }

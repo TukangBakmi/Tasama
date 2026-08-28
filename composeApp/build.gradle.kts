@@ -48,6 +48,8 @@ kotlin {
             implementation(libs.firebase.messaging.android)
             implementation(libs.glide)
             implementation(libs.androidx.lifecycle.process)
+            implementation(libs.androidx.core.splashscreen)
+            implementation(libs.androidx.appcompat)
         }
         commonMain.dependencies {
             implementation(libs.filekit.compose)

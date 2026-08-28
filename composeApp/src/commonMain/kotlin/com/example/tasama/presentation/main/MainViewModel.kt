@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -74,16 +75,18 @@ class MainViewModel(
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val authState: StateFlow<AuthState> = authRepository.userId
-        .flatMapLatest { uid ->
-            flow {
-                if (uid != null) {
-                    emit(AuthState.Authenticated(isGuest = authRepository.isGuest()))
-                } else {
-                    emit(AuthState.Unauthenticated)
-                }
+        .mapLatest { uid ->
+            if (uid != null) {
+                AuthState.Authenticated(isGuest = authRepository.isGuest())
+            } else {
+                AuthState.Unauthenticated
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState.Loading)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = AuthState.Loading
+        )
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val hasPartner: StateFlow<Boolean> = authRepository.userId

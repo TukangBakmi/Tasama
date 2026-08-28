@@ -1,15 +1,18 @@
 package com.example.tasama
 
 import android.Manifest
+import android.app.UiModeManager
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,22 +26,29 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.example.tasama.auth.GoogleSignInHelper
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.model.AppTheme
+import com.example.tasama.domain.repository.SettingsRepository
+import com.example.tasama.presentation.main.AuthState
 import com.example.tasama.presentation.main.MainViewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     
     private val authRepository: AuthRepository by inject()
-    private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by inject()
-    private val mainViewModel: MainViewModel by inject()
+    private val settingsRepository: SettingsRepository by inject()
+    private val partnerViewModel: com.example.tasama.presentation.partner.PartnerViewModel by viewModel()
+    private val mainViewModel: MainViewModel by viewModel()
     private val loginViewModel: com.example.tasama.presentation.login.LoginViewModel by viewModel()
 
     private var initialChannelId by mutableStateOf<String?>(null)
@@ -63,6 +73,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        android.util.Log.d("TasamaSplash", "MainActivity.onCreate - Started")
+        val settings = runBlocking { settingsRepository.settings.first() }
+        android.util.Log.d("TasamaTheme", "MainActivity.onCreate - Theme setting: ${settings.theme}")
+        setNightMode(settings.theme)
+
+        // Ensure authState flow is active by subscribing to it
+        lifecycleScope.launch {
+            mainViewModel.authState.collect { state ->
+                android.util.Log.d("TasamaSplash", "MainActivity - observed AuthState: $state")
+            }
+        }
+        
+        val uiMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        android.util.Log.d("TasamaTheme", "MainActivity.onCreate - UI Mode: $uiMode (Night: ${android.content.res.Configuration.UI_MODE_NIGHT_YES}, Light: ${android.content.res.Configuration.UI_MODE_NIGHT_NO})")
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -249,6 +274,34 @@ class MainActivity : ComponentActivity() {
             action = com.example.tasama.service.LocationService.ACTION_STOP
         }
         startService(intent)
+    }
+
+    private fun setNightMode(theme: AppTheme) {
+        val mode = when (theme) {
+            AppTheme.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            AppTheme.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+            AppTheme.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        if (AppCompatDelegate.getDefaultNightMode() != mode) {
+            AppCompatDelegate.setDefaultNightMode(mode)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+            val applicationMode = when (theme) {
+                AppTheme.LIGHT -> UiModeManager.MODE_NIGHT_NO
+                AppTheme.DARK -> UiModeManager.MODE_NIGHT_YES
+                AppTheme.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+            }
+            try {
+                // Using reflection to set application night mode to avoid potential compilation issues
+                // with property access if the environment is not synced correctly.
+                val method = uiModeManager.javaClass.getMethod("setApplicationNightMode", Int::class.javaPrimitiveType)
+                method.invoke(uiModeManager, applicationMode)
+            } catch (e: Exception) {
+                android.util.Log.e("TasamaTheme", "Failed to set application night mode", e)
+            }
+        }
     }
 
     private fun startBatteryMonitoring() {

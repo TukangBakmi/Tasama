@@ -128,46 +128,17 @@ fun MainScreen(
                 Box(modifier = Modifier.padding(globalPadding)) {
                     when (authState) {
                         is AuthState.Loading -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(100.dp)
-                                            .shadow(8.dp, androidx.compose.foundation.shape.CircleShape)
-                                            .clip(androidx.compose.foundation.shape.CircleShape)
-                                            .background(Color.Transparent),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Image(
-                                            painter = painterResource(Res.drawable.logo),
-                                            contentDescription = "Tasama Logo",
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .scale(1.1f),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = "Tasama",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(24.dp))
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(32.dp),
-                                        strokeWidth = 3.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                            // Empty box while loading to let the Android System Splash Screen handle the UI
+                            Box(modifier = Modifier.fillMaxSize())
+                            LaunchedEffect(Unit) {
+                                println("DEBUG: [TasamaSplash] MainScreen - AuthState.Loading")
                             }
                         }
 
                         is AuthState.Unauthenticated -> {
+                            LaunchedEffect(Unit) {
+                                println("DEBUG: [TasamaSplash] MainScreen - AuthState.Unauthenticated (Navigating to Login)")
+                            }
                             LoginScreen(
                                 onGoogleSignInClick = onGoogleSignInClick,
                                 onLoginSuccess = {}
@@ -175,6 +146,9 @@ fun MainScreen(
                         }
 
                         is AuthState.Authenticated -> {
+                            LaunchedEffect(Unit) {
+                                println("DEBUG: [TasamaSplash] MainScreen - AuthState.Authenticated (Navigating to Dashboard)")
+                            }
                             val hasPartner by viewModel.hasPartner.collectAsState()
                             val unreadCount by viewModel.unreadChannelsCount.collectAsState()
                             val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()

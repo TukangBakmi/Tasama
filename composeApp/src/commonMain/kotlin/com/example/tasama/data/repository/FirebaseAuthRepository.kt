@@ -28,17 +28,25 @@ class FirebaseAuthRepository(
 
     private val _userId = MutableStateFlow<String?>(null)
     private val _isLoggingOut = MutableStateFlow(false)
+    private val _isInitialized = MutableStateFlow(false)
     override val isLoggingOut = _isLoggingOut.asStateFlow()
 
-    override val userId: Flow<String?> = combine(_userId, _isLoggingOut) { uid, loggingOut ->
-        if (loggingOut) null else uid
-    }.distinctUntilChanged()
+    override val userId: Flow<String?> = _isInitialized
+        .filter { it }
+        .flatMapLatest {
+            combine(_userId, _isLoggingOut) { uid, loggingOut ->
+                if (loggingOut) null else uid
+            }
+        }.distinctUntilChanged()
 
     init {
         repositoryScope.launch {
             auth.authStateChanged.collect { user ->
                 println("DEBUG: [AUTH] AuthState changed: ${user?.uid}")
                 _userId.value = user?.uid
+                if (!_isInitialized.value) {
+                    _isInitialized.value = true
+                }
             }
         }
     }

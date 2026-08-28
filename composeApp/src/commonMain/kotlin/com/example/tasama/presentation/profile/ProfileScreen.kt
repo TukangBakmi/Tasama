@@ -112,12 +112,13 @@ fun ProfileScreen(
             var showUnlinkConfirmDialog by remember { mutableStateOf(false) }
             var showEditNameDialog by remember { mutableStateOf(false) }
             var showAvatarSelectionDialog by remember { mutableStateOf(false) }
+            var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
             ProfileContent(
                 uiState = uiState,
                 onExportExcel = viewModel::exportToExcel,
                 onExportPdf = viewModel::exportToPdf,
-                onLogout = viewModel::logout,
+                onLogout = { showLogoutConfirmDialog = true },
                 onCopyId = { id ->
                     clipboardManager.setText(AnnotatedString(id))
                     viewModel.onIdCopied()
@@ -202,6 +203,30 @@ fun ProfileScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showUnlinkConfirmDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            if (showLogoutConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showLogoutConfirmDialog = false },
+                    title = { Text("Log out?") },
+                    text = { Text("Are you sure you want to log out of your account?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.logout()
+                                showLogoutConfirmDialog = false
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Log out")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showLogoutConfirmDialog = false }) {
                             Text("Cancel")
                         }
                     }

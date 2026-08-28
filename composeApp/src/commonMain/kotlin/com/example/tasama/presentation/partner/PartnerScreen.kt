@@ -39,6 +39,7 @@ fun PartnerScreen(
     val clipboardManager = LocalClipboardManager.current
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
 
     // Side effect handlers using snapshotFlow to prevent cancellation when state is cleared
@@ -73,7 +74,7 @@ fun PartnerScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                uiState.isGuest -> GuestPartnerContent(onLogin = viewModel::logout)
+                uiState.isGuest -> GuestPartnerContent(onLogin = { showLogoutConfirmDialog = true })
                 uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 uiState.isLinked -> {
                     if (uiState.settings.partnerMapEnabled) {
@@ -125,6 +126,30 @@ fun PartnerScreen(
                 )
             }
         }
+    }
+
+    if (showLogoutConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmDialog = false },
+            title = { Text("Log out?") },
+            text = { Text("Are you sure you want to log out of your account?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.logout()
+                        showLogoutConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Log out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDatePicker) {

@@ -173,6 +173,7 @@ class ProfileViewModel(
     }
 
     fun logout() {
+        if (_uiState.value.isLoading) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             authRepository.signOut()

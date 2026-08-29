@@ -1,5 +1,7 @@
 package com.example.tasama.presentation.chat
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.PresenceState
@@ -7,6 +9,7 @@ import com.example.tasama.domain.repository.PresenceState
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val inputText: String = "",
+    val textFieldValue: TextFieldValue = TextFieldValue(""),
     val isLoadingMore: Boolean = false,
     val hasMoreMessages: Boolean = true,
     val channelName: String = "Chat",

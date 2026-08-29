@@ -213,6 +213,7 @@ fun ChatListScreen(
                                     otherUser = user,
                                     presence = presence,
                                     typingName = typingName,
+                                    draft = uiState.drafts[channel.id],
                                     isSelected = isSelected,
                                     isSelectionMode = uiState.isSelectionMode,
                                     onClick = {
@@ -391,6 +392,7 @@ fun ChannelItem(
     otherUser: User?,
     presence: PresenceState,
     typingName: String? = null,
+    draft: String? = null,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     onClick: () -> Unit,
@@ -516,11 +518,32 @@ fun ChannelItem(
                     }
                 }
 
+                val previewText = when {
+                    typingName != null -> "$typingName is typing..."
+                    draft != null -> "Draft: $draft"
+                    else -> channel?.lastMessage ?: "No messages yet"
+                }
+
+                val previewColor = when {
+                    typingName != null -> MaterialTheme.colorScheme.primary
+                    draft != null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
+                if (typingName == null && draft != null) {
+                    Text(
+                        text = "Draft: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
                 Text(
-                    text = if (typingName != null) "$typingName is typing..." else (channel?.lastMessage ?: "No messages yet"),
+                    text = if (typingName == null && draft != null) draft else previewText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (typingName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (typingName != null) FontWeight.Medium else FontWeight.Normal,
+                    color = previewColor,
+                    fontWeight = if (typingName != null || draft != null) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -633,7 +656,7 @@ fun AddContactDialog(
 }
 
 @Composable
-private fun ContactSelectionItem(
+fun ContactSelectionItem(
     user: User,
     onSelect: () -> Unit,
     onDelete: (() -> Unit)? = null,

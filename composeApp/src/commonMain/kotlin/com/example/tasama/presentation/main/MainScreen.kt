@@ -182,8 +182,11 @@ fun MainScreen(
                                             val density = LocalDensity.current
                                             val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
+                                            val currentItem = items[pagerState.currentPage]
+                                            val isPartnerLinking = currentItem == BottomNavItem.Partner && !hasPartner
+                                            
                                             AnimatedVisibility(
-                                                visible = !isKeyboardVisible,
+                                                visible = !isKeyboardVisible || isPartnerLinking,
                                                 enter = slideInVertically(initialOffsetY = { it }),
                                                 exit = slideOutVertically(targetOffsetY = { it })
                                             ) {

@@ -33,12 +33,15 @@ import kotlinx.coroutines.MainScope
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
+import com.example.tasama.data.repository.DataStoreDraftRepository
 import com.example.tasama.data.repository.DataStoreSettingsRepository
+import com.example.tasama.domain.repository.DraftRepository
 import com.example.tasama.domain.repository.SettingsRepository
 
 val appModule = module {
 
     single<SettingsRepository> { DataStoreSettingsRepository(get()) }
+    single<DraftRepository> { DataStoreDraftRepository(get()) }
 
     single<TransactionRepository> {
         FirebaseTransactionRepository(get())
@@ -90,10 +93,10 @@ val appModule = module {
     viewModel { TransactionViewModel(get(), get()) }
     viewModel { AIViewModel(get(), get(), get(), get(), get()) }
     viewModel { SavingsViewModel(get(), get(), get()) }
-    viewModel { ChatViewModel(get(), get(), get(), get()) }
-    viewModel { ChatListViewModel(get(), get(), get(), get()) }
+    viewModel { ChatViewModel(get(), get(), get(), get(), get()) }
+    viewModel { ChatListViewModel(get(), get(), get(), get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
-    viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { MainViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

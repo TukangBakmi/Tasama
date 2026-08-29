@@ -3,17 +3,22 @@ package com.example.tasama.presentation.partner
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.tasama.presentation.chat.ContactSelectionItem
+import com.example.tasama.presentation.chat.ChatListUiState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -114,15 +119,19 @@ fun PartnerScreen(
                 }
                 else -> LinkingContent(
                     uiState = uiState,
-                    onShortIdChange = viewModel::onPartnerShortIdChange,
-                    onSendRequest = viewModel::sendPartnerRequest,
+                    onSearch = viewModel::searchUser,
+                    onConfirm = { shortId ->
+                        viewModel.onPartnerShortIdChange(shortId)
+                        viewModel.sendPartnerRequest()
+                    },
                     onAcceptRequest = { showDatePicker = true },
                     onDeclineRequest = viewModel::declinePartnerRequest,
                     onCancelRequest = viewModel::cancelPartnerRequest,
                     onCopyId = { id ->
                         clipboardManager.setText(AnnotatedString(id))
                         viewModel.onIdCopied()
-                    }
+                    },
+                    onClearError = viewModel::clearError
                 )
             }
         }
@@ -199,7 +208,10 @@ fun PartnerScreen(
 @Composable
 fun GuestPartnerContent(onLogin: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -228,17 +240,125 @@ fun GuestPartnerContent(onLogin: () -> Unit) {
 }
 
 @Composable
+fun LinkPartnerDialog(
+    uiState: PartnerUiState,
+    onDismiss: () -> Unit,
+    onSearch: (String) -> Unit,
+    onConfirm: (String) -> Unit,
+    onClearError: () -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+
+    LaunchedEffect(query) {
+        onSearch(query)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Link Partner") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Search by name or ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                )
+
+                if (uiState.isSearchingUser) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+
+                uiState.searchedUser?.let { user ->
+                    if (!uiState.filteredContacts.any { it.id == user.id }) {
+                        Text("Found User", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        ContactSelectionItem(
+                            user = user,
+                            onSelect = { onConfirm(user.shortId) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                }
+
+                if (uiState.filteredContacts.isNotEmpty()) {
+                    Text(
+                        if (query.isEmpty()) "Suggested Contacts" else "Contacts",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(uiState.filteredContacts) { contact ->
+                            ContactSelectionItem(
+                                user = contact,
+                                onSelect = { onConfirm(contact.shortId) }
+                            )
+                        }
+                    }
+                } else if (!uiState.isSearchingUser && query.isNotEmpty() && uiState.searchedUser == null) {
+                    Text(
+                        "No users found",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+
+                if (uiState.error != null) {
+                    Text(
+                        text = uiState.error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
+@Composable
 fun LinkingContent(
     uiState: PartnerUiState,
-    onShortIdChange: (String) -> Unit,
-    onSendRequest: () -> Unit,
+    onSearch: (String) -> Unit,
+    onConfirm: (String) -> Unit,
     onAcceptRequest: () -> Unit,
     onDeclineRequest: () -> Unit,
     onCancelRequest: () -> Unit,
-    onCopyId: (String) -> Unit
+    onCopyId: (String) -> Unit,
+    onClearError: () -> Unit
 ) {
+    var showLinkDialog by remember { mutableStateOf(false) }
+
+    if (showLinkDialog) {
+        LinkPartnerDialog(
+            uiState = uiState,
+            onDismiss = { showLinkDialog = false },
+            onSearch = onSearch,
+            onConfirm = { shortId ->
+                onConfirm(shortId)
+                showLinkDialog = false
+            },
+            onClearError = onClearError
+        )
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -268,24 +388,16 @@ fun LinkingContent(
             }
             else -> {
                 Text("Link a Partner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Enter your partner's 12-digit ID to send a request.", textAlign = TextAlign.Center)
+                Text("Connect with your partner to share location and savings.", textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(24.dp))
-                OutlinedTextField(
-                    value = uiState.partnerShortIdInput,
-                    onValueChange = {
-                        if (it.all { char -> char.isDigit() } && it.length <= 12) {
-                            onShortIdChange(it)
-                        }
-                    },
-                    label = { Text("Partner ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onSendRequest, modifier = Modifier.fillMaxWidth(), enabled = uiState.partnerShortIdInput.length == 12) {
-                    Text("Send Request")
+                
+                Button(
+                    onClick = { showLinkDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Link Partner")
                 }
+
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(
                     modifier = Modifier
@@ -388,7 +500,10 @@ fun DisabledPartnerMapContent(
     onUpdatePartnerMapEnabled: (Boolean) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {

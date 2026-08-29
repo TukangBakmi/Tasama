@@ -22,7 +22,8 @@ class ChatViewModel(
     private val repository: ChatRepository,
     private val authRepository: AuthRepository,
     private val presenceRepository: PresenceRepository,
-    private val notificationService: com.example.tasama.domain.service.NotificationService
+    private val notificationService: com.example.tasama.domain.service.NotificationService,
+    private val draftRepository: com.example.tasama.domain.repository.DraftRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -36,6 +37,7 @@ class ChatViewModel(
 
     private var otherUserJob: Job? = null
     private var presenceJob: Job? = null
+    private var draftJob: Job? = null
 
     private val _isResumed = MutableStateFlow(false)
 
@@ -92,6 +94,8 @@ class ChatViewModel(
             viewModelScope.launch {
                 try {
                     repository.setTypingStatus(oldChannelId, false)
+                    // Save draft of the old channel
+                    draftRepository.saveDraft(oldChannelId, _uiState.value.inputText)
                 } catch (_: Exception) {}
             }
             lastTypingStatusSent = null
@@ -100,6 +104,7 @@ class ChatViewModel(
         currentChannelId = channelId
         observeMessages(channelId)
         observeTypingUsers(channelId)
+        observeDraft(channelId)
         
         // Only mark as read and set active channel if the app is in foreground
         if (_isResumed.value) {
@@ -121,6 +126,12 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        // Save draft before clearing
+        currentChannelId?.let { channelId ->
+            viewModelScope.launch {
+                draftRepository.saveDraft(channelId, _uiState.value.inputText)
+            }
+        }
         // Clear active channel when leaving the chat
         viewModelScope.launch {
             try {
@@ -224,6 +235,23 @@ class ChatViewModel(
         }
     }
 
+    private fun observeDraft(channelId: String) {
+        draftJob?.cancel()
+        draftJob = viewModelScope.launch {
+            draftRepository.getDraft(channelId).collect { draft ->
+                if (draft != null && _uiState.value.inputText.isEmpty()) {
+                    _uiState.update { it.copy(
+                        inputText = draft,
+                        textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                            text = draft,
+                            selection = androidx.compose.ui.text.TextRange(draft.length)
+                        )
+                    ) }
+                }
+            }
+        }
+    }
+
     fun observeOtherUserStatus(userId: String) {
         otherUserJob?.cancel()
         otherUserJob = viewModelScope.launch {
@@ -297,9 +325,18 @@ class ChatViewModel(
         }
     }
 
-    fun onMessageChange(message: String) {
-        _uiState.update { it.copy(inputText = message) }
-        updateTypingStatus(message.isNotEmpty())
+    fun onTextFieldValueChange(newValue: androidx.compose.ui.text.input.TextFieldValue) {
+        _uiState.update { it.copy(
+            textFieldValue = newValue,
+            inputText = newValue.text
+        ) }
+        updateTypingStatus(newValue.text.isNotEmpty())
+        
+        currentChannelId?.let { channelId ->
+            viewModelScope.launch {
+                draftRepository.saveDraft(channelId, newValue.text)
+            }
+        }
     }
 
     fun toggleMessageSelection(messageId: String) {
@@ -453,9 +490,12 @@ class ChatViewModel(
                     it.copy(
                         isSending = false,
                         inputText = "",
+                        textFieldValue = androidx.compose.ui.text.input.TextFieldValue(""),
                         replyingToMessage = null
                     )
                 }
+                // Clear draft on successful send
+                draftRepository.clearDraft(channelId)
             } catch (e: Exception) {
                 // Restore sending state on error so user can retry
                 _uiState.update {

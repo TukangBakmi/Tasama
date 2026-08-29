@@ -8,6 +8,7 @@ import com.example.tasama.domain.model.LiveLocation
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.DirectionsRepository
 import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PlaceRepository
@@ -44,11 +45,16 @@ data class PartnerUiState(
     val isWeatherLoading: Boolean = false,
     val weatherError: String? = null,
     val partnerPresence: PresenceState = PresenceState.Offline(0L),
-    val settings: AppSettings = AppSettings()
+    val settings: AppSettings = AppSettings(),
+    val searchedUser: User? = null,
+    val isSearchingUser: Boolean = false,
+    val suggestedContacts: List<User> = emptyList(),
+    val filteredContacts: List<User> = emptyList()
 )
 
 class PartnerViewModel(
     private val authRepository: AuthRepository,
+    private val chatRepository: ChatRepository,
     private val placeRepository: PlaceRepository,
     private val directionsRepository: DirectionsRepository,
     private val weatherRepository: WeatherRepository,
@@ -83,6 +89,84 @@ class PartnerViewModel(
     init {
         observeSettings()
         refresh()
+        loadSuggestedContacts()
+    }
+
+    private fun loadSuggestedContacts() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            authRepository.getUserFlow(uid).collect { user ->
+                val contactIds = user?.contactIds ?: emptyList()
+                val contacts = contactIds.mapNotNull { authRepository.getUser(it) }
+                
+                // Sort by last message timestamp from chat repository
+                chatRepository.getChannels().first().let { channels ->
+                    val suggested = contacts.sortedWith(compareByDescending<User> { contact ->
+                        channels.find { channel -> channel.participantIds.contains(contact.id) }?.lastMessageTimestamp ?: 0L
+                    }.thenBy { it.name })
+                    
+                    _uiState.update { it.copy(suggestedContacts = suggested, filteredContacts = suggested) }
+                }
+            }
+        }
+    }
+
+    fun searchUser(query: String) {
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchedUser = null, error = null, filteredContacts = uiState.value.suggestedContacts) }
+            return
+        }
+
+        val currentUid = authRepository.getCurrentUserId()
+        val isNumericId = query.length == 12 && query.all { it.isDigit() }
+
+        // Filter suggested contacts by name or ID in real-time
+        val filtered = uiState.value.suggestedContacts.filter {
+            it.name.contains(query, ignoreCase = true) || it.shortId == query
+        }
+        _uiState.update { it.copy(filteredContacts = filtered) }
+
+        if (isNumericId) {
+            _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
+            viewModelScope.launch {
+                try {
+                    val userId = authRepository.getUserIdFromShortId(query)
+                    if (userId != null) {
+                        if (userId == currentUid) {
+                            _uiState.update { it.copy(error = "You cannot link with yourself", isSearchingUser = false) }
+                            return@launch
+                        }
+                        
+                        val user = authRepository.getUser(userId)
+                        if (user != null) {
+                            // Eligibility check (not already someone's partner, etc. - simple check for now)
+                            if (user.partnerId != null) {
+                                _uiState.update { it.copy(error = "User already has a partner", isSearchingUser = false) }
+                            } else {
+                                _uiState.update { it.copy(searchedUser = user, isSearchingUser = false) }
+                            }
+                        } else {
+                            _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                        }
+                    } else {
+                        _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                    }
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
+                }
+            }
+        }
+    }
+
+    fun clearSearch() {
+        _uiState.update { 
+            it.copy(
+                searchedUser = null, 
+                error = null, 
+                filteredContacts = it.suggestedContacts,
+                partnerShortIdInput = ""
+            ) 
+        }
     }
 
     private fun observeSettings() {

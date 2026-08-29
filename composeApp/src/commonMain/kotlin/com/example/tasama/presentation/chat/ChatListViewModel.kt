@@ -22,7 +22,8 @@ class ChatListViewModel(
     private val repository: ChatRepository,
     private val aiChatRepository: AIChatRepository,
     private val authRepository: AuthRepository,
-    private val presenceRepository: PresenceRepository
+    private val presenceRepository: PresenceRepository,
+    private val draftRepository: com.example.tasama.domain.repository.DraftRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatListUiState())
@@ -33,12 +34,14 @@ class ChatListViewModel(
     private var contactsJob: Job? = null
     private var presenceJob: Job? = null
     private var typingJob: Job? = null
+    private var draftsJob: Job? = null
 
     val currentUserId: String?
         get() = repository.getCurrentUserId()
 
     init {
         observeUserSession()
+        observeDrafts()
     }
 
     private fun observeUserSession() {
@@ -95,6 +98,15 @@ class ChatListViewModel(
                 }.toMap()
             }.collect { typingMap ->
                 _uiState.update { it.copy(typingNames = typingMap) }
+            }
+        }
+    }
+
+    private fun observeDrafts() {
+        draftsJob?.cancel()
+        draftsJob = viewModelScope.launch {
+            draftRepository.getAllDrafts().collect { draftsMap ->
+                _uiState.update { it.copy(drafts = draftsMap) }
             }
         }
     }

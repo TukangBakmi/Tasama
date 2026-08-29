@@ -2,7 +2,11 @@ package com.example.tasama.presentation.chat
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.Orientation
@@ -186,7 +190,15 @@ fun ChatScreen(
                                         }
                                     }
 
-                                    if (statusText.isNotEmpty()) {
+                                    /* 
+                                    if (uiState.typingIndicatorText != null) {
+                                        Text(
+                                            uiState.typingIndicatorText!!,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    } else */ if (statusText.isNotEmpty()) {
                                         Text(
                                             statusText,
                                             style = MaterialTheme.typography.labelSmall,
@@ -425,9 +437,16 @@ fun ChatContent(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom)
             ) {
+                if (uiState.typingUsers.isNotEmpty() && uiState.otherUser != null) {
+                    item(key = "typing_indicator") {
+                        TypingBubble()
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+
                 items(
                     count = reversedMessages.size,
-                    key = { reversedMessages[it].id }
+                    key = { index -> reversedMessages[index].id }
                 ) { index ->
                     val message = reversedMessages[index]
                     val date = Instant.fromEpochMilliseconds(message.timestamp)
@@ -464,6 +483,12 @@ fun ChatContent(
                                 onReplyClick(repliedId, timestamp)
                             }
                         )
+                    }
+                }
+
+                if (uiState.typingUsers.isNotEmpty() && uiState.otherUser != null) {
+                    item {
+                        TypingBubble()
                     }
                 }
 
@@ -899,6 +924,64 @@ fun ReplyPreview(
                     contentDescription = "Cancel Reply",
                     modifier = Modifier.size(18.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun TypingBubble(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    
+    val dot1Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot1"
+    )
+    
+    val dot2Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, delayMillis = 200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot2"
+    )
+    
+    val dot3Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, delayMillis = 400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot3"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp),
+            modifier = Modifier.width(60.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot1Alpha)))
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot2Alpha)))
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot3Alpha)))
             }
         }
     }

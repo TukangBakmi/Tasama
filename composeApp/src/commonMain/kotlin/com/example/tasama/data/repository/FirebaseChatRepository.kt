@@ -6,6 +6,7 @@ import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.database.database
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,6 +24,7 @@ class FirebaseChatRepository(
     private val authRepository: AuthRepository
 ) : ChatRepository {
     private val firestore = Firebase.firestore
+    private val database = Firebase.database
     private val channelsCollection = firestore.collection("chat_channels")
 
     override suspend fun cleanup() {
@@ -404,6 +406,26 @@ class FirebaseChatRepository(
         val uid = authRepository.getCurrentUserId() ?: return
         firestore.collection("users").document(uid).updateFields {
             "activeChannelId" to channelId
+        }
+    }
+
+    override fun getTypingUsers(channelId: String): Flow<Set<String>> {
+        return database.reference("typing/$channelId").valueEvents.map { snapshot ->
+            snapshot.children
+                .filter { child -> child.child("isTyping").value<Boolean?>() == true }
+                .mapNotNull { it.key }
+                .toSet()
+        }.catch { emit(emptySet()) }
+    }
+
+    override suspend fun setTypingStatus(channelId: String, isTyping: Boolean) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val typingRef = database.reference("typing/$channelId/$uid")
+        if (isTyping) {
+            typingRef.child("isTyping").setValue(true)
+            typingRef.onDisconnect().removeValue()
+        } else {
+            typingRef.removeValue()
         }
     }
 }

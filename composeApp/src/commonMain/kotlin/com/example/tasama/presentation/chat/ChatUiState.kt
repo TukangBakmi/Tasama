@@ -17,6 +17,9 @@ data class ChatUiState(
     val showDeleteConfirmation: Boolean = false,
     val replyingToMessage: ChatMessage? = null,
     val isSending: Boolean = false,
+    val participantNames: Map<String, String> = emptyMap(),
+    val typingUsers: Set<String> = emptySet(),
+    val typingIndicatorText: String? = null,
     val scrollToMessageId: String? = null,
     val highlightedMessageId: String? = null,
     val error: String? = null

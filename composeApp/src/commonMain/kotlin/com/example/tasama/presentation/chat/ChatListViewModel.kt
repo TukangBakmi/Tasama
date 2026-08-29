@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
@@ -31,6 +32,7 @@ class ChatListViewModel(
     private var usersJob: Job? = null
     private var contactsJob: Job? = null
     private var presenceJob: Job? = null
+    private var typingJob: Job? = null
 
     val currentUserId: String?
         get() = repository.getCurrentUserId()
@@ -47,6 +49,7 @@ class ChatListViewModel(
                     usersJob?.cancel()
                     contactsJob?.cancel()
                     presenceJob?.cancel()
+                    typingJob?.cancel()
                     _uiState.value = ChatListUiState()
                 } else {
                     loadChannels()
@@ -63,6 +66,35 @@ class ChatListViewModel(
             repository.getChannels().collectLatest { channels ->
                 _uiState.update { it.copy(channels = channels, isLoading = false) }
                 observeUsersStatus(channels)
+                observeTypingStatuses(channels)
+            }
+        }
+    }
+
+    private fun observeTypingStatuses(channels: List<ChatChannel>) {
+        typingJob?.cancel()
+        val currentUid = currentUserId ?: return
+        
+        typingJob = viewModelScope.launch {
+            val typingFlows = channels.map { channel ->
+                repository.getTypingUsers(channel.id).map { typingIds ->
+                    val otherTypingId = typingIds.find { it != currentUid }
+                    val name = otherTypingId?.let { channel.participantNames[it] }
+                    channel.id to name
+                }
+            }
+
+            if (typingFlows.isEmpty()) {
+                _uiState.update { it.copy(typingNames = emptyMap()) }
+                return@launch
+            }
+
+            combine(typingFlows) { results ->
+                results.mapNotNull { (channelId, name) ->
+                    if (name != null) channelId to name else null
+                }.toMap()
+            }.collect { typingMap ->
+                _uiState.update { it.copy(typingNames = typingMap) }
             }
         }
     }

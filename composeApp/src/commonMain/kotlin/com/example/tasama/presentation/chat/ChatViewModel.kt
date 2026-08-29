@@ -9,6 +9,9 @@ import com.example.tasama.domain.repository.PresenceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.toLocalDateTime
@@ -28,6 +31,8 @@ class ChatViewModel(
     private var currentChannelId: String? = null
     private var messagesJob: Job? = null
     private var channelInfoJob: Job? = null
+    private var typingJob: Job? = null
+    private var typingStatusJob: Job? = null
 
     private var otherUserJob: Job? = null
     private var presenceJob: Job? = null
@@ -57,6 +62,7 @@ class ChatViewModel(
             viewModelScope.launch {
                 try {
                     repository.setActiveChannel(null)
+                    currentChannelId?.let { repository.setTypingStatus(it, false) }
                 } catch (_: Exception) {}
             }
         }
@@ -68,18 +74,32 @@ class ChatViewModel(
                 if (uid == null) {
                     messagesJob?.cancel()
                     channelInfoJob?.cancel()
+                    typingJob?.cancel()
+                    typingStatusJob?.cancel()
                     otherUserJob?.cancel()
                     presenceJob?.cancel()
                     _uiState.value = ChatUiState()
                     currentChannelId = null
+                    lastTypingStatusSent = null
                 }
             }
         }
     }
 
     fun setChannel(channelId: String) {
+        val oldChannelId = currentChannelId
+        if (oldChannelId != null && oldChannelId != channelId) {
+            viewModelScope.launch {
+                try {
+                    repository.setTypingStatus(oldChannelId, false)
+                } catch (_: Exception) {}
+            }
+            lastTypingStatusSent = null
+        }
+
         currentChannelId = channelId
         observeMessages(channelId)
+        observeTypingUsers(channelId)
         
         // Only mark as read and set active channel if the app is in foreground
         if (_isResumed.value) {
@@ -105,7 +125,67 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 repository.setActiveChannel(null)
+                currentChannelId?.let { repository.setTypingStatus(it, false) }
             } catch (_: Exception) {}
+        }
+    }
+
+    private fun observeTypingUsers(channelId: String) {
+        typingJob?.cancel()
+        typingJob = viewModelScope.launch {
+            val currentUserId = repository.getCurrentUserId()
+            
+            combine(
+                repository.getTypingUsers(channelId),
+                _uiState.map { it.participantNames }.distinctUntilChanged()
+            ) { typingIds, names ->
+                val otherTypingIds = typingIds.filter { it != currentUserId }
+                
+                val typingText = when {
+                    otherTypingIds.isEmpty() -> null
+                    otherTypingIds.size == 1 -> {
+                        val userId = otherTypingIds.first()
+                        val name = names[userId] ?: "Someone"
+                        "$name is typing..."
+                    }
+                    otherTypingIds.size == 2 -> {
+                        val name1 = names[otherTypingIds.first()] ?: "Someone"
+                        val name2 = names[otherTypingIds.last()] ?: "Someone"
+                        "$name1 and $name2 are typing..."
+                    }
+                    else -> "${otherTypingIds.size} people are typing..."
+                }
+                
+                otherTypingIds.toSet() to typingText
+            }.collect { (typingUsers, typingText) ->
+                _uiState.update { it.copy(
+                    typingUsers = typingUsers,
+                    typingIndicatorText = typingText
+                ) }
+            }
+        }
+    }
+
+    private var lastTypingStatusSent: Boolean? = null
+    private fun updateTypingStatus(isTyping: Boolean) {
+        val channelId = currentChannelId ?: return
+        
+        typingStatusJob?.cancel()
+        typingStatusJob = viewModelScope.launch {
+            if (isTyping != lastTypingStatusSent) {
+                try {
+                    repository.setTypingStatus(channelId, isTyping)
+                    lastTypingStatusSent = isTyping
+                } catch (_: Exception) {}
+            }
+            
+            if (isTyping) {
+                kotlinx.coroutines.delay(2000)
+                try {
+                    repository.setTypingStatus(channelId, false)
+                    lastTypingStatusSent = false
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -118,7 +198,12 @@ class ChatViewModel(
                     val otherParticipantName = ch.participantNames.entries
                         .find { entry -> entry.key != currentUserId }?.value ?: "Chat"
                     
-                    _uiState.update { state -> state.copy(channelName = otherParticipantName) }
+                    _uiState.update { state -> 
+                        state.copy(
+                            channelName = otherParticipantName,
+                            participantNames = ch.participantNames
+                        ) 
+                    }
                     
                     val otherParticipantId = ch.participantIds.find { it != currentUserId }
                     if (otherParticipantId != null) {
@@ -214,6 +299,7 @@ class ChatViewModel(
 
     fun onMessageChange(message: String) {
         _uiState.update { it.copy(inputText = message) }
+        updateTypingStatus(message.isNotEmpty())
     }
 
     fun toggleMessageSelection(messageId: String) {
@@ -348,6 +434,7 @@ class ChatViewModel(
 
         // Lock sending immediately to prevent duplicates from fast taps
         _uiState.update { it.copy(isSending = true) }
+        updateTypingStatus(false)
 
         viewModelScope.launch {
             try {

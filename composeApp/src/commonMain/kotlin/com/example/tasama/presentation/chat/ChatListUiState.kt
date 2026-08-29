@@ -17,7 +17,8 @@ data class ChatListUiState(
     val isSelectionMode: Boolean = false,
     val selectedChannelIds: Set<String> = emptySet(),
     val showDeleteConfirmation: Boolean = false,
-    val contactToDelete: User? = null
+    val contactToDelete: User? = null,
+    val typingNames: Map<String, String> = emptyMap()
 )
 
 data class SearchedUser(

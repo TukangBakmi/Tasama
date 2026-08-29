@@ -204,6 +204,7 @@ fun ChatListScreen(
                             var showMenu by remember { mutableStateOf(false) }
                             val isSelected = uiState.selectedChannelIds.contains(channel.id)
                             val presence = user?.id?.let { uiState.userPresence[it] } ?: PresenceState.Offline(0L)
+                            val typingName = uiState.typingNames[channel.id]
 
                             Box {
                                 ChannelItem(
@@ -211,6 +212,7 @@ fun ChatListScreen(
                                     currentUserId = viewModel.currentUserId,
                                     otherUser = user,
                                     presence = presence,
+                                    typingName = typingName,
                                     isSelected = isSelected,
                                     isSelectionMode = uiState.isSelectionMode,
                                     onClick = {
@@ -388,6 +390,7 @@ fun ChannelItem(
     currentUserId: String?, 
     otherUser: User?,
     presence: PresenceState,
+    typingName: String? = null,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     onClick: () -> Unit,
@@ -514,9 +517,10 @@ fun ChannelItem(
                 }
 
                 Text(
-                    text = channel?.lastMessage ?: "No messages yet",
+                    text = if (typingName != null) "$typingName is typing..." else (channel?.lastMessage ?: "No messages yet"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (typingName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (typingName != null) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)

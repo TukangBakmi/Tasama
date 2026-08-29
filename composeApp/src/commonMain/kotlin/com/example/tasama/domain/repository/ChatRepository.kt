@@ -31,4 +31,6 @@ interface ChatRepository : SessionCleanupRepository {
     suspend fun deleteMessages(channelId: String, messageIds: List<String>)
     suspend fun restoreMessages(channelId: String, messageIds: List<String>)
     suspend fun setActiveChannel(channelId: String?)
+    fun getTypingUsers(channelId: String): Flow<Set<String>>
+    suspend fun setTypingStatus(channelId: String, isTyping: Boolean)
 }

@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
+import com.example.tasama.domain.model.LiveLocation
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.DirectionsRepository
+import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.repository.PresenceState
@@ -23,6 +25,7 @@ import kotlin.time.Clock
 data class PartnerUiState(
     val currentUser: User? = null,
     val partner: User? = null,
+    val partnerLiveLocation: LiveLocation? = null,
     val places: List<Place> = emptyList(),
     val pendingRequestFrom: User? = null,
     val pendingRequestTo: User? = null,
@@ -50,13 +53,15 @@ class PartnerViewModel(
     private val directionsRepository: DirectionsRepository,
     private val weatherRepository: WeatherRepository,
     private val settingsRepository: SettingsRepository,
-    private val presenceRepository: PresenceRepository
+    private val presenceRepository: PresenceRepository,
+    private val liveLocationRepository: LiveLocationRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
 
     private var settingsJob: Job? = null
     private var partnerObservationJob: Job? = null
+    private var partnerLiveLocationJob: Job? = null
     private var presenceObservationJob: Job? = null
     private var placesObservationJob: Job? = null
     private var currentUserJob: Job? = null
@@ -98,6 +103,7 @@ class PartnerViewModel(
 
     private fun stopAllActivities() {
         partnerObservationJob?.cancel()
+        partnerLiveLocationJob?.cancel()
         presenceObservationJob?.cancel()
         placesObservationJob?.cancel()
         distanceJob?.cancel()
@@ -141,10 +147,12 @@ class PartnerViewModel(
     private suspend fun handlePartnerAndRequests(user: User) {
         if (user.partnerId != null) {
             observePartner(user.partnerId)
+            observePartnerLiveLocation(user.partnerId)
             observePresence(user.partnerId)
             _uiState.update { it.copy(isLinked = true, pendingRequestFrom = null, pendingRequestTo = null) }
         } else {
-            _uiState.update { it.copy(partner = null, partnerPresence = PresenceState.Offline(0L), isLinked = false) }
+            _uiState.update { it.copy(partner = null, partnerLiveLocation = null, partnerPresence = PresenceState.Offline(0L), isLinked = false) }
+            partnerLiveLocationJob?.cancel()
             presenceObservationJob?.cancel()
 
             if (user.partnerRequestFrom != null) {
@@ -175,29 +183,55 @@ class PartnerViewModel(
                     // Throttling: Only update UI if significant fields changed
                     if (old == null || new == null) return@distinctUntilChanged false
                     
-                    val posChanged = (old.latitude != new.latitude || old.longitude != new.longitude)
+                    // We don't need high frequency position updates here anymore as RTDB handles it
+                    // But we still track position for weather/distance triggering if RTDB is unavailable
+                    val posChanged = abs((old.latitude ?: 0.0) - (new.latitude ?: 0.0)) > 0.001 || 
+                                     abs((old.longitude ?: 0.0) - (new.longitude ?: 0.0)) > 0.001
                     val batteryChanged = abs((old.batteryLevel ?: 0f) - (new.batteryLevel ?: 0f)) > 0.05f || old.isCharging != new.isCharging
                     val statusChanged = old.connectionType != new.connectionType || old.name != new.name
                     
-                    // Include timestamp and accuracy to keep connection status "Live" when stationary
-                    val timeUpdated = old.lastLocationUpdate != new.lastLocationUpdate
-                    val accuracyChanged = abs((old.accuracy ?: 0f) - (new.accuracy ?: 0f)) > 10f
-                    
-                    !posChanged && !batteryChanged && !statusChanged && !timeUpdated && !accuracyChanged
+                    !posChanged && !batteryChanged && !statusChanged
                 }
                 .collect { partner ->
                     _uiState.update { it.copy(partner = partner) }
                     
                     if (partner != null) {
-                        // Fetch weather for partner
-                        if (partner.latitude != null && partner.longitude != null) {
-                            checkAndFetchWeather(partner.latitude, partner.longitude)
+                        // Prefer live location if available, otherwise use Firestore
+                        val lat = _uiState.value.partnerLiveLocation?.latitude ?: partner.latitude
+                        val lon = _uiState.value.partnerLiveLocation?.longitude ?: partner.longitude
+
+                        if (lat != null && lon != null) {
+                            checkAndFetchWeather(lat, lon)
                         }
 
-                        // Trigger distance update if partner moved
+                        // Trigger distance update
                         checkAndFetchDistance()
                     }
                 }
+        }
+    }
+
+    private fun observePartnerLiveLocation(partnerId: String) {
+        if (!_uiState.value.settings.partnerMapEnabled) return
+        partnerLiveLocationJob?.cancel()
+        partnerLiveLocationJob = viewModelScope.launch {
+            liveLocationRepository.getLiveLocation(partnerId).collect { liveLocation ->
+                val previousLiveLocation = _uiState.value.partnerLiveLocation
+                _uiState.update { it.copy(partnerLiveLocation = liveLocation) }
+                
+                // Trigger distance/weather if live location changes or becomes available
+                if (liveLocation != null) {
+                    checkAndFetchDistance()
+                    checkAndFetchWeather(liveLocation.latitude, liveLocation.longitude)
+                } else if (previousLiveLocation != null) {
+                    // RTDB data lost, fallback to Firestore if available
+                    val fallback = _uiState.value.partner
+                    if (fallback?.latitude != null && fallback.longitude != null) {
+                        checkAndFetchDistance()
+                        checkAndFetchWeather(fallback.latitude, fallback.longitude)
+                    }
+                }
+            }
         }
     }
 
@@ -214,13 +248,16 @@ class PartnerViewModel(
     private fun checkAndFetchDistance(force: Boolean = false) {
         if (!_uiState.value.settings.partnerMapEnabled) return
         
-        val me = uiState.value.currentUser ?: return
-        val partner = uiState.value.partner ?: return
+        val me = _uiState.value.currentUser ?: return
+        val partner = _uiState.value.partner ?: return
+        val liveLoc = _uiState.value.partnerLiveLocation
         
         val myLat = me.latitude ?: return
         val myLon = me.longitude ?: return
-        val pLat = partner.latitude ?: return
-        val pLon = partner.longitude ?: return
+        
+        // Prefer Live Location for distance calculations
+        val pLat = liveLoc?.latitude ?: partner.latitude ?: return
+        val pLon = liveLoc?.longitude ?: partner.longitude ?: return
 
         val now = Clock.System.now().toEpochMilliseconds()
         

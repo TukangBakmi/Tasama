@@ -15,6 +15,7 @@ class GeofenceMonitor(
     private val scope: CoroutineScope
 ) : SessionCleanupRepository {
     private val userStates = mutableMapOf<String, MutableMap<String, Boolean>>() // userId -> {placeId -> isInside}
+    private val consecutivePoints = mutableMapOf<String, MutableMap<String, Int>>() // userId_placeId -> count
     private var monitoringJob: Job? = null
 
     override suspend fun cleanup() {
@@ -22,6 +23,7 @@ class GeofenceMonitor(
         monitoringJob?.cancel()
         monitoringJob = null
         userStates.clear()
+        consecutivePoints.clear()
     }
 
     fun startMonitoring() {
@@ -61,23 +63,45 @@ class GeofenceMonitor(
         
         places.forEach { place ->
             val distance = calculateDistance(lat, lon, place.latitude, place.longitude)
-            val isInside = distance <= place.radius
             val wasInside = currentState[place.id] ?: false
             
-            if (isInside && !wasInside) {
-                // Entered
-                currentState[place.id] = true
-                if (place.notifyOnEntry) {
-                    onTransition(user, place, true)
+            // Hysteresis: Entry buffer (15m inner) and Exit buffer (50m outer)
+            // Entering: must be within (radius - 15m) OR just within radius if radius is small
+            val entryThreshold = maxOf(place.radius - 15.0, place.radius * 0.8)
+            val isInsideForEntry = distance <= entryThreshold
+            
+            // Exiting: must be outside (radius + 50m)
+            val isOutsideForExit = distance > place.radius + 50.0
+
+            val counts = consecutivePoints.getOrPut(userId) { mutableMapOf() }
+            
+            if (isInsideForEntry && !wasInside) {
+                // Potential Entry: Verify 2 consecutive points to filter jumps
+                val currentCount = (counts[place.id] ?: 0) + 1
+                if (currentCount >= 2) {
+                    currentState[place.id] = true
+                    counts[place.id] = 0
+                    if (place.notifyOnEntry) {
+                        onTransition(user, place, true)
+                    }
+                } else {
+                    counts[place.id] = currentCount
                 }
-            } else if (!isInside && wasInside) {
-                // Left with jitter protection
-                if (distance > place.radius + 50) { // 50m buffer
+            } else if (isOutsideForExit && wasInside) {
+                // Potential Exit: Verify 2 consecutive points
+                val currentCount = (counts[place.id] ?: 0) + 1
+                if (currentCount >= 2) {
                     currentState[place.id] = false
+                    counts[place.id] = 0
                     if (place.notifyOnExit) {
                         onTransition(user, place, false)
                     }
+                } else {
+                    counts[place.id] = currentCount
                 }
+            } else {
+                // Reset count if user is in "dead zone" or state hasn't changed
+                counts[place.id] = 0
             }
         }
     }

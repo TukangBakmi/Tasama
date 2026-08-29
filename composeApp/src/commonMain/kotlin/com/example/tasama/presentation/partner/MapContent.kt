@@ -11,6 +11,7 @@ expect fun MapContent(
     modifier: Modifier = Modifier,
     currentUser: User?,
     partner: User?,
+    partnerLiveLocation: com.example.tasama.domain.model.LiveLocation? = null,
     places: List<Place> = emptyList(),
     anniversaryDate: Long? = null,
     distanceInfo: DistanceInfo? = null,

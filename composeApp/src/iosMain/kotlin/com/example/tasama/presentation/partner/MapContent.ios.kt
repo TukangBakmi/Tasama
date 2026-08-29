@@ -150,6 +150,7 @@ actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
     partner: User?,
+    partnerLiveLocation: com.example.tasama.domain.model.LiveLocation?,
     places: List<Place>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
@@ -184,7 +185,36 @@ actual fun MapContent(
     }
 
     val myLocation = currentUser?.let { Location(it.latitude ?: 0.0, it.longitude ?: 0.0) }
-    val partnerLocation = partner?.let { Location(it.latitude ?: 0.0, it.longitude ?: 0.0) }
+    val partnerLocation = remember(partner?.latitude, partner?.longitude, partnerLiveLocation?.latitude, partnerLiveLocation?.longitude) {
+        val lat = partnerLiveLocation?.latitude ?: partner?.latitude
+        val lon = partnerLiveLocation?.longitude ?: partner?.longitude
+        if (lat != null && lon != null) {
+            Location(lat, lon)
+        } else null
+    }
+
+    // Animated coordinates for smoothness
+    val animatedLat by animateFloatAsState(
+        targetValue = partnerLocation?.latitude?.toFloat() ?: 0f,
+        animationSpec = tween(
+            durationMillis = if (partnerLiveLocation != null) 500 else 1500,
+            easing = LinearEasing
+        ),
+        label = "lat"
+    )
+    val animatedLon by animateFloatAsState(
+        targetValue = partnerLocation?.longitude?.toFloat() ?: 0f,
+        animationSpec = tween(
+            durationMillis = if (partnerLiveLocation != null) 500 else 1500,
+            easing = LinearEasing
+        ),
+        label = "lon"
+    )
+
+    val partnerAnimatedLocation = remember(animatedLat, animatedLon, partnerLocation) {
+        if (partnerLocation == null) null
+        else Location(animatedLat.toDouble(), animatedLon.toDouble())
+    }
 
     val coordinator = remember {
         MapCoordinator(
@@ -229,12 +259,12 @@ actual fun MapContent(
         mv.setRegion(MKCoordinateRegionMake(center, span), animated = true)
     }
 
-    val isTogether = remember(myLocation, partnerLocation) {
-        if (myLocation == null || partnerLocation == null) false
-        else calculateDistance(myLocation, partnerLocation) < 25.0
+    val isTogether = remember(myLocation, partnerAnimatedLocation) {
+        if (myLocation == null || partnerAnimatedLocation == null) false
+        else calculateDistance(myLocation, partnerAnimatedLocation) < 25.0
     }
 
-    val markerData = remember(myLocation, partnerLocation, isTogether, mapSize, mapViewInstance) {
+    val markerData = remember(myLocation, partnerAnimatedLocation, isTogether, mapSize, mapViewInstance) {
         mapViewInstance?.let { mapView ->
             val pMe = myLocation?.let { loc ->
                 val coord = CLLocationCoordinate2DMake(loc.latitude, loc.longitude)
@@ -242,7 +272,7 @@ actual fun MapContent(
                     Offset(x.toFloat() * density.density, y.toFloat() * density.density)
                 }
             }
-            val pPartner = partnerLocation?.let { loc ->
+            val pPartner = partnerAnimatedLocation?.let { loc ->
                 val coord = CLLocationCoordinate2DMake(loc.latitude, loc.longitude)
                 mapView.convertCoordinate(coord, toPointToView = mapView).useContents {
                     Offset(x.toFloat() * density.density, y.toFloat() * density.density)
@@ -252,7 +282,7 @@ actual fun MapContent(
             val isMeVisible = pMe?.let { it.x in 0f..mapSize.width.toFloat() && it.y in 0f..mapSize.height.toFloat() } ?: false
             val isPartnerVisible = pPartner?.let { it.x in 0f..mapSize.width.toFloat() && it.y in 0f..mapSize.height.toFloat() } ?: false
             
-            val showPolyline = !isTogether && myLocation != null && partnerLocation != null
+            val showPolyline = !isTogether && myLocation != null && partnerAnimatedLocation != null
 
             var myEdge: Offset? = null
             var myAngle = 0f
@@ -282,7 +312,7 @@ actual fun MapContent(
                 isMeVisible = isMeVisible,
                 isPartnerVisible = isPartnerVisible,
                 myEffectiveLocation = myLocation ?: Location(0.0, 0.0),
-                partnerEffectiveLocation = partnerLocation ?: Location(0.0, 0.0),
+                partnerEffectiveLocation = partnerAnimatedLocation ?: Location(0.0, 0.0),
                 myEdgePoint = myEdge,
                 partnerEdgePoint = partnerEdge,
                 myAngle = myAngle,

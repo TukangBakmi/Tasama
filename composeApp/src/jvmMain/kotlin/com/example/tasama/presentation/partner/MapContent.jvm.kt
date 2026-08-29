@@ -17,8 +17,8 @@ actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
     partner: User?,
+    partnerLiveLocation: com.example.tasama.domain.model.LiveLocation?,
     places: List<com.example.tasama.domain.model.Place>,
-    stories: List<Story>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
     weatherInfo: com.example.tasama.domain.model.WeatherInfo?,
@@ -29,13 +29,7 @@ actual fun MapContent(
     onEditAnniversary: () -> Unit,
     onAddPlace: (com.example.tasama.domain.model.Place) -> Unit,
     onDeletePlace: (String) -> Unit,
-    onAddStory: (Story, List<ByteArray>) -> Unit,
-    onDeleteStory: (Story) -> Unit,
-    onUpdateStory: (Story, List<ByteArray>) -> Unit,
     onUnlink: () -> Unit,
-    onSelectStory: (Story?) -> Unit,
-    selectedStoryForMap: Story?,
-    onClearSelectedStory: () -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
     onOpenSettings: () -> Unit
 ) {

@@ -3,12 +3,14 @@ package com.example.tasama.di
 import com.example.tasama.data.repository.FirebaseAIChatRepository
 import com.example.tasama.data.repository.FirebaseAuthRepository
 import com.example.tasama.data.repository.FirebaseChatRepository
+import com.example.tasama.data.repository.FirebaseLiveLocationRepository
 import com.example.tasama.data.repository.FirebasePresenceRepository
 import com.example.tasama.data.repository.FirebaseSavingsRepository
 import com.example.tasama.data.repository.FirebaseTransactionRepository
 import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
@@ -50,6 +52,10 @@ val appModule = module {
         FirebasePresenceRepository(get(), get())
     }
 
+    single<LiveLocationRepository> {
+        FirebaseLiveLocationRepository()
+    }
+
     single<AuthRepository> {
         FirebaseAuthRepository(
             lazy { get() },
@@ -87,7 +93,7 @@ val appModule = module {
     viewModel { ChatViewModel(get(), get(), get(), get()) }
     viewModel { ChatListViewModel(get(), get(), get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
-    viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { MainViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
 }

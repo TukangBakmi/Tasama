@@ -21,8 +21,10 @@ import com.bumptech.glide.request.transition.Transition
 import com.example.tasama.MainActivity
 import com.example.tasama.R
 import com.example.tasama.domain.model.BatteryMode
+import com.example.tasama.domain.model.LiveLocation
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.service.GeofenceMonitor
@@ -36,6 +38,7 @@ import kotlin.math.abs
 class LocationService : Service() {
 
     private val authRepository: AuthRepository by inject()
+    private val liveLocationRepository: LiveLocationRepository by inject()
     private val placeRepository: PlaceRepository by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val geofenceMonitor: GeofenceMonitor by inject()
@@ -75,12 +78,36 @@ class LocationService : Service() {
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                val uid = authRepository.getCurrentUserId() ?: return
+                val uid = authRepository.getCurrentUserId()
+                if (uid == null) {
+                    println("LIVE_LOCATION_SERVICE: UID is null, skipping update")
+                    return
+                }
+                
+                println("LIVE_LOCATION_SERVICE: Received ${locationResult.locations.size} locations")
                 for (location in locationResult.locations) {
                     val speed = if (location.hasSpeed()) location.speed else null
                     val accuracy = if (location.hasAccuracy()) location.accuracy else null
+                    val heading = if (location.hasBearing()) location.bearing else null
+                    val timestamp = System.currentTimeMillis()
+
                     serviceScope.launch {
+                        println("LIVE_LOCATION_SERVICE: Updating location for $uid at ${location.latitude}, ${location.longitude}")
+                        // Update Firestore (Persistent/History)
                         authRepository.updateLocation(uid, location.latitude, location.longitude, speed, accuracy)
+                        
+                        // Update RTDB (Real-time)
+                        liveLocationRepository.updateLiveLocation(
+                            uid,
+                            LiveLocation(
+                                latitude = location.latitude,
+                                longitude = location.longitude,
+                                accuracy = accuracy,
+                                heading = heading,
+                                speed = speed,
+                                timestamp = timestamp
+                            )
+                        )
                     }
                 }
             }
@@ -439,10 +466,31 @@ class LocationService : Service() {
     }
 
     private fun stopLocationService() {
+        if (!isServiceStarted) return
         isServiceStarted = false
+        
         fusedLocationClient.removeLocationUpdates(locationCallback)
+        
+        // Remove live location from RTDB when stopping
+        serviceScope.launch {
+            withContext(NonCancellable) {
+                authRepository.getCurrentUserId()?.let { uid ->
+                    liveLocationRepository.removeLiveLocation(uid)
+                }
+            }
+        }
+
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopLocationService()
+        serviceScope.launch {
+            geofenceMonitor.cleanup()
+        }
+        serviceScope.cancel()
     }
 
     private fun getAvatarResId(avatarUrl: String?): Int {

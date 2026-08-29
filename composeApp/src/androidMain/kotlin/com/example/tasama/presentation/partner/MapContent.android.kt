@@ -120,6 +120,7 @@ actual fun MapContent(
     modifier: Modifier,
     currentUser: User?,
     partner: User?,
+    partnerLiveLocation: com.example.tasama.domain.model.LiveLocation?,
     places: List<Place>,
     anniversaryDate: Long?,
     distanceInfo: DistanceInfo?,
@@ -177,9 +178,11 @@ actual fun MapContent(
         } else null
     }
 
-    val partnerLocation = remember(partner?.latitude, partner?.longitude) {
-        if (partner?.latitude != null && partner.longitude != null) {
-            LatLng(partner.latitude, partner.longitude)
+    val partnerLocation = remember(partner?.latitude, partner?.longitude, partnerLiveLocation?.latitude, partnerLiveLocation?.longitude) {
+        val lat = partnerLiveLocation?.latitude ?: partner?.latitude
+        val lon = partnerLiveLocation?.longitude ?: partner?.longitude
+        if (lat != null && lon != null) {
+            LatLng(lat, lon)
         } else null
     }
 
@@ -189,7 +192,7 @@ actual fun MapContent(
     )
     val animatedPartnerLocation by animateLatLngAsState(
         targetValue = partnerLocation ?: LatLng(0.0, 0.0),
-        animationSpec = tween(durationMillis = 1500, easing = LinearEasing)
+        animationSpec = tween(durationMillis = if (partnerLiveLocation != null) 500 else 1500, easing = LinearEasing)
     )
 
     val currentMyLocation = if (myLocation != null) animatedMyLocation else null

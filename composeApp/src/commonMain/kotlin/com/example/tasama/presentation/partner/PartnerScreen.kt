@@ -25,12 +25,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.tasama.presentation.partner.components.LinkPartnerDialog
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
+import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
 import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.main.LocalSnackbarHostState
 import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -42,7 +45,7 @@ fun PartnerScreen(
     viewModel: PartnerViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+    val snackbarHostState = LocalSnackbarHostState.current
     val feedbackHandler = LocalTransientFeedbackHandler.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -133,8 +136,7 @@ fun PartnerScreen(
                     onCopyId = { id ->
                         clipboardManager.setText(AnnotatedString(id))
                         viewModel.onIdCopied(feedbackHandler)
-                    },
-                    onClearError = viewModel::clearError
+                    }
                 )
             }
         }
@@ -243,95 +245,6 @@ fun GuestPartnerContent(onLogin: () -> Unit) {
 }
 
 @Composable
-fun LinkPartnerDialog(
-    uiState: PartnerUiState,
-    onDismiss: () -> Unit,
-    onSearch: (String) -> Unit,
-    onConfirm: (String) -> Unit,
-    onClearError: () -> Unit
-) {
-    var query by remember { mutableStateOf("") }
-
-    LaunchedEffect(query) {
-        onSearch(query)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Link Partner") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Search by name or ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                )
-
-                if (uiState.isSearchingUser) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
-                }
-
-                uiState.searchedUser?.let { user ->
-                    if (!uiState.filteredContacts.any { it.id == user.id }) {
-                        Text("Found User", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        ContactSelectionItem(
-                            user = user,
-                            onSelect = { onConfirm(user.shortId) }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                }
-
-                if (uiState.filteredContacts.isNotEmpty()) {
-                    Text(
-                        if (query.isEmpty()) "Suggested Contacts" else "Contacts",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Gray
-                    )
-                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                        items(uiState.filteredContacts) { contact ->
-                            ContactSelectionItem(
-                                user = contact,
-                                onSelect = { onConfirm(contact.shortId) }
-                            )
-                        }
-                    }
-                } else if (!uiState.isSearchingUser && query.isNotEmpty() && uiState.searchedUser == null) {
-                    Text(
-                        "No users found",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-
-                if (uiState.error != null) {
-                    Text(
-                        text = uiState.error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
-
-@Composable
 fun LinkingContent(
     uiState: PartnerUiState,
     onSearch: (String) -> Unit,
@@ -339,21 +252,23 @@ fun LinkingContent(
     onAcceptRequest: () -> Unit,
     onDeclineRequest: () -> Unit,
     onCancelRequest: () -> Unit,
-    onCopyId: (String) -> Unit,
-    onClearError: () -> Unit
+    onCopyId: (String) -> Unit
 ) {
     var showLinkDialog by remember { mutableStateOf(false) }
 
     if (showLinkDialog) {
         LinkPartnerDialog(
-            uiState = uiState,
+            searchedUser = uiState.searchedUser,
+            isSearchingUser = uiState.isSearchingUser,
+            filteredContacts = uiState.filteredContacts,
+            suggestedContacts = uiState.suggestedContacts,
+            error = uiState.error,
             onDismiss = { showLinkDialog = false },
             onSearch = onSearch,
             onConfirm = { shortId ->
                 onConfirm(shortId)
                 showLinkDialog = false
-            },
-            onClearError = onClearError
+            }
         )
     }
 

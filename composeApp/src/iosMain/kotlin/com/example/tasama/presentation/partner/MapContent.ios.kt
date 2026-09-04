@@ -635,15 +635,18 @@ actual fun MapContent(
                 },
                 sheetState = bottomSheetState
             ) {
-                AddPlaceSheetContent(
-                    location = showAddPlaceSheet!!,
-                    initialPlace = editingPlace,
-                    onAddPlace = { place: Place ->
-                        onAddPlace(place)
-                        showAddPlaceSheet = null
-                        editingPlace = null
-                    }
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    AddPlaceSheetContent(
+                        location = showAddPlaceSheet!!,
+                        initialPlace = editingPlace,
+                        onAddPlace = { place: Place ->
+                            onAddPlace(place)
+                            showAddPlaceSheet = null
+                            editingPlace = null
+                        }
+                    )
+                    com.example.tasama.presentation.components.AppTransientFeedbackOverlay()
+                }
             }
         }
     }

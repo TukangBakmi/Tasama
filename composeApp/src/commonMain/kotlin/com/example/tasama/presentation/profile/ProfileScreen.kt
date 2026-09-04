@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
+import com.example.tasama.presentation.partner.components.LinkPartnerDialog
 import com.example.tasama.domain.model.AppTheme
 import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.UserAvatar
@@ -179,13 +180,16 @@ fun ProfileScreen(
                     }
                 }
                 LinkPartnerDialog(
+                    searchedUser = uiState.searchedUser,
+                    isSearchingUser = uiState.isSearchingUser,
+                    filteredContacts = uiState.filteredContacts,
+                    suggestedContacts = uiState.suggestedContacts,
+                    error = uiState.errorText,
                     onDismiss = { showLinkPartnerDialog = false },
+                    onSearch = viewModel::searchUser,
                     onConfirm = { shortId ->
                         viewModel.linkPartner(shortId)
-                    },
-                    isLoading = uiState.isLoading,
-                    error = uiState.errorText,
-                    onClearError = viewModel::clearLinkError
+                    }
                 )
             }
 
@@ -608,68 +612,6 @@ fun SettingsSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
-fun LinkPartnerDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    isLoading: Boolean = false,
-    error: String? = null,
-    onClearError: () -> Unit = {}
-) {
-    var shortId by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Link Partner") },
-        text = {
-            Column {
-                Text("Enter your partner's 12-digit ID to link your accounts.")
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = shortId,
-                    onValueChange = {
-                        // Only allow numbers and max 12 digits
-                        if (it.all { char -> char.isDigit() } && it.length <= 12) {
-                            shortId = it
-                            if (error != null) onClearError()
-                        }
-                    },
-                    label = { Text("Partner ID") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading,
-                    isError = error != null,
-                    supportingText = if (error != null) {
-                        { Text(text = error, color = MaterialTheme.colorScheme.error) }
-                    } else null
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(shortId) },
-                enabled = shortId.length == 12 && !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Link")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) {
-                Text("Cancel")
-            }
         }
     )
 }

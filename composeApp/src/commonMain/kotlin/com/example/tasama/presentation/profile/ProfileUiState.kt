@@ -1,6 +1,7 @@
 package com.example.tasama.presentation.profile
 
 import com.example.tasama.domain.model.AppTheme
+import com.example.tasama.domain.model.User
 
 data class ProfileUiState(
     val userName: String = "",
@@ -20,5 +21,9 @@ data class ProfileUiState(
     val errorText: String? = null,
     val isGuest: Boolean = false,
     val hasPendingRequest: Boolean = false,
-    val isLinkSuccess: Boolean = false
+    val isLinkSuccess: Boolean = false,
+    val searchedUser: User? = null,
+    val isSearchingUser: Boolean = false,
+    val suggestedContacts: List<User> = emptyList(),
+    val filteredContacts: List<User> = emptyList()
 )

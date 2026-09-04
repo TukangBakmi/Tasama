@@ -123,38 +123,56 @@ class PartnerViewModel(
 
         // Filter suggested contacts by name or ID in real-time
         val filtered = uiState.value.suggestedContacts.filter {
-            it.name.contains(query, ignoreCase = true) || it.shortId == query
+            it.name.contains(query, ignoreCase = true) || 
+            it.shortId.contains(query) ||
+            it.id.contains(query, ignoreCase = true)
         }
         _uiState.update { it.copy(filteredContacts = filtered) }
 
-        if (isNumericId) {
-            _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
-            viewModelScope.launch {
-                try {
-                    val userId = authRepository.getUserIdFromShortId(query)
-                    if (userId != null) {
-                        if (userId == currentUid) {
-                            _uiState.update { it.copy(error = "You cannot link with yourself", isSearchingUser = false) }
-                            return@launch
-                        }
-                        
-                        val user = authRepository.getUser(userId)
-                        if (user != null) {
-                            // Eligibility check (not already someone's partner, etc. - simple check for now)
-                            if (user.partnerId != null) {
-                                _uiState.update { it.copy(error = "User already has a partner", isSearchingUser = false) }
-                            } else {
-                                _uiState.update { it.copy(searchedUser = user, isSearchingUser = false) }
-                            }
+        _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
+        viewModelScope.launch {
+            try {
+                var userId: String? = null
+                
+                // 1. Try as Short ID if it matches the 12-digit pattern
+                if (isNumericId) {
+                    userId = authRepository.getUserIdFromShortId(query)
+                }
+
+                // 2. Try as Display Name (Exact match for global search)
+                if (userId == null) {
+                    userId = authRepository.getUserIdByName(query)
+                }
+
+                // 3. Try as Full User ID (UID)
+                if (userId == null && query.length >= 20) {
+                    userId = authRepository.getUser(query)?.id
+                }
+
+                if (userId != null) {
+                    if (userId == currentUid) {
+                        _uiState.update { it.copy(error = "You cannot link with yourself", isSearchingUser = false) }
+                        return@launch
+                    }
+                    
+                    val user = authRepository.getUser(userId)
+                    if (user != null) {
+                        if (user.partnerId != null) {
+                            _uiState.update { it.copy(error = "User already has a partner", isSearchingUser = false) }
                         } else {
-                            _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
+                            _uiState.update { it.copy(searchedUser = user, isSearchingUser = false) }
                         }
                     } else {
                         _uiState.update { it.copy(error = "User not found", isSearchingUser = false) }
                     }
-                } catch (e: Exception) {
-                    _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
+                } else {
+                    _uiState.update { it.copy(isSearchingUser = false) }
+                    if (isNumericId || query.length >= 20) {
+                        _uiState.update { it.copy(error = "User not found") }
+                    }
                 }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message, isSearchingUser = false) }
             }
         }
     }

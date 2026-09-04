@@ -209,6 +209,17 @@ class FirebaseAuthRepository(
         }
     }
 
+    override suspend fun getUserIdByName(name: String): String? {
+        return try {
+            val query = firestore.collection("users")
+                .where { "name" equalTo name }
+                .get()
+            query.documents.firstOrNull()?.data<User>()?.id
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     override suspend fun updateFcmToken(uid: String, token: String?) {
         try {
             firestore.collection("users")

@@ -3,22 +3,20 @@ package com.example.tasama.presentation.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.AppTheme
+import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.domain.service.ExportService
 import com.example.tasama.domain.service.FileService
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
     private val authRepository: AuthRepository,
+    private val chatRepository: ChatRepository,
     private val transactionRepository: TransactionRepository,
     private val settingsRepository: SettingsRepository,
     private val exportService: ExportService,
@@ -30,6 +28,91 @@ class ProfileViewModel(
     init {
         observeUser()
         observeSettings()
+        loadSuggestedContacts()
+    }
+
+    private fun loadSuggestedContacts() {
+        val uid = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            authRepository.getUserFlow(uid).collect { user ->
+                val contactIds = user?.contactIds ?: emptyList()
+                val contacts = contactIds.mapNotNull { authRepository.getUser(it) }
+
+                // Sort by last message timestamp from chat repository
+                chatRepository.getChannels().first().let { channels ->
+                    val suggested = contacts.sortedWith(compareByDescending<User> { contact ->
+                        channels.find { channel -> channel.participantIds.contains(contact.id) }?.lastMessageTimestamp ?: 0L
+                    }.thenBy { it.name })
+
+                    _uiState.update { it.copy(suggestedContacts = suggested, filteredContacts = suggested) }
+                }
+            }
+        }
+    }
+
+    fun searchUser(query: String) {
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchedUser = null, errorText = null, filteredContacts = uiState.value.suggestedContacts) }
+            return
+        }
+
+        val currentUid = authRepository.getCurrentUserId()
+        val isNumericId = query.length == 12 && query.all { it.isDigit() }
+
+        // Filter suggested contacts by name or ID in real-time
+        val filtered = uiState.value.suggestedContacts.filter {
+            it.name.contains(query, ignoreCase = true) || 
+            it.shortId.contains(query) ||
+            it.id.contains(query, ignoreCase = true)
+        }
+        _uiState.update { it.copy(filteredContacts = filtered) }
+
+        _uiState.update { it.copy(isSearchingUser = true, errorText = null, searchedUser = null) }
+        viewModelScope.launch {
+            try {
+                var userId: String? = null
+
+                // 1. Try as Short ID if it matches the 12-digit pattern
+                if (isNumericId) {
+                    userId = authRepository.getUserIdFromShortId(query)
+                }
+
+                // 2. Try as Display Name (Exact match for global search)
+                if (userId == null) {
+                    userId = authRepository.getUserIdByName(query)
+                }
+
+                // 3. Try as Full User ID (UID)
+                if (userId == null && query.length >= 20) {
+                    userId = authRepository.getUser(query)?.id
+                }
+
+                if (userId != null) {
+                    if (userId == currentUid) {
+                        _uiState.update { it.copy(errorText = "You cannot link with yourself", isSearchingUser = false) }
+                        return@launch
+                    }
+
+                    val user = authRepository.getUser(userId)
+                    if (user != null) {
+                        if (user.partnerId != null) {
+                            _uiState.update { it.copy(errorText = "User already has a partner", isSearchingUser = false) }
+                        } else {
+                            _uiState.update { it.copy(searchedUser = user, isSearchingUser = false) }
+                        }
+                    } else {
+                        _uiState.update { it.copy(errorText = "User not found", isSearchingUser = false) }
+                    }
+                } else {
+                    _uiState.update { it.copy(isSearchingUser = false) }
+                    if (isNumericId || query.length >= 20) {
+                        _uiState.update { it.copy(errorText = "User not found") }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorText = e.message, isSearchingUser = false) }
+            }
+        }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)

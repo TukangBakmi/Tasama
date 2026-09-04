@@ -23,6 +23,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.example.tasama.domain.model.ChatMessage
 
 sealed class TransientFeedback {
+    data class Info(val text: String) : TransientFeedback()
     data class Copy(val text: String) : TransientFeedback()
     data class UndoDelete(
         val text: String,
@@ -54,6 +55,7 @@ fun AppTransientFeedbackOverlay(
     TransientFeedbackOverlay(
         isVisible = feedback != null,
         text = when (val f = feedback) {
+            is TransientFeedback.Info -> f.text
             is TransientFeedback.Copy -> f.text
             is TransientFeedback.UndoDelete -> f.text
             null -> ""

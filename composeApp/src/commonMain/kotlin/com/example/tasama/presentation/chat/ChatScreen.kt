@@ -296,7 +296,7 @@ fun ChatScreen(
                         keyboardController?.show()
                     },
                     onReplyClick = { repliedId, _ ->
-                        viewModel.jumpToMessage(repliedId)
+                        viewModel.jumpToMessage(repliedId, feedbackHandler)
                     },
                     onScrollToMessageComplete = viewModel::onScrollToMessageComplete
                 )
@@ -835,7 +835,7 @@ fun ReplyPreview(
         modifier = modifier
             .fillMaxWidth()
             .clickable(enabled = onReplyClick != null) { onReplyClick?.invoke() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+        color = Color(0x32000000),
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -843,7 +843,7 @@ fun ReplyPreview(
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(4.dp)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(Color(0xFF00A9F4))
             )
             Column(
                 modifier = Modifier
@@ -853,13 +853,14 @@ fun ReplyPreview(
                 Text(
                     text = senderName,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color(0xFF00A9F4),
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp
                 )
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFE6F2F8),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     fontSize = 12.sp
@@ -867,7 +868,12 @@ fun ReplyPreview(
             }
             if (onCancel != null) {
                 IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cancel",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFFE6F2F8).copy(alpha = 0.7f)
+                    )
                 }
             }
         }

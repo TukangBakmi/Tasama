@@ -457,13 +457,13 @@ class ChatViewModel(
         }
     }
 
-    fun jumpToMessage(messageId: String) {
+    fun jumpToMessage(messageId: String, onFeedback: (TransientFeedback) -> Unit) {
         val exists = _uiState.value.messages.any { it.id == messageId }
         if (exists) {
             scrollToMessage(messageId)
             setHighlightedMessage(messageId)
         } else {
-            _uiState.update { it.copy(error = "Message not found or deleted") }
+            onFeedback(TransientFeedback.Info("Message not found or deleted"))
         }
     }
 

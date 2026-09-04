@@ -6,6 +6,7 @@ import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.PresenceRepository
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -377,14 +378,18 @@ class ChatViewModel(
         _uiState.update { it.copy(showDeleteConfirmation = false) }
     }
 
-    fun deleteSelectedMessages() {
+    fun deleteSelectedMessages(onFeedback: (TransientFeedback) -> Unit) {
         val channelId = currentChannelId ?: return
         val selectedIds = _uiState.value.selectedMessageIds.toList()
         if (selectedIds.isEmpty()) return
+        val messagesToDelete = _uiState.value.messages.filter { it.id in selectedIds }
 
         viewModelScope.launch {
             try {
                 repository.deleteMessages(channelId, selectedIds)
+                val count = selectedIds.size
+                val text = if (count == 1) "Message deleted for me" else "$count messages deleted for me"
+                onFeedback(TransientFeedback.UndoDelete(text, channelId, selectedIds, messagesToDelete))
                 exitSelectionMode()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
@@ -392,7 +397,7 @@ class ChatViewModel(
         }
     }
 
-    fun restoreMessages(messageIds: List<String>) {
+    fun restoreMessages(messageIds: List<String>, messages: List<ChatMessage> = emptyList()) {
         val channelId = currentChannelId ?: return
         viewModelScope.launch {
             try {

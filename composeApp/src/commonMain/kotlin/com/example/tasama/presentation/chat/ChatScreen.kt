@@ -1,32 +1,12 @@
 package com.example.tasama.presentation.chat
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,44 +14,49 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
-import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.tasama.domain.model.ChatMessage
-import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.repository.PresenceState
-import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.components.PlatformBackHandler
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.DatePeriod
-import kotlinx.datetime.minus
+import com.example.tasama.presentation.components.UserAvatar
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.TransientFeedback
+import com.example.tasama.presentation.main.LocalSnackbarHostState
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.datetime.*
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.compose.ui.tooling.preview.Preview
+import kotlin.math.roundToInt
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,12 +67,13 @@ fun ChatScreen(
     onUserClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val snackbarHostState = LocalSnackbarHostState.current
+    val feedbackHandler = LocalTransientFeedbackHandler.current
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val scope = rememberCoroutineScope()
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -131,151 +117,191 @@ fun ChatScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        if (uiState.isSelectionMode) {
-                            Text("${uiState.selectedMessageIds.size} terpilih")
-                        } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        uiState.otherUser?.let { onUserClick(it.id) }
-                                    }
-                            ) {
-                                UserAvatar(
-                                    user = uiState.otherUser,
-                                    modifier = Modifier.size(36.dp),
-                                    fallbackName = uiState.channelName
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        uiState.channelName,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-
-                                    var nowTime by remember { mutableLongStateOf(kotlin.time.Clock.System.now().toEpochMilliseconds()) }
-                                    LaunchedEffect(Unit) {
-                                        while (true) {
-                                            kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
-                                            nowTime = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                Column {
+                    TopAppBar(
+                        title = {
+                            if (uiState.isSelectionMode) {
+                                Text("${uiState.selectedMessageIds.size} terpilih")
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            uiState.otherUser?.let { onUserClick(it.id) }
                                         }
-                                    }
+                                ) {
+                                    UserAvatar(
+                                        user = uiState.otherUser,
+                                        modifier = Modifier.size(36.dp),
+                                        fallbackName = uiState.channelName
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            uiState.channelName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
 
-                                    val statusText = remember(uiState.presence, nowTime) {
-                                        when (val presence = uiState.presence) {
-                                            is PresenceState.Online -> "online"
-                                            is PresenceState.Offline -> {
-                                                val lastSeen = presence.lastSeen
-                                                if (lastSeen == 0L) return@remember ""
-                                                try {
-                                                    val instant = Instant.fromEpochMilliseconds(lastSeen)
-                                                    val tz = TimeZone.currentSystemDefault()
-                                                    val lastActiveDateTime = instant.toLocalDateTime(tz)
-                                                    val nowDateTime = Instant.fromEpochMilliseconds(nowTime).toLocalDateTime(tz)
+                                        var nowTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+                                        LaunchedEffect(Unit) {
+                                            while (true) {
+                                                kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
+                                                nowTime = Clock.System.now().toEpochMilliseconds()
+                                            }
+                                        }
 
-                                                    val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+                                        val statusText = remember(uiState.presence, nowTime) {
+                                            when (val presence = uiState.presence) {
+                                                is PresenceState.Online -> "online"
+                                                is PresenceState.Offline -> {
+                                                    val lastSeen = presence.lastSeen
+                                                    if (lastSeen == 0L) return@remember ""
+                                                    try {
+                                                        val instant = Instant.fromEpochMilliseconds(lastSeen)
+                                                        val tz = TimeZone.currentSystemDefault()
+                                                        val lastActiveDateTime = instant.toLocalDateTime(tz)
+                                                        val nowDateTime = Instant.fromEpochMilliseconds(nowTime).toLocalDateTime(tz)
 
-                                                    when (lastActiveDateTime.date) {
-                                                        nowDateTime.date -> {
-                                                            "last seen today at $timeStr"
+                                                        val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+
+                                                        when (lastActiveDateTime.date) {
+                                                            nowDateTime.date -> {
+                                                                "last seen today at $timeStr"
+                                                            }
+                                                            nowDateTime.date.minus(DatePeriod(days = 1)) -> {
+                                                                "last seen yesterday at $timeStr"
+                                                            }
+                                                            else -> {
+                                                                val day = lastActiveDateTime.day.toString().padStart(2, '0')
+                                                                val month = lastActiveDateTime.month.ordinal.plus(1).toString().padStart(2, '0')
+                                                                val year = lastActiveDateTime.year
+                                                                "last seen $day/$month/$year"
+                                                            }
                                                         }
-                                                        nowDateTime.date.minus(DatePeriod(days = 1)) -> {
-                                                            "last seen yesterday at $timeStr"
-                                                        }
-                                                        else -> {
-                                                            val day = lastActiveDateTime.day.toString().padStart(2, '0')
-                                                            val month = lastActiveDateTime.month.ordinal.plus(1).toString().padStart(2, '0')
-                                                            val year = lastActiveDateTime.year
-                                                            "last seen $day/$month/$year"
-                                                        }
+                                                    } catch (_: Exception) {
+                                                        "offline"
                                                     }
-                                                } catch (_: Exception) {
-                                                    "offline"
                                                 }
                                             }
                                         }
-                                    }
 
-                                    if (statusText.isNotEmpty()) {
-                                        Text(
-                                            statusText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        if (statusText.isNotEmpty()) {
+                                            Text(
+                                                statusText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        if (uiState.isSelectionMode) {
-                            IconButton(onClick = {
-                                val selectedMessages = uiState.messages.filter { uiState.selectedMessageIds.contains(it.id) }
-                                // Handle copy if needed
-                            }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
-                            }
-                            IconButton(onClick = viewModel::showDeleteConfirmation) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete")
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (uiState.isSelectionMode) {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.surface
                         },
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                if (uiState.isSelectionMode) {
+                                    viewModel.exitSelectionMode()
+                                } else {
+                                    onBackClick()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = if (uiState.isSelectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                        },
+                        actions = {
+                            if (uiState.isSelectionMode) {
+                                IconButton(onClick = {
+                                    val textToCopy = viewModel.getSelectedMessagesText()
+                                    if (textToCopy.isNotEmpty()) {
+                                        clipboardManager.setText(AnnotatedString(textToCopy))
+                                        val count = uiState.selectedMessageIds.size
+                                        val feedbackText = if (count == 1) "Message copied" else "$count messages copied"
+                                        feedbackHandler(TransientFeedback.Copy(feedbackText))
+                                    }
+                                    viewModel.exitSelectionMode()
+                                }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Selected")
+                                }
+                                IconButton(onClick = viewModel::showDeleteConfirmation) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                                }
+                            } else {
+                                var showMenu by remember { mutableStateOf(false) }
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Hapus Chat") },
+                                        onClick = {
+                                            showMenu = false
+                                            // TODO: Implement clear history or similar if needed
+                                            // For now just show delete confirmation for all messages if supported
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = if (uiState.isSelectionMode)
+                                MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
-                )
-                HorizontalDivider(
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        contentWindowInsets = WindowInsets(0)
-    ) { paddingValues ->
-        ChatContent(
-            uiState = uiState,
-            modifier = Modifier.padding(paddingValues),
-            onLoadMore = viewModel::loadMoreMessages,
-            onMessageLongClick = viewModel::enterSelectionMode,
-            onMessageClick = { messageId ->
-                if (uiState.isSelectionMode) {
-                    viewModel.toggleMessageSelection(messageId)
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                 }
             },
-            onSwipeToReply = { message ->
-                viewModel.setReplyingTo(message)
-                focusRequester.requestFocus()
-                keyboardController?.show()
+            bottomBar = {
+                ChatInput(
+                    textFieldValue = uiState.textFieldValue,
+                    onValueChange = viewModel::onTextFieldValueChange,
+                    onSend = viewModel::sendMessage,
+                    replyingToMessage = uiState.replyingToMessage,
+                    onCancelReply = { viewModel.setReplyingTo(null) },
+                    isSending = uiState.isSending,
+                    focusRequester = focusRequester
+                )
             },
-            onReplyClick = { repliedId, _ ->
-                viewModel.jumpToMessage(repliedId)
-            },
-            onScrollToMessageComplete = viewModel::onScrollToMessageComplete,
-            textFieldValue = uiState.textFieldValue,
-            onValueChange = viewModel::onTextFieldValueChange,
-            onSend = viewModel::sendMessage,
-            onCancelReply = { viewModel.setReplyingTo(null) },
-            focusRequester = focusRequester
-        )
+            contentWindowInsets = WindowInsets(0)
+        ) { paddingValues ->
+            Box(modifier = Modifier.padding(paddingValues)) {
+                ChatContent(
+                    uiState = uiState,
+                    onLoadMore = viewModel::loadMoreMessages,
+                    onMessageLongClick = viewModel::enterSelectionMode,
+                    onMessageClick = { messageId ->
+                        if (uiState.isSelectionMode) {
+                            viewModel.toggleMessageSelection(messageId)
+                        }
+                    },
+                    onSwipeToReply = { message ->
+                        viewModel.setReplyingTo(message)
+                        focusRequester.requestFocus()
+                        keyboardController?.show()
+                    },
+                    onReplyClick = { repliedId, _ ->
+                        viewModel.jumpToMessage(repliedId)
+                    },
+                    onScrollToMessageComplete = viewModel::onScrollToMessageComplete
+                )
+            }
+        }
 
         if (uiState.showDeleteConfirmation) {
             AlertDialog(
@@ -284,7 +310,7 @@ fun ChatScreen(
                 text = { Text("These messages will be removed for you. Others will still be able to see them.") },
                 confirmButton = {
                     TextButton(
-                        onClick = viewModel::deleteSelectedMessages,
+                        onClick = { viewModel.deleteSelectedMessages(feedbackHandler) },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("Delete")
@@ -309,24 +335,11 @@ fun ChatContent(
     onMessageClick: (String) -> Unit = {},
     onSwipeToReply: (ChatMessage) -> Unit = {},
     onReplyClick: (String, Long?) -> Unit = { _, _ -> },
-    onScrollToMessageComplete: () -> Unit = {},
-    textFieldValue: TextFieldValue,
-    onValueChange: (TextFieldValue) -> Unit,
-    onSend: () -> Unit,
-    onCancelReply: () -> Unit,
-    focusRequester: FocusRequester
+    onScrollToMessageComplete: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // Show button if we are not at the bottom
-    val showScrollToBottom by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 10
-        }
-    }
-
-    // We reverse the list for the UI
     val reversedMessages = remember(uiState.messages) {
         uiState.messages.asReversed()
     }
@@ -366,8 +379,6 @@ fun ChatContent(
         }
     }
 
-    val haptic = LocalHapticFeedback.current
-
     // Observe scroll requests to jump to a message
     LaunchedEffect(uiState.scrollToMessageId, reversedMessages) {
         uiState.scrollToMessageId?.let { targetId ->
@@ -387,77 +398,83 @@ fun ChatContent(
         }
     }
 
-    Box(modifier = modifier
-        .fillMaxSize()
-        .background(MaterialTheme.colorScheme.surface)
-    ) {
-        if (uiState.messages.isEmpty()) {
-            // Empty state
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                reverseLayout = true,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom)
-            ) {
-                if (uiState.typingUsers.isNotEmpty()) {
-                    item(key = "typing_indicator") {
-                        TypingBubble()
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 10
+        }
+    }
 
-                items(
-                    count = reversedMessages.size,
-                    key = { index -> reversedMessages[index].id }
-                ) { index ->
-                    val message = reversedMessages[index]
-                    val date = Instant.fromEpochMilliseconds(message.timestamp)
-                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
-
-                    val showHeader = if (index == reversedMessages.size - 1) true else {
-                        val nextDate = Instant.fromEpochMilliseconds(reversedMessages[index + 1].timestamp)
-                            .toLocalDateTime(TimeZone.currentSystemDefault()).date
-                        date != nextDate
-                    }
-
-                    Column {
-                        if (showHeader) {
-                            DateHeader(date)
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        val isSelected = uiState.selectedMessageIds.contains(message.id)
-                        val isHighlighted = uiState.highlightedMessageId == message.id
-                        MessageBubble(
-                            message = message,
-                            isSelected = isSelected,
-                            isHighlighted = isHighlighted,
-                            isSelectionMode = uiState.isSelectionMode,
-                            onLongClick = { onMessageLongClick(message.id) },
-                            onClick = { onMessageClick(message.id) },
-                            onSwipeToReply = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onSwipeToReply(it)
-                            },
-                            onReplyClick = { repliedId, timestamp ->
-                                onReplyClick(repliedId, timestamp)
-                            }
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            reverseLayout = true,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+        ) {
+            if (uiState.typingIndicatorText != null) {
+                item {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            uiState.typingIndicatorText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
+            }
 
-                if (uiState.isLoadingMore) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            items(
+                count = reversedMessages.size,
+                key = { index -> reversedMessages[index].id }
+            ) { index ->
+                val message = reversedMessages[index]
+                val date = Instant.fromEpochMilliseconds(message.timestamp)
+                    .toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+                val showHeader = if (index == reversedMessages.size - 1) true else {
+                    val nextDate = Instant.fromEpochMilliseconds(reversedMessages[index + 1].timestamp)
+                        .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                    date != nextDate
+                }
+
+                Column {
+                    if (showHeader) {
+                        DateHeader(date)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    val isSelected = uiState.selectedMessageIds.contains(message.id)
+                    val isHighlighted = uiState.highlightedMessageId == message.id
+                    MessageBubble(
+                        message = message,
+                        isSelected = isSelected,
+                        isHighlighted = isHighlighted,
+                        onLongClick = { onMessageLongClick(message.id) },
+                        onClick = { onMessageClick(message.id) },
+                        onSwipeToReply = { onSwipeToReply(message) },
+                        onReplyClick = { repliedId, timestamp ->
+                            onReplyClick(repliedId, timestamp)
                         }
+                    )
+                }
+            }
+
+            if (uiState.isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     }
                 }
             }
@@ -465,42 +482,29 @@ fun ChatContent(
 
         AnimatedVisibility(
             visible = showScrollToBottom,
-            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 80.dp, end = 16.dp) // Adjusted to be above input
+                .padding(16.dp)
         ) {
-            FloatingActionButton(
+            SmallFloatingActionButton(
                 onClick = {
                     scope.launch {
                         listState.animateScrollToItem(0)
                     }
                 },
-                modifier = Modifier.size(42.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                elevation = FloatingActionButtonDefaults.elevation(4.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Scroll to bottom",
-                    modifier = Modifier.size(24.dp)
+                    contentDescription = "Scroll to bottom"
                 )
             }
         }
-
-        ChatInput(
-            textFieldValue = textFieldValue,
-            onValueChange = onValueChange,
-            onSend = onSend,
-            replyingToMessage = uiState.replyingToMessage,
-            onCancelReply = onCancelReply,
-            isSending = uiState.isSending,
-            focusRequester = focusRequester,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
     }
 }
 
@@ -510,56 +514,102 @@ fun MessageBubble(
     message: ChatMessage,
     isSelected: Boolean,
     isHighlighted: Boolean,
-    isSelectionMode: Boolean,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
-    onSwipeToReply: (ChatMessage) -> Unit,
+    onSwipeToReply: () -> Unit,
     onReplyClick: (String, Long?) -> Unit
 ) {
-    val backgroundColor by animateColorAsState(
-        targetValue = when {
-            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-            else -> Color.Transparent
-        }
-    )
+    val isUser = message.isFromMe
+    val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val scope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val haptic = LocalHapticFeedback.current
+    var hasTriggeredHaptic by remember { mutableStateOf(false) }
+
+    val containerColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+        isUser -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (isUser) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val shape = if (isUser) {
+        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
+    } else {
+        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(backgroundColor)
+            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val newOffset = (offsetX.value + dragAmount).coerceIn(0f, 150f)
+                        scope.launch {
+                            offsetX.snapTo(newOffset)
+                        }
+                        if (newOffset >= 90f && !hasTriggeredHaptic) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            hasTriggeredHaptic = true
+                        } else if (newOffset < 90f) {
+                            hasTriggeredHaptic = false
+                        }
+                    },
+                    onDragEnd = {
+                        if (offsetX.value >= 90f) {
+                            onSwipeToReply()
+                        }
+                        scope.launch {
+                            offsetX.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
+                        }
+                        hasTriggeredHaptic = false
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            offsetX.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
+                        }
+                        hasTriggeredHaptic = false
+                    }
+                )
+            }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        contentAlignment = alignment
     ) {
-        val alignment = if (message.isFromMe) Alignment.CenterEnd else Alignment.CenterStart
-        val bubbleColor = if (message.isFromMe) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        }
-        val contentColor = if (message.isFromMe) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+        if (offsetX.value > 0) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Reply,
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 16.dp)
+                    .alpha((offsetX.value / 90f).coerceIn(0f, 1f)),
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
 
-        Column(
-            modifier = Modifier.align(alignment).widthIn(max = 300.dp)
+        Surface(
+            color = containerColor,
+            contentColor = contentColor,
+            shape = shape,
+            shadowElevation = 0.5.dp,
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
         ) {
-            Surface(
-                color = bubbleColor,
-                contentColor = contentColor,
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomStart = if (message.isFromMe) 16.dp else 4.dp,
-                    bottomEnd = if (message.isFromMe) 4.dp else 16.dp
-                )
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Column {
                     if (message.repliedMessageId != null) {
                         ReplyPreview(
                             senderName = message.repliedMessageSenderName ?: "Partner",
@@ -568,23 +618,42 @@ fun MessageBubble(
                             onReplyClick = { onReplyClick(message.repliedMessageId, 0L) }
                         )
                     }
-                    Text(text = message.text, style = MaterialTheme.typography.bodyLarge)
-                    
+
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+
+                    val timeString = remember(message.timestamp) {
+                        try {
+                            val instant = Instant.fromEpochMilliseconds(message.timestamp)
+                            val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                            val hour = localDateTime.hour.toString().padStart(2, '0')
+                            val minute = localDateTime.minute.toString().padStart(2, '0')
+                            "$hour:$minute"
+                        } catch (_: Exception) {
+                            ""
+                        }
+                    }
+
                     Row(
-                        modifier = Modifier.align(Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.align(Alignment.End)
                     ) {
-                        val time = Instant.fromEpochMilliseconds(message.timestamp)
-                            .toLocalDateTime(TimeZone.currentSystemDefault())
-                        Text(
-                            text = "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = contentColor.copy(alpha = 0.7f)
-                        )
-                        if (message.isFromMe) {
+                        if (timeString.isNotEmpty()) {
+                            Text(
+                                text = timeString,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = contentColor.copy(alpha = 0.6f),
+                                fontSize = 10.sp
+                            )
+                        }
+                        if (isUser) {
                             Spacer(modifier = Modifier.width(4.dp))
                             val isRead = message.readBy.filterKeys { it != message.userId }.isNotEmpty()
-                            MessageStatusIcon(isRead = isRead, isDelivered = true)
+                            MessageStatusIcon(isRead = isRead, tint = contentColor.copy(alpha = 0.6f))
                         }
                     }
                 }
@@ -594,38 +663,50 @@ fun MessageBubble(
 }
 
 @Composable
-fun MessageStatusIcon(isRead: Boolean, isDelivered: Boolean, modifier: Modifier = Modifier) {
+fun MessageStatusIcon(isRead: Boolean, tint: Color, modifier: Modifier = Modifier) {
     val icon = if (isRead) Icons.Default.DoneAll else Icons.Default.Check
-    val color = if (isRead) Color(0xFF34B7F1) else LocalContentColor.current.copy(alpha = 0.5f)
+    val color = if (isRead) Color(0xFF34B7F1) else tint
     Icon(
         imageVector = icon,
         contentDescription = null,
-        modifier = modifier.size(14.dp),
+        modifier = modifier.size(12.dp),
         tint = color
     )
 }
 
 @Composable
-fun DateHeader(date: LocalDate, modifier: Modifier = Modifier) {
+fun DateHeader(date: kotlinx.datetime.LocalDate, modifier: Modifier = Modifier) {
+    val dateString = remember(date) {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        when (date) {
+            now -> "Today"
+            now.minus(DatePeriod(days = 1)) -> "Yesterday"
+            else -> {
+                val day = date.day.toString().padStart(2, '0')
+                val month = date.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+                val year = if (date.year != now.year) " ${date.year}" else ""
+                "$day $month$year"
+            }
+        }
+    }
+
     Box(
-        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(8.dp)
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            val now = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
-            val text = when (date) {
-                now -> "Today"
-                now.minus(DatePeriod(days = 1)) -> "Yesterday"
-                else -> "${date.day} ${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.year}"
-            }
             Text(
-                text = text,
+                text = dateString,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
             )
         }
     }
@@ -644,50 +725,78 @@ fun ChatInput(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        tonalElevation = 2.dp,
-        shadowElevation = 8.dp
+        color = Color.Transparent
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
+        Column(
+            modifier = Modifier
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+        ) {
             if (replyingToMessage != null) {
                 ReplyPreview(
-                    senderName = if (replyingToMessage.isFromMe) "You" else "Partner",
+                    senderName = if (replyingToMessage.isFromMe) "You" else replyingToMessage.senderName,
                     text = replyingToMessage.text,
                     onCancel = onCancelReply,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
             Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = textFieldValue,
-                    onValueChange = onValueChange,
+                Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .focusRequester(focusRequester),
-                    placeholder = { Text("Message") },
-                    maxLines = 5,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        .padding(end = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 1.dp
+                ) {
+                    TextField(
+                        value = textFieldValue,
+                        onValueChange = onValueChange,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Default
+                        ),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        ),
+                        maxLines = 4
                     )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                FloatingActionButton(
-                    onClick = { if (textFieldValue.text.isNotBlank() && !isSending) onSend() },
-                    modifier = Modifier.size(48.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (textFieldValue.text.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        )
+                        .clickable(enabled = textFieldValue.text.isNotBlank() && !isSending, onClick = onSend),
+                    contentAlignment = Alignment.Center
                 ) {
                     if (isSending) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
                     } else {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             }
@@ -707,7 +816,7 @@ fun ReplyPreview(
         modifier = modifier
             .fillMaxWidth()
             .clickable(enabled = onReplyClick != null) { onReplyClick?.invoke() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -726,66 +835,22 @@ fun ReplyPreview(
                     text = senderName,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
                 )
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 12.sp
                 )
             }
             if (onCancel != null) {
-                IconButton(onClick = onCancel) {
+                IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun TypingBubble(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val dot1Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-    val dot2Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, delayMillis = 200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-    val dot3Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, delayMillis = 400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-
-    Surface(
-        modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot1Alpha), CircleShape))
-            Spacer(Modifier.width(4.dp))
-            Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot2Alpha), CircleShape))
-            Spacer(Modifier.width(4.dp))
-            Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dot3Alpha), CircleShape))
         }
     }
 }
@@ -797,17 +862,12 @@ fun ChatPreview() {
         ChatContent(
             uiState = ChatUiState(
                 messages = listOf(
-                    ChatMessage(id = "1", text = "Hey! How is our savings for the Japan trip going?", sender = MessageSender.USER, isFromMe = false),
-                    ChatMessage(id = "2", text = "It's going well! We just reached 80% of our goal.", sender = MessageSender.USER, isFromMe = true),
-                    ChatMessage(id = "3", text = "That's awesome! Let's save a bit more this month.", sender = MessageSender.USER, isFromMe = false)
+                    ChatMessage(id = "1", text = "Hey! How is our savings for the Japan trip going?", isFromMe = false),
+                    ChatMessage(id = "2", text = "It's going well! We just reached 80% of our goal.", isFromMe = true),
+                    ChatMessage(id = "3", text = "That's awesome! Let's save a bit more this month.", isFromMe = false)
                 )
             ),
-            onLoadMore = {},
-            textFieldValue = TextFieldValue(""),
-            onValueChange = {},
-            onSend = {},
-            onCancelReply = {},
-            focusRequester = FocusRequester()
+            onLoadMore = {}
         )
     }
 }

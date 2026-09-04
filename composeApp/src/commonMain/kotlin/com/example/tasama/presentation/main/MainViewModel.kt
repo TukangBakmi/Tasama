@@ -9,8 +9,13 @@ import com.example.tasama.domain.repository.PresenceRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.service.GeofenceMonitor
+import com.example.tasama.presentation.components.TransientFeedback
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -32,6 +37,7 @@ class MainViewModel(
     private val savingsRepository: SavingsRepository,
     private val presenceRepository: PresenceRepository,
     private val geofenceMonitor: GeofenceMonitor,
+    private val aiChatRepository: com.example.tasama.domain.repository.AIChatRepository,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
     val settings: StateFlow<AppSettings> = settingsRepository.settings
@@ -113,4 +119,41 @@ class MainViewModel(
     val hasPendingSavingsInvitations: StateFlow<Boolean> = savingsRepository.getMyInvitations()
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    private val _transientFeedback = MutableStateFlow<TransientFeedback?>(null)
+    val transientFeedback: StateFlow<TransientFeedback?> = _transientFeedback.asStateFlow()
+
+    private var feedbackJob: Job? = null
+
+    fun showTransientFeedback(feedback: TransientFeedback) {
+        feedbackJob?.cancel()
+        _transientFeedback.value = feedback
+        feedbackJob = viewModelScope.launch {
+            delay(3000)
+            _transientFeedback.value = null
+        }
+    }
+
+    fun hideTransientFeedback() {
+        feedbackJob?.cancel()
+        _transientFeedback.value = null
+    }
+
+    fun restoreMessages(feedback: TransientFeedback.UndoDelete) {
+        viewModelScope.launch {
+            try {
+                if (feedback.channelId != null) {
+                    // Regular Chat
+                    chatRepository.restoreMessages(feedback.channelId, feedback.messageIds)
+                } else {
+                    // AI Chat
+                    if (feedback.messages.isNotEmpty()) {
+                        aiChatRepository.restoreMessages(feedback.messages)
+                    }
+                }
+                hideTransientFeedback()
+            } catch (_: Exception) {
+            }
+        }
+    }
 }

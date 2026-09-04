@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
@@ -220,8 +221,8 @@ class ProfileViewModel(
         _uiState.update { it.copy(exportMessage = null) }
     }
 
-    fun onIdCopied() {
-        _uiState.update { it.copy(exportMessage = "User ID copied") }
+    fun onIdCopied(onFeedback: (TransientFeedback) -> Unit) {
+        onFeedback(TransientFeedback.Copy("User ID copied"))
     }
 
     fun updateTheme(theme: AppTheme) {

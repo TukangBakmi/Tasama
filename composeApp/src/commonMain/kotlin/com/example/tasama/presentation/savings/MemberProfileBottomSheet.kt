@@ -7,9 +7,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -19,6 +16,9 @@ import com.example.tasama.domain.model.User
 import com.example.tasama.presentation.components.AppSnackbar
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.chat.InfoItem
+import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.TransientFeedback
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,8 +28,7 @@ fun MemberProfileBottomSheet(
     onOpenChat: (String) -> Unit,
     onCopyUserId: (String) -> Unit
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    val feedbackHandler = LocalTransientFeedbackHandler.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -67,9 +66,7 @@ fun MemberProfileBottomSheet(
                     trailingIcon = Icons.Default.ContentCopy,
                     onTrailingIconClick = {
                         onCopyUserId(member.userId)
-                        scope.launch {
-                            snackbarHostState.showSnackbar("User ID copied")
-                        }
+                        feedbackHandler(TransientFeedback.Copy("User ID copied to clipboard"))
                     }
                 )
             
@@ -89,15 +86,9 @@ fun MemberProfileBottomSheet(
                     Text("Open Chat")
                 }
             }
-
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-            ) { data ->
-                AppSnackbar(snackbarData = data)
-            }
+            
+            // Add the overlay here to ensure it renders on top of the Bottom Sheet
+            AppTransientFeedbackOverlay()
         }
     }
 }

@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.*
 import com.example.tasama.presentation.components.CurrencyVisualTransformation
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
 import com.example.tasama.presentation.components.UserAvatar
+import com.example.tasama.presentation.main.LocalSnackbarHostState
 import com.example.tasama.util.formatCurrency
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -40,7 +42,8 @@ fun SavingsScreen(
     onNavigateToDetail: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+    val snackbarHostState = LocalSnackbarHostState.current
+    val feedbackHandler = LocalTransientFeedbackHandler.current
 
     LaunchedEffect(uiState.selectedSpaceId) {
         if (uiState.selectedSpaceId != null && !uiState.showSpaceDetails) {
@@ -55,15 +58,6 @@ fun SavingsScreen(
             .collect { error ->
                 viewModel.clearError()
                 snackbarHostState.showSnackbar(error)
-            }
-    }
-
-    LaunchedEffect(Unit) {
-        snapshotFlow { uiState.successMessage }
-            .filterNotNull()
-            .collect { message ->
-                viewModel.clearSuccessMessage()
-                snackbarHostState.showSnackbar(message)
             }
     }
 
@@ -117,7 +111,7 @@ fun SavingsScreen(
                     uiState = uiState,
                     onDismiss = { viewModel.onDismissInvite() },
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    onInvite = { viewModel.inviteMember(it) }
+                    onInvite = { viewModel.inviteMember(it, feedbackHandler) }
                 )
             }
 

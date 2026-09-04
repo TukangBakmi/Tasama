@@ -30,6 +30,8 @@ import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.DistanceInfo
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
@@ -41,6 +43,7 @@ fun PartnerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+    val feedbackHandler = LocalTransientFeedbackHandler.current
     val clipboardManager = LocalClipboardManager.current
 
     var showDatePicker by remember { mutableStateOf(false) }
@@ -129,7 +132,7 @@ fun PartnerScreen(
                     onCancelRequest = viewModel::cancelPartnerRequest,
                     onCopyId = { id ->
                         clipboardManager.setText(AnnotatedString(id))
-                        viewModel.onIdCopied()
+                        viewModel.onIdCopied(feedbackHandler)
                     },
                     onClearError = viewModel::clearError
                 )

@@ -47,6 +47,9 @@ import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.compose.PickerResultLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PlatformFile
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.TransientFeedback
+import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.filterNotNull
@@ -62,6 +65,7 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
+    val feedbackHandler = LocalTransientFeedbackHandler.current
     val clipboardManager = LocalClipboardManager.current
     rememberCoroutineScope()
 
@@ -121,7 +125,7 @@ fun ProfileScreen(
                 onLogout = { showLogoutConfirmDialog = true },
                 onCopyId = { id ->
                     clipboardManager.setText(AnnotatedString(id))
-                    viewModel.onIdCopied()
+                    viewModel.onIdCopied(feedbackHandler)
                 },
                 onEditName = { showEditNameDialog = true },
                 onEditAvatar = { showAvatarSelectionDialog = true },

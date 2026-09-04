@@ -31,6 +31,12 @@ import com.example.tasama.presentation.chat.ChatListScreen
 import com.example.tasama.presentation.chat.ChatScreen
 import com.example.tasama.presentation.chat.UserDetailScreen
 import com.example.tasama.presentation.components.AppSnackbar
+import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
+import com.example.tasama.presentation.components.LocalTransientFeedback
+import com.example.tasama.presentation.components.LocalTransientFeedbackActionHandler
+import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.TransientFeedback
+import com.example.tasama.presentation.components.TransientFeedbackOverlay
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
 import com.example.tasama.presentation.partner.PartnerScreen
@@ -58,6 +64,7 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     val authState by viewModel.authState.collectAsState()
+    val transientFeedback by viewModel.transientFeedback.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(initialChannelId, authState) {
@@ -98,7 +105,18 @@ fun MainScreen(
         }
     }
 
-    CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+    CompositionLocalProvider(
+        LocalSnackbarHostState provides snackbarHostState,
+        LocalTransientFeedbackHandler provides { viewModel.showTransientFeedback(it) },
+        LocalTransientFeedback provides transientFeedback,
+        LocalTransientFeedbackActionHandler provides {
+            if (it is TransientFeedback.UndoDelete) {
+                viewModel.restoreMessages(it)
+            } else {
+                viewModel.hideTransientFeedback()
+            }
+        }
+    ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Scaffold(
                 snackbarHost = {
@@ -439,6 +457,7 @@ fun MainScreen(
                                     
                                     val uiState by savingsViewModel.uiState.collectAsState()
                                     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                                    val feedbackHandler = LocalTransientFeedbackHandler.current
                                     val scope = rememberCoroutineScope()
                                     
                                     LaunchedEffect(uiState.hasLeftSpace, uiState.showRemovedFromSpaceDialog) {
@@ -484,6 +503,7 @@ fun MainScreen(
                                             },
                                             onCopyUserId = { userId ->
                                                 clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(userId))
+                                                feedbackHandler(TransientFeedback.Copy("User ID copied to clipboard"))
                                             }
                                         )
 
@@ -492,7 +512,7 @@ fun MainScreen(
                                                 uiState = uiState,
                                                 onDismiss = { savingsViewModel.onDismissInvite() },
                                                 onQueryChange = { savingsViewModel.onSearchQueryChange(it) },
-                                                onInvite = { savingsViewModel.inviteMember(it) }
+                                                onInvite = { savingsViewModel.inviteMember(it, feedbackHandler) }
                                             )
                                         }
 
@@ -504,20 +524,15 @@ fun MainScreen(
                                                     snackbarHostState.showSnackbar(error)
                                                 }
                                         }
-
-                                        LaunchedEffect(Unit) {
-                                            snapshotFlow { uiState.successMessage }
-                                                .filterNotNull()
-                                                .collect { message ->
-                                                    savingsViewModel.clearSuccessMessage()
-                                                    snackbarHostState.showSnackbar(message)
-                                                }
-                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    
+                    // Render the feedback overlay at the end of the root Box 
+                    // to ensure it stays on top of all other components
+                    AppTransientFeedbackOverlay()
                 }
             }
         }

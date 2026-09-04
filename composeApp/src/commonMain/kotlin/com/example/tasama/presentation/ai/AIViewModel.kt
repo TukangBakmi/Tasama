@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.example.tasama.data.remote.GroqException
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
@@ -652,19 +653,31 @@ class AIViewModel(
         _uiState.update { it.copy(selectedMessageIds = emptySet()) }
     }
 
-    fun deleteSelectedMessages() {
+    fun deleteSelectedMessages(onFeedback: (TransientFeedback) -> Unit) {
         val selectedIds = _uiState.value.selectedMessageIds.toList()
         if (selectedIds.isEmpty()) return
+        val messagesToDelete = _uiState.value.messages.filter { it.id in selectedIds }
 
         viewModelScope.launch {
-            aiChatRepository.deleteMessages(selectedIds)
-            _uiState.update { it.copy(selectedMessageIds = emptySet()) }
+            try {
+                aiChatRepository.deleteMessages(selectedIds)
+                val count = selectedIds.size
+                val text = if (count == 1) "Message deleted for me" else "$count messages deleted for me"
+                onFeedback(TransientFeedback.UndoDelete(text, null, selectedIds, messagesToDelete))
+                _uiState.update { it.copy(selectedMessageIds = emptySet()) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete messages") }
+            }
         }
     }
 
     fun restoreMessages(messages: List<ChatMessage>) {
         viewModelScope.launch {
-            aiChatRepository.restoreMessages(messages)
+            try {
+                aiChatRepository.restoreMessages(messages)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Failed to restore messages") }
+            }
         }
     }
 

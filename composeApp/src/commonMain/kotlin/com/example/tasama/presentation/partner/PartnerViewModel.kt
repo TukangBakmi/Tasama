@@ -17,6 +17,7 @@ import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -611,8 +612,8 @@ class PartnerViewModel(
         }
     }
 
-    fun onIdCopied() {
-        _uiState.update { it.copy(successMessage = "ID copied to clipboard") }
+    fun onIdCopied(onFeedback: (TransientFeedback) -> Unit) {
+        onFeedback(TransientFeedback.Copy("ID copied to clipboard"))
     }
 
     fun clearError() {

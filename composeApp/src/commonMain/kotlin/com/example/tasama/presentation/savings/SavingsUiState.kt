@@ -21,7 +21,6 @@ data class SavingsUiState(
     val filteredContacts: List<User> = emptyList(),
     val isSearching: Boolean = false,
     val error: String? = null,
-    val successMessage: String? = null,
     val userCurrency: String = "IDR",
     val currentUser: User? = null,
     val showRemovedFromSpaceDialog: Boolean = false,

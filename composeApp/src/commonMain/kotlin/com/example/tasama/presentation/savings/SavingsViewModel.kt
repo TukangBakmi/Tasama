@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.*
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -322,7 +323,7 @@ class SavingsViewModel(
         }
     }
 
-    fun inviteMember(userId: String) {
+    fun inviteMember(userId: String, onFeedback: (TransientFeedback) -> Unit = {}) {
         val spaceId = _uiState.value.selectedSpaceId ?: return
         val currentUserId = authRepository.getCurrentUserId()
         
@@ -351,7 +352,7 @@ class SavingsViewModel(
                 }
 
                 onDismissInvite()
-                _uiState.update { it.copy(successMessage = "Invitation sent successfully") }
+                onFeedback(TransientFeedback.Copy("Invitation sent successfully"))
             } catch (e: Exception) {
                 onDismissInvite()
                 _uiState.update { it.copy(error = e.message ?: "Failed to invite member") }
@@ -521,10 +522,6 @@ class SavingsViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    fun clearSuccessMessage() {
-        _uiState.update { it.copy(successMessage = null) }
     }
 
     fun isOwner(space: SavingsSpace?): Boolean {

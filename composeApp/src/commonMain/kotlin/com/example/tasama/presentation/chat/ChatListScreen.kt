@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +29,7 @@ import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.UserAvatar
 import kotlinx.datetime.*
-import kotlinx.datetime.number
+import kotlinx.datetime.Clock as DClock
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import tasama.composeapp.generated.resources.Res
@@ -387,8 +385,8 @@ fun AIAdvisorItem(
 
 @Composable
 fun ChannelItem(
-    channel: ChatChannel?, 
-    currentUserId: String?, 
+    channel: ChatChannel?,
+    currentUserId: String?,
     otherUser: User?,
     presence: PresenceState,
     typingName: String? = null,
@@ -430,10 +428,10 @@ fun ChannelItem(
                 modifier = Modifier.fillMaxSize(),
                 fallbackName = otherUser?.name ?: channel?.participantNames?.filterKeys { it != currentUserId }?.values?.firstOrNull()
             )
-            
+
             // Online status indicator
             val isOnline = presence is PresenceState.Online
-            
+
             Box(
                 modifier = Modifier
                     .size(14.dp)
@@ -466,7 +464,7 @@ fun ChannelItem(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                
+
                 val timeString = remember(channel?.lastMessageTimestamp) {
                     val timestamp = channel?.lastMessageTimestamp ?: 0L
                     if (timestamp == 0L) return@remember ""
@@ -509,10 +507,9 @@ fun ChannelItem(
                     val otherId = channel.participantIds.find { it != currentUserId }
                     if (otherId != null) {
                         val isRead = channel.lastMessageReadBy.containsKey(otherId)
-                        val isDelivered = channel.lastMessageDeliveredTo.containsKey(otherId)
                         MessageStatusIcon(
                             isRead = isRead,
-                            isDelivered = isDelivered,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             modifier = Modifier.padding(end = 4.dp)
                         )
                     }

@@ -3,6 +3,7 @@ package com.example.tasama.presentation.ai
 import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.domain.model.SavingsTransaction
+import com.example.tasama.presentation.components.TransientFeedback
 
 data class AIUiState(
     val messages: List<ChatMessage> = emptyList(),

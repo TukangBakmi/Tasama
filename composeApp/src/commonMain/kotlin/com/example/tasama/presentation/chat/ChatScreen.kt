@@ -409,13 +409,13 @@ fun ChatContent(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             reverseLayout = true,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
             if (uiState.typingIndicatorText != null) {
                 item {
                     Row(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
@@ -449,7 +449,7 @@ fun ChatContent(
 
                 Column {
                     if (showHeader) {
-                        DateHeader(date)
+                        DateHeader(date, modifier = Modifier.padding(horizontal = 12.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                     val isSelected = uiState.selectedMessageIds.contains(message.id)
@@ -471,7 +471,7 @@ fun ChatContent(
             if (uiState.isLoadingMore) {
                 item {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
@@ -528,10 +528,28 @@ fun MessageBubble(
 
     val containerColor = when {
         isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-        isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
         isUser -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
+
+    // Row highlight animation: fade-in (300ms) -> fade-out (1000ms)
+    // The peak alpha is held while the message is centered (via ViewModel delay)
+    val highlightAlpha by animateFloatAsState(
+        targetValue = if (isHighlighted) 1f else 0f,
+        animationSpec = if (isHighlighted) {
+            tween(durationMillis = 300, easing = LinearOutSlowInEasing)
+        } else {
+            tween(durationMillis = 1000, easing = FastOutLinearInEasing)
+        },
+        label = "HighlightAlpha"
+    )
+
+    // Selection background is constant; Highlight background is animated.
+    // Both span the entire width of the message row.
+    val rowBackgroundAlpha = remember(isSelected, highlightAlpha) {
+        if (isSelected) 0.18f else 0.15f * highlightAlpha
+    }
+
     val contentColor = if (isUser) {
         MaterialTheme.colorScheme.onPrimaryContainer
     } else {
@@ -547,7 +565,7 @@ fun MessageBubble(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = rowBackgroundAlpha))
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
@@ -584,7 +602,7 @@ fun MessageBubble(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 20.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
         if (offsetX.value > 0) {
@@ -593,7 +611,7 @@ fun MessageBubble(
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = 16.dp)
+                    .padding(start = 0.dp) // Aligned to the start of the 20dp padded area
                     .alpha((offsetX.value / 90f).coerceIn(0f, 1f)),
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -607,6 +625,7 @@ fun MessageBubble(
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .clip(shape)
         ) {
             Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Column {

@@ -532,7 +532,7 @@ fun MainScreen(
                     
                     // Render the feedback overlay at the end of the root Box 
                     // to ensure it stays on top of all other components
-                    AppTransientFeedbackOverlay()
+                    AppTransientFeedbackOverlay(showUndoBanner = false)
                 }
             }
         }

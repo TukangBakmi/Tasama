@@ -3,6 +3,8 @@ package com.example.tasama.presentation.ai
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -47,6 +49,8 @@ import org.jetbrains.compose.resources.painterResource
 import tasama.composeapp.generated.resources.Res
 import tasama.composeapp.generated.resources.sir_quack
 import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.LocalTransientFeedback
+import com.example.tasama.presentation.components.LocalTransientFeedbackActionHandler
 import com.example.tasama.presentation.components.TransientFeedback
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.datetime.Instant
@@ -245,6 +249,22 @@ fun AIScreen(
             },
             bottomBar = {
                 Column {
+                    val feedback = LocalTransientFeedback.current
+                    val actionHandler = LocalTransientFeedbackActionHandler.current
+
+                    AnimatedVisibility(
+                        visible = feedback is TransientFeedback.UndoDelete,
+                        enter = slideInVertically(initialOffsetY = { it }),
+                        exit = slideOutVertically(targetOffsetY = { it })
+                    ) {
+                        if (feedback is TransientFeedback.UndoDelete) {
+                            com.example.tasama.presentation.components.UndoDeleteBanner(
+                                text = feedback.text,
+                                onUndo = { actionHandler(feedback) }
+                            )
+                        }
+                    }
+
                     CorrectionPrompt(
                         pendingCorrection = uiState.pendingCorrection,
                         onConfirm = viewModel::confirmCorrection,

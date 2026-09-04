@@ -48,6 +48,8 @@ import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.LocalTransientFeedback
+import com.example.tasama.presentation.components.LocalTransientFeedbackActionHandler
 import com.example.tasama.presentation.components.TransientFeedback
 import com.example.tasama.presentation.main.LocalSnackbarHostState
 import kotlinx.coroutines.flow.filterNotNull
@@ -268,15 +270,33 @@ fun ChatScreen(
                 }
             },
             bottomBar = {
-                ChatInput(
-                    textFieldValue = uiState.textFieldValue,
-                    onValueChange = viewModel::onTextFieldValueChange,
-                    onSend = viewModel::sendMessage,
-                    replyingToMessage = uiState.replyingToMessage,
-                    onCancelReply = { viewModel.setReplyingTo(null) },
-                    isSending = uiState.isSending,
-                    focusRequester = focusRequester
-                )
+                Column {
+                    val feedback = LocalTransientFeedback.current
+                    val actionHandler = LocalTransientFeedbackActionHandler.current
+                    
+                    AnimatedVisibility(
+                        visible = feedback is TransientFeedback.UndoDelete,
+                        enter = slideInVertically(initialOffsetY = { it }),
+                        exit = slideOutVertically(targetOffsetY = { it })
+                    ) {
+                        if (feedback is TransientFeedback.UndoDelete) {
+                            com.example.tasama.presentation.components.UndoDeleteBanner(
+                                text = feedback.text,
+                                onUndo = { actionHandler(feedback) }
+                            )
+                        }
+                    }
+
+                    ChatInput(
+                        textFieldValue = uiState.textFieldValue,
+                        onValueChange = viewModel::onTextFieldValueChange,
+                        onSend = viewModel::sendMessage,
+                        replyingToMessage = uiState.replyingToMessage,
+                        onCancelReply = { viewModel.setReplyingTo(null) },
+                        isSending = uiState.isSending,
+                        focusRequester = focusRequester
+                    )
+                }
             },
             contentWindowInsets = WindowInsets(0)
         ) { paddingValues ->

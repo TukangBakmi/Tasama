@@ -31,6 +31,8 @@ sealed class TransientFeedback {
         val messageIds: List<String>,
         val messages: List<ChatMessage> = emptyList()
     ) : TransientFeedback()
+
+    data object Hide : TransientFeedback()
 }
 
 val LocalTransientFeedbackHandler = staticCompositionLocalOf<(TransientFeedback) -> Unit> {
@@ -47,25 +49,71 @@ val LocalTransientFeedbackActionHandler = staticCompositionLocalOf<(TransientFee
 
 @Composable
 fun AppTransientFeedbackOverlay(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showUndoBanner: Boolean = true
 ) {
     val feedback = LocalTransientFeedback.current
     val actionHandler = LocalTransientFeedbackActionHandler.current
 
+    val isUndoDelete = feedback is TransientFeedback.UndoDelete
+    if (isUndoDelete && !showUndoBanner) return
+
     TransientFeedbackOverlay(
-        isVisible = feedback != null,
+        isVisible = feedback != null && feedback !is TransientFeedback.Hide,
         text = when (val f = feedback) {
             is TransientFeedback.Info -> f.text
             is TransientFeedback.Copy -> f.text
             is TransientFeedback.UndoDelete -> f.text
-            null -> ""
+            else -> ""
         },
-        actionLabel = if (feedback is TransientFeedback.UndoDelete) "UNDO" else null,
+        actionLabel = if (isUndoDelete) "UNDO" else null,
         onAction = {
             feedback?.let { actionHandler(it) }
         },
+        isUndoBanner = isUndoDelete,
         modifier = modifier
     )
+}
+
+@Composable
+fun UndoDeleteBanner(
+    text: String,
+    onUndo: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0xFF1C1C1E),
+        contentColor = Color.White,
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onUndo,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00A9F4))
+            ) {
+                Text(
+                    text = "UNDO",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -74,6 +122,7 @@ fun TransientFeedbackOverlay(
     text: String,
     actionLabel: String? = null,
     onAction: () -> Unit = {},
+    isUndoBanner: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Use MutableTransitionState to allow the exit animation to complete before the Popup is removed
@@ -83,7 +132,7 @@ fun TransientFeedbackOverlay(
 
     if (transitionState.currentState || transitionState.targetState) {
         val density = LocalDensity.current
-        val bottomPadding = 64.dp
+        val bottomPadding = if (isUndoBanner) 0.dp else 64.dp
         val bottomPaddingPx = with(density) { bottomPadding.roundToPx() }
 
         Popup(
@@ -100,52 +149,92 @@ fun TransientFeedbackOverlay(
             AnimatedVisibility(
                 visibleState = transitionState,
                 enter = slideInVertically(
-                    initialOffsetY = { it + bottomPaddingPx },
+                    initialOffsetY = { it },
                     animationSpec = tween(durationMillis = 300)
                 ) + fadeIn(),
                 exit = slideOutVertically(
-                    targetOffsetY = { it + bottomPaddingPx },
+                    targetOffsetY = { it },
                     animationSpec = tween(durationMillis = 300)
                 ) + fadeOut(),
                 modifier = modifier
                     .navigationBarsPadding()
                     .imePadding()
             ) {
-                Surface(
-                    color = Color(0xFF323232),
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(24.dp),
-                    tonalElevation = 4.dp,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .widthIn(min = 100.dp, max = 340.dp)
-                ) {
-                    Row(
+                if (isUndoBanner) {
+                    Surface(
+                        color = Color(0xFF1C1C1E),
+                        contentColor = Color.White,
+                        tonalElevation = 4.dp,
+                        shadowElevation = 8.dp,
                         modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .fillMaxWidth()
                     ) {
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontSize = 14.sp,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        
-                        if (actionLabel != null) {
-                            Spacer(modifier = Modifier.width(16.dp))
-                            TextButton(
-                                onClick = onAction,
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF81C784))
-                            ) {
-                                Text(
-                                    text = actionLabel,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            if (actionLabel != null) {
+                                TextButton(
+                                    onClick = onAction,
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00A9F4))
+                                ) {
+                                    Text(
+                                        text = actionLabel,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = Color(0xFF323232),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(24.dp),
+                        tonalElevation = 4.dp,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .widthIn(min = 100.dp, max = 340.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = 14.sp,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            
+                            if (actionLabel != null) {
+                                Spacer(modifier = Modifier.width(16.dp))
+                                TextButton(
+                                    onClick = onAction,
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF81C784))
+                                ) {
+                                    Text(
+                                        text = actionLabel,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
                             }
                         }
                     }

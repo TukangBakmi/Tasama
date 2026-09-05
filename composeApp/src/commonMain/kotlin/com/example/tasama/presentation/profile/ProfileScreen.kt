@@ -87,14 +87,6 @@ fun ProfileScreen(
     // Side effect handlers using snapshotFlow to prevent cancellation when state is cleared
     LaunchedEffect(Unit) {
         launch {
-            snapshotFlow { uiState.exportMessage }
-                .filterNotNull()
-                .collect { message ->
-                    viewModel.clearExportMessage()
-                    snackbarHostState.showSnackbar(message)
-                }
-        }
-        launch {
             snapshotFlow { uiState.error }
                 .filterNotNull()
                 .collect { error ->
@@ -121,8 +113,8 @@ fun ProfileScreen(
 
             ProfileContent(
                 uiState = uiState,
-                onExportExcel = viewModel::exportToExcel,
-                onExportPdf = viewModel::exportToPdf,
+                onExportExcel = { viewModel.exportToExcel(feedbackHandler) },
+                onExportPdf = { viewModel.exportToPdf(feedbackHandler) },
                 onLogout = { showLogoutConfirmDialog = true },
                 onCopyId = { id ->
                     clipboardManager.setText(AnnotatedString(id))
@@ -147,7 +139,7 @@ fun ProfileScreen(
                     currentName = uiState.userName,
                     onDismiss = { showEditNameDialog = false },
                     onConfirm = { newName ->
-                        viewModel.updateDisplayName(newName)
+                        viewModel.updateDisplayName(newName, feedbackHandler)
                         showEditNameDialog = false
                     }
                 )
@@ -160,11 +152,11 @@ fun ProfileScreen(
                         // Since updateProfilePicture expects a URL (string),
                         // we'll store the resource name or a specific convention.
                         // For now, let's pass the resource name as the "URL".
-                        viewModel.updateProfilePicture(avatarRes)
+                        viewModel.updateProfilePicture(avatarRes, feedbackHandler)
                         showAvatarSelectionDialog = false
                     },
                     onDeleteAvatar = {
-                        viewModel.deleteProfilePicture()
+                        viewModel.deleteProfilePicture(feedbackHandler)
                         showAvatarSelectionDialog = false
                     },
                     pickerLauncher = pickerLauncher,
@@ -188,7 +180,7 @@ fun ProfileScreen(
                     onDismiss = { showLinkPartnerDialog = false },
                     onSearch = viewModel::searchUser,
                     onConfirm = { shortId ->
-                        viewModel.linkPartner(shortId)
+                        viewModel.linkPartner(shortId, feedbackHandler)
                     }
                 )
             }
@@ -201,7 +193,7 @@ fun ProfileScreen(
                     confirmButton = {
                         TextButton(
                             onClick = {
-                                viewModel.unlinkPartner()
+                                viewModel.unlinkPartner(feedbackHandler)
                                 showUnlinkConfirmDialog = false
                             },
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
@@ -276,7 +268,7 @@ fun ProfileScreen(
                         pickedFile = null
                     },
                     onConfirm = { croppedBytes ->
-                        viewModel.uploadProfilePicture(croppedBytes)
+                        viewModel.uploadProfilePicture(croppedBytes, feedbackHandler)
                         showCropper = false
                         pickedFile = null
                     }

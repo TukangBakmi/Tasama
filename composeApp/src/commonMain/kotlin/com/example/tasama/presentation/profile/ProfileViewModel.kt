@@ -173,7 +173,7 @@ class ProfileViewModel(
 
     // loadUserProfile is no longer needed as observeUser handles it reactively
 
-    fun linkPartner(partnerShortId: String) {
+    fun linkPartner(partnerShortId: String, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isLinkSuccess = false, errorText = null) }
@@ -181,29 +181,25 @@ class ProfileViewModel(
             _uiState.update { it.copy(isLoading = false) }
             if (result.isSuccess) {
                 _uiState.update { it.copy(
-                    exportMessage = "Partner request sent",
                     isLinkSuccess = true
                 ) }
+                onFeedback(TransientFeedback.Info("Partner request sent"))
             } else {
-                _uiState.update { it.copy(
-                    errorText = result.exceptionOrNull()?.message ?: "Failed to link partner"
-                ) }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to link partner"))
             }
         }
     }
 
-    fun unlinkPartner() {
+    fun unlinkPartner(onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.unlinkPartner(uid)
+            _uiState.update { it.copy(isLoading = false) }
             if (result.isSuccess) {
-                _uiState.update { it.copy(exportMessage = "Partner unlinked") }
+                onFeedback(TransientFeedback.Info("Partner unlinked"))
             } else {
-                _uiState.update { it.copy(
-                    isLoading = false,
-                    error = result.exceptionOrNull()?.message ?: "Failed to unlink partner"
-                ) }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to unlink partner"))
             }
         }
     }
@@ -220,20 +216,21 @@ class ProfileViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    fun updateProfilePicture(url: String?) {
+    fun updateProfilePicture(url: String?, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateProfilePicture(uid, url)
             _uiState.update { it.copy(isUpdating = false) }
+            onFeedback(TransientFeedback.Info(if (url == null) "Profile picture removed" else "Profile picture updated"))
         }
     }
 
-    fun deleteProfilePicture() {
-        updateProfilePicture(null)
+    fun deleteProfilePicture(onFeedback: (TransientFeedback) -> Unit) {
+        updateProfilePicture(null, onFeedback)
     }
 
-    fun uploadProfilePicture(bytes: ByteArray) {
+    fun uploadProfilePicture(bytes: ByteArray, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             try {
@@ -241,18 +238,21 @@ class ProfileViewModel(
                 val url = authRepository.uploadProfilePicture(uid, bytes)
                 authRepository.updateProfilePicture(uid, url)
                 _uiState.update { it.copy(isUpdating = false) }
+                onFeedback(TransientFeedback.Info("Profile picture updated"))
             } catch (e: Exception) {
-                _uiState.update { it.copy(isUpdating = false, error = "Failed to upload: ${e.message}") }
+                _uiState.update { it.copy(isUpdating = false) }
+                onFeedback(TransientFeedback.Info("Failed to upload: ${e.message}"))
             }
         }
     }
 
-    fun updateDisplayName(name: String) {
+    fun updateDisplayName(name: String, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             authRepository.updateDisplayName(uid, name)
             _uiState.update { it.copy(isUpdating = false) }
+            onFeedback(TransientFeedback.Info("Display name updated"))
         }
     }
 
@@ -265,7 +265,7 @@ class ProfileViewModel(
         }
     }
 
-    fun exportToExcel() {
+    fun exportToExcel(onFeedback: (TransientFeedback) -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true) }
             val transactions = transactionRepository.getTransactions()
@@ -277,11 +277,12 @@ class ProfileViewModel(
                 mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
-            _uiState.update { it.copy(isExporting = false, exportMessage = "Excel exported successfully") }
+            _uiState.update { it.copy(isExporting = false) }
+            onFeedback(TransientFeedback.Info("Excel exported successfully"))
         }
     }
 
-    fun exportToPdf() {
+    fun exportToPdf(onFeedback: (TransientFeedback) -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true) }
             try {
@@ -293,15 +294,13 @@ class ProfileViewModel(
                     content = bytes,
                     mimeType = "application/pdf"
                 )
-                _uiState.update { it.copy(isExporting = false, exportMessage = "PDF exported successfully") }
+                _uiState.update { it.copy(isExporting = false) }
+                onFeedback(TransientFeedback.Info("PDF exported successfully"))
             } catch (e: Exception) {
-                _uiState.update { it.copy(isExporting = false, exportMessage = "Error exporting PDF: ${e.message}") }
+                _uiState.update { it.copy(isExporting = false) }
+                onFeedback(TransientFeedback.Info("Error exporting PDF: ${e.message}"))
             }
         }
-    }
-
-    fun clearExportMessage() {
-        _uiState.update { it.copy(exportMessage = null) }
     }
 
     fun onIdCopied(onFeedback: (TransientFeedback) -> Unit) {

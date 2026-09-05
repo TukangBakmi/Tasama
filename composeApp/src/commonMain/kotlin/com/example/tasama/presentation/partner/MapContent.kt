@@ -24,6 +24,7 @@ expect fun MapContent(
     onAddPlace: (Place) -> Unit = {},
     onDeletePlace: (String) -> Unit = {},
     onUnlink: () -> Unit = {},
+    onCopyId: (String) -> Unit = {},
     settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
     onOpenSettings: () -> Unit = {}
 )

@@ -14,7 +14,6 @@ data class ProfileUiState(
     val currency: String = "IDR",
     val theme: AppTheme = AppTheme.SYSTEM,
     val isExporting: Boolean = false,
-    val exportMessage: String? = null,
     val isLoading: Boolean = false,
     val isUpdating: Boolean = false,
     val error: String? = null,

@@ -133,6 +133,7 @@ actual fun MapContent(
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onUnlink: () -> Unit,
+    onCopyId: (String) -> Unit,
     settings: AppSettings,
     onOpenSettings: () -> Unit
 ) {

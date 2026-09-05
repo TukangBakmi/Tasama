@@ -56,19 +56,10 @@ fun PartnerScreen(
     // Side effect handlers using snapshotFlow to prevent cancellation when state is cleared
     LaunchedEffect(Unit) {
         launch {
-            snapshotFlow { uiState.successMessage }
-                .filterNotNull()
-                .collect { message ->
-                    viewModel.clearError()
-                    snackbarHostState.showSnackbar(message)
-                }
-        }
-        launch {
             snapshotFlow { uiState.error }
                 .filterNotNull()
                 .collect { error ->
-                    viewModel.clearError()
-                    snackbarHostState.showSnackbar(error)
+                    // Search errors are shown in the dialog/UI state
                 }
         }
     }
@@ -104,7 +95,11 @@ fun PartnerScreen(
                             onEditAnniversary = { showDatePicker = true },
                             onAddPlace = { viewModel.addPlace(it) },
                             onDeletePlace = viewModel::deletePlace,
-                            onUnlink = viewModel::unlinkPartner,
+                            onUnlink = { viewModel.unlinkPartner(feedbackHandler) },
+                            onCopyId = { id ->
+                                clipboardManager.setText(AnnotatedString(id))
+                                viewModel.onIdCopied(feedbackHandler)
+                            },
                             onUpdatePartnerMapEnabled = viewModel::updatePartnerMapEnabled,
                             onUpdateBatteryMode = viewModel::updateBatteryMode,
                             onUpdateSmartFollowEnabled = viewModel::updateSmartFollowEnabled,
@@ -128,15 +123,16 @@ fun PartnerScreen(
                     onSearch = viewModel::searchUser,
                     onConfirm = { shortId ->
                         viewModel.onPartnerShortIdChange(shortId)
-                        viewModel.sendPartnerRequest()
+                        viewModel.sendPartnerRequest(feedbackHandler)
                     },
                     onAcceptRequest = { showDatePicker = true },
-                    onDeclineRequest = viewModel::declinePartnerRequest,
-                    onCancelRequest = viewModel::cancelPartnerRequest,
+                    onDeclineRequest = { viewModel.declinePartnerRequest(feedbackHandler) },
+                    onCancelRequest = { viewModel.cancelPartnerRequest(feedbackHandler) },
                     onCopyId = { id ->
                         clipboardManager.setText(AnnotatedString(id))
                         viewModel.onIdCopied(feedbackHandler)
-                    }
+                    },
+                    onClearSearch = viewModel::clearSearch
                 )
             }
         }
@@ -173,9 +169,9 @@ fun PartnerScreen(
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
                         if (uiState.isLinked) {
-                            viewModel.updateAnniversaryDate(it)
+                            viewModel.updateAnniversaryDate(it, feedbackHandler)
                         } else {
-                            viewModel.acceptPartnerRequest(it)
+                            viewModel.acceptPartnerRequest(it, feedbackHandler)
                         }
                     }
                     showDatePicker = false
@@ -252,7 +248,8 @@ fun LinkingContent(
     onAcceptRequest: () -> Unit,
     onDeclineRequest: () -> Unit,
     onCancelRequest: () -> Unit,
-    onCopyId: (String) -> Unit
+    onCopyId: (String) -> Unit,
+    onClearSearch: () -> Unit
 ) {
     var showLinkDialog by remember { mutableStateOf(false) }
 
@@ -263,7 +260,10 @@ fun LinkingContent(
             filteredContacts = uiState.filteredContacts,
             suggestedContacts = uiState.suggestedContacts,
             error = uiState.error,
-            onDismiss = { showLinkDialog = false },
+            onDismiss = { 
+                showLinkDialog = false
+                onClearSearch()
+            },
             onSearch = onSearch,
             onConfirm = { shortId ->
                 onConfirm(shortId)
@@ -359,6 +359,7 @@ fun PartnerMapContent(
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onUnlink: () -> Unit,
+    onCopyId: (String) -> Unit,
     onUpdatePartnerMapEnabled: (Boolean) -> Unit,
     onUpdateBatteryMode: (BatteryMode) -> Unit,
     onUpdateSmartFollowEnabled: (Boolean) -> Unit,
@@ -389,6 +390,7 @@ fun PartnerMapContent(
             onAddPlace = onAddPlace,
             onDeletePlace = onDeletePlace,
             onUnlink = onUnlink,
+            onCopyId = onCopyId,
             settings = settings,
             onOpenSettings = { showSettings = true }
         )

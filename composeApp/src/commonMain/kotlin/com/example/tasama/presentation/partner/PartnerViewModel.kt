@@ -33,7 +33,6 @@ data class PartnerUiState(
     val pendingRequestTo: User? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
-    val successMessage: String? = null,
     val isLinked: Boolean = false,
     val isGuest: Boolean = false,
     val partnerShortIdInput: String = "",
@@ -523,7 +522,7 @@ class PartnerViewModel(
         _uiState.update { it.copy(partnerShortIdInput = shortId) }
     }
 
-    fun sendPartnerRequest() {
+    fun sendPartnerRequest(onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         val shortId = _uiState.value.partnerShortIdInput
         if (shortId.length != 12) {
@@ -534,15 +533,17 @@ class PartnerViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val result = authRepository.sendPartnerRequest(uid, shortId)
+            _uiState.update { it.copy(isLoading = false) }
             if (result.isSuccess) {
-                _uiState.update { it.copy(isLoading = false, successMessage = "Request sent successfully!", partnerShortIdInput = "") }
+                _uiState.update { it.copy(partnerShortIdInput = "") }
+                onFeedback(TransientFeedback.Info("Request sent successfully!"))
             } else {
-                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Failed to send request") }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to send request"))
             }
         }
     }
 
-    fun acceptPartnerRequest(anniversaryDate: Long) {
+    fun acceptPartnerRequest(anniversaryDate: Long, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         val partnerUid = _uiState.value.pendingRequestFrom?.id
         viewModelScope.launch {
@@ -555,59 +556,63 @@ class PartnerViewModel(
                 if (partnerUid != null) {
                     placeRepository.deleteAllPlaces(partnerUid)
                 }
-                _uiState.update { it.copy(isLoading = false, successMessage = "Partner linked!", isOperationSuccess = true) }
+                _uiState.update { it.copy(isLoading = false, isOperationSuccess = true) }
+                onFeedback(TransientFeedback.Info("Partner linked!"))
             } else {
-                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Failed to link partner") }
+                _uiState.update { it.copy(isLoading = false) }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to link partner"))
             }
         }
     }
 
-    fun declinePartnerRequest() {
+    fun declinePartnerRequest(onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val result = authRepository.declinePartnerRequest(uid)
             if (result.isSuccess) {
-                _uiState.update { it.copy(successMessage = "Request declined") }
+                onFeedback(TransientFeedback.Info("Request declined"))
             } else {
-                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to decline request") }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to decline request"))
             }
         }
     }
 
-    fun cancelPartnerRequest() {
+    fun cancelPartnerRequest(onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val result = authRepository.cancelPartnerRequest(uid)
             if (result.isSuccess) {
-                _uiState.update { it.copy(successMessage = "Request cancelled") }
+                onFeedback(TransientFeedback.Info("Request cancelled"))
             } else {
-                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to cancel request") }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to cancel request"))
             }
         }
     }
 
-    fun unlinkPartner() {
+    fun unlinkPartner(onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val result = authRepository.unlinkPartner(uid)
             if (result.isSuccess) {
-                _uiState.update { it.copy(successMessage = "Partner unlinked") }
+                onFeedback(TransientFeedback.Info("Partner unlinked"))
             } else {
-                _uiState.update { it.copy(error = result.exceptionOrNull()?.message ?: "Failed to unlink partner") }
+                onFeedback(TransientFeedback.Info(result.exceptionOrNull()?.message ?: "Failed to unlink partner"))
             }
         }
     }
 
-    fun updateAnniversaryDate(date: Long) {
+    fun updateAnniversaryDate(date: Long, onFeedback: (TransientFeedback) -> Unit) {
         val uid = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isOperationSuccess = false) }
             authRepository.updateAnniversaryDate(uid, date).fold(
                 onSuccess = {
-                    _uiState.update { it.copy(isLoading = false, isOperationSuccess = true, successMessage = "Anniversary updated") }
+                    _uiState.update { it.copy(isLoading = false, isOperationSuccess = true) }
+                    onFeedback(TransientFeedback.Info("Anniversary updated"))
                 },
                 onFailure = { e ->
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false) }
+                    onFeedback(TransientFeedback.Info(e.message ?: "Failed to update anniversary"))
                 }
             )
         }
@@ -635,7 +640,7 @@ class PartnerViewModel(
     }
 
     fun clearError() {
-        _uiState.update { it.copy(error = null, successMessage = null) }
+        _uiState.update { it.copy(error = null) }
     }
 
     // Settings update methods

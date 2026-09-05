@@ -163,6 +163,7 @@ actual fun MapContent(
     onAddPlace: (Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onUnlink: () -> Unit,
+    onCopyId: (String) -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
     onOpenSettings: () -> Unit
 ) {
@@ -457,7 +458,8 @@ actual fun MapContent(
                 distanceInfo = distanceInfo,
                 isPartnerComingToMe = isPartnerComingToMe,
                 isDistanceLoading = isDistanceLoading,
-                distanceError = distanceError
+                distanceError = distanceError,
+                onCopyId = onCopyId
             )
         }
 
@@ -1043,7 +1045,8 @@ fun PartnerStatusCard(
     distanceInfo: DistanceInfo? = null,
     isPartnerComingToMe: Boolean = false,
     isDistanceLoading: Boolean = false,
-    distanceError: String? = null
+    distanceError: String? = null,
+    onCopyId: (String) -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
@@ -1057,7 +1060,9 @@ fun PartnerStatusCard(
             border = BorderStroke(1.dp, outlineColor)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clickable { onCopyId(user.shortId) },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {

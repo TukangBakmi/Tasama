@@ -11,11 +11,14 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.example.tasama.domain.model.AppSettings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,10 +76,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         android.util.Log.d("TasamaSplash", "MainActivity.onCreate - Started")
-        val settings = runBlocking { settingsRepository.settings.first() }
-        android.util.Log.d("TasamaTheme", "MainActivity.onCreate - Theme setting: ${settings.theme}")
-        setNightMode(settings.theme)
+        
+        var appSettings by mutableStateOf<AppSettings?>(null)
+        
+        // Block splash screen until settings are loaded
+        splashScreen.setKeepOnScreenCondition { appSettings == null }
+
+        lifecycleScope.launch {
+            appSettings = settingsRepository.settings.first()
+            appSettings?.let { setNightMode(it.theme) }
+        }
 
         // Ensure authState flow is active by subscribing to it
         lifecycleScope.launch {
@@ -84,7 +95,6 @@ class MainActivity : AppCompatActivity() {
                 android.util.Log.d("TasamaSplash", "MainActivity - observed AuthState: $state")
             }
         }
-        
         val uiMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
         android.util.Log.d("TasamaTheme", "MainActivity.onCreate - UI Mode: $uiMode (Night: ${android.content.res.Configuration.UI_MODE_NIGHT_YES}, Light: ${android.content.res.Configuration.UI_MODE_NIGHT_NO})")
 
@@ -108,6 +118,12 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val scope = rememberCoroutineScope()
+            val settings by mainViewModel.settings.collectAsState()
+
+            // Update System Night Mode reactively on Android
+            LaunchedEffect(settings.theme) {
+                setNightMode(settings.theme)
+            }
 
             LaunchedEffect(Unit) {
                 authRepository.userId.collectLatest { uid: String? ->
@@ -141,6 +157,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             App(
+                initialTheme = appSettings?.theme,
                 initialChannelId = initialChannelId,
                 navigateToTab = navigateToTab,
                 onChannelNavigated = { initialChannelId = null },

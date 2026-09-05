@@ -19,6 +19,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 @Preview
 fun App(
+    initialTheme: AppTheme? = null,
     initialChannelId: String? = null,
     navigateToTab: String? = null,
     onChannelNavigated: () -> Unit = {},
@@ -35,11 +36,21 @@ fun App(
 
     val viewModel: MainViewModel = koinViewModel()
     val settings by viewModel.settings.collectAsState()
+    val isSystemDark = isSystemInDarkTheme()
 
-    val isDarkTheme = when (settings.theme) {
-        AppTheme.LIGHT -> false
-        AppTheme.DARK -> true
-        AppTheme.SYSTEM -> isSystemInDarkTheme()
+    val isDarkTheme = remember(settings.theme, initialTheme, isSystemDark) {
+        // Use initialTheme if settings haven't loaded yet (are still at default SYSTEM)
+        val theme = if (settings.theme == AppTheme.SYSTEM && initialTheme != null) {
+            initialTheme
+        } else {
+            settings.theme
+        }
+        
+        when (theme) {
+            AppTheme.LIGHT -> false
+            AppTheme.DARK -> true
+            AppTheme.SYSTEM -> isSystemDark
+        }
     }
 
     TasamaTheme(darkTheme = isDarkTheme) {

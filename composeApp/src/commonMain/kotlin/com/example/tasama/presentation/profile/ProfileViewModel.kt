@@ -311,6 +311,11 @@ class ProfileViewModel(
     fun updateTheme(theme: AppTheme) {
         viewModelScope.launch {
             settingsRepository.updateTheme(theme)
+            
+            // Re-apply night mode if on Android to ensure window backgrounds update
+            // However, the App.kt is responsible for Compose UI recomposition.
+            // On Android, we might need to signal the Activity to recreate or update its UI mode
+            // if we want the system status bars etc. to change immediately when switching to/from SYSTEM.
         }
     }
 

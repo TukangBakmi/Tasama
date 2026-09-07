@@ -144,8 +144,16 @@ class SavingsViewModel(
 
         detailsJob = viewModelScope.launch {
             repository.getSavingsSpace(spaceId).collect { space ->
+                val lastKnownSpace = _uiState.value.selectedSpace
+                
                 if (space == null) {
-                    _uiState.update { it.copy(showRemovedFromSpaceDialog = true, isLoading = false) }
+                    // Check if the space was deleted by someone else while a user was viewing it
+                    if (lastKnownSpace != null) {
+                        println("DEBUG: [Savings] Space deleted. Notifying user.")
+                        _events.emit(SavingsEvent.NavigateToSavingsList)
+                        _events.emit(SavingsEvent.ShowFeedback("This Savings Space has been deleted by the owner."))
+                    }
+                    _uiState.update { it.copy(isLoading = false) }
                 } else {
                     _uiState.update { it.copy(selectedSpaceId = spaceId, selectedSpace = space, isLoading = false) }
                 }
@@ -189,7 +197,7 @@ class SavingsViewModel(
     }
 
     fun onRemovedDialogConfirm() {
-        _uiState.update { it.copy(showRemovedFromSpaceDialog = false) }
+        // No-op, removed in favor of event-driven navigation and toast
     }
 
     fun addSpace(space: SavingsSpace) {
@@ -217,14 +225,17 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 println("DEBUG: [Savings] deleteSpace started for id: $id")
-                repository.deleteSavingsSpace(id)
-                println("DEBUG: [Savings] repository.deleteSavingsSpace SUCCESS")
-                
-                // Cancel all detail-related jobs immediately to stop UI updates
+
+                // Cancel detail jobs BEFORE the actual deletion to avoid the collector 
+                // in loadSpaceDetails receiving a null space and showing the "deleted" toast 
+                // to the person who is actually performing the deletion.
                 detailsJob?.cancel()
                 transactionJob?.cancel()
                 invitationJob?.cancel()
                 activityJob?.cancel()
+
+                repository.deleteSavingsSpace(id)
+                println("DEBUG: [Savings] repository.deleteSavingsSpace SUCCESS")
                 
                 // Clear state locally immediately to ensure no stale data
                 _uiState.update { 
@@ -371,14 +382,16 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 println("DEBUG: [Savings] leaveSpace started for id: $spaceId")
-                repository.leaveSpace(spaceId)
-                println("DEBUG: [Savings] repository.leaveSpace SUCCESS")
                 
-                // Cancel all detail-related jobs immediately to stop UI updates
+                // Cancel all detail-related jobs immediately to stop UI updates 
+                // and avoid "deleted by owner" false positives if access is lost
                 detailsJob?.cancel()
                 transactionJob?.cancel()
                 invitationJob?.cancel()
                 activityJob?.cancel()
+
+                repository.leaveSpace(spaceId)
+                println("DEBUG: [Savings] repository.leaveSpace SUCCESS")
                 
                 // Clear state locally immediately to ensure no stale data
                 _uiState.update { 

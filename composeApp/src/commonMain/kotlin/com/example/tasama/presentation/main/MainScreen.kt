@@ -457,6 +457,10 @@ fun MainScreen(
                                     
                                     val uiState by savingsViewModel.uiState.collectAsState()
                                     
+                                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                                    val feedbackHandler = LocalTransientFeedbackHandler.current
+                                    val scope = rememberCoroutineScope()
+
                                     LaunchedEffect(Unit) {
                                         savingsViewModel.events.collect { event ->
                                             when (event) {
@@ -464,6 +468,9 @@ fun MainScreen(
                                                     println("DEBUG: [Savings] Navigation event received in MainScreen")
                                                     navController.popBackStack("tabs", inclusive = false)
                                                     println("DEBUG: [Savings] Savings list screen should be displayed")
+                                                }
+                                                is com.example.tasama.presentation.savings.SavingsEvent.ShowFeedback -> {
+                                                    feedbackHandler(TransientFeedback.Copy(event.message))
                                                 }
                                             }
                                         }
@@ -476,10 +483,6 @@ fun MainScreen(
                                             savingsViewModel.onDismissSpaceDetails()
                                         }
                                     }
-
-                                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-                                    val feedbackHandler = LocalTransientFeedbackHandler.current
-                                    val scope = rememberCoroutineScope()
                                     
                                     LaunchedEffect(uiState.showRemovedFromSpaceDialog) {
                                         if (uiState.showRemovedFromSpaceDialog && uiState.showSpaceDetails) {

@@ -40,15 +40,30 @@ service cloud.firestore {
 
     // Invitations rules
     match /savings_invitations/{invitationId} {
-      allow read: if request.auth != null &&
-                   (request.auth.uid == resource.data.inviterId || request.auth.uid == resource.data.inviteeId);
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.inviterId ||
+        request.auth.uid == resource.data.inviteeId ||
+        (resource.data.spaceId != null &&
+         get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds != null &&
+         request.auth.uid in get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds)
+      );
 
       allow create: if request.auth != null && request.auth.uid == request.resource.data.inviterId;
 
-      allow update: if request.auth != null &&
-                    (request.auth.uid == resource.data.inviterId || request.auth.uid == resource.data.inviteeId);
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.inviterId ||
+        request.auth.uid == resource.data.inviteeId ||
+        (resource.data.spaceId != null &&
+         get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds != null &&
+         request.auth.uid in get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds)
+      );
 
-      allow delete: if request.auth != null && request.auth.uid == request.resource.data.inviterId;
+      allow delete: if request.auth != null && (
+        request.auth.uid == resource.data.inviterId ||
+        (resource.data.spaceId != null &&
+         get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds != null &&
+         request.auth.uid in get(/databases/$(database)/documents/savings_spaces/$(resource.data.spaceId)).data.ownerIds)
+      );
     }
   }
 }

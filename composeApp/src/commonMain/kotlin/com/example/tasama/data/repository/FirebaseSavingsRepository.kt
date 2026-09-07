@@ -153,12 +153,58 @@ class FirebaseSavingsRepository(
 
     override suspend fun deleteSavingsSpace(id: String) {
         val uid = authRepository.getCurrentUserId() ?: return
-        val space = spacesCollection.document(id).get().data<SavingsSpace>()
+        val spaceDoc = spacesCollection.document(id)
         
-        val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
-        if (!isOwner) throw Exception("Only owner can delete the space")
+        // 1. Fetch space details to check ownership and existence
+        val spaceSnapshot = try { spaceDoc.get() } catch (e: Exception) { null }
         
-        spacesCollection.document(id).delete()
+        if (spaceSnapshot == null || !spaceSnapshot.exists) {
+            println("DEBUG: [SAVINGS] deleteSavingsSpace: Space $id not found or inaccessible")
+        } else {
+            val space = spaceSnapshot.data<SavingsSpace>()
+            val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+            if (!isOwner) throw Exception("Only owner can delete the space")
+            println("DEBUG: [SAVINGS] deleteSavingsSpace: Owner validated for space $id ('${space.name}')")
+        }
+        
+        println("DEBUG: [SAVINGS] deleteSavingsSpace: Initiating cleanup for Space ID: $id")
+
+        // 2. Cleanup: Delete ALL pending invitations for this space
+        try {
+            val statusPending = InvitationStatus.PENDING.name
+            
+            // Query all invitations for this space
+            val invites = invitationsCollection
+                .where("spaceId", id)
+                .get()
+            
+            println("DEBUG: [SAVINGS] deleteSavingsSpace: Found ${invites.documents.size} total invitations for space $id")
+            
+            var deletedCount = 0
+            invites.documents.forEach { doc ->
+                val invId = doc.id
+                val rawStatus = try { doc.get<String>("status") } catch (e: Exception) { null }
+                
+                // We delete ALL PENDING invitations.
+                // If it's already ACCEPTED, the user is already a member and the space deletion 
+                // will affect them via the memberIds list in the space doc (they will be redirected).
+                // If it's DECLINED/CANCELLED, we could also clean them up, but the requirement 
+                // specified "pending invitations".
+                if (rawStatus == statusPending) {
+                    println("DEBUG: [SAVINGS] deleteSavingsSpace: Deleting pending invitation $invId")
+                    doc.reference.delete()
+                    deletedCount++
+                }
+            }
+            println("DEBUG: [SAVINGS] deleteSavingsSpace: Invitation cleanup complete. Deleted $deletedCount pending invitations.")
+        } catch (e: Exception) {
+            println("ERROR: [SAVINGS] deleteSavingsSpace: Invitation cleanup error: ${e.message}")
+            // We don't rethrow here to ensure the space itself gets deleted even if cleanup fails
+        }
+
+        // 3. Delete the space document itself
+        spaceDoc.delete()
+        println("DEBUG: [SAVINGS] deleteSavingsSpace: Space $id document deleted successfully")
     }
 
     override suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction) {
@@ -459,6 +505,19 @@ class FirebaseSavingsRepository(
         ))
         
         logActivity(spaceId, uid, authRepository.getUserName(uid) ?: "User", SavingsActivityType.MEMBER_LEFT, "Left the space")
+
+        // Cleanup: If the user had a pending invitation to this space (shouldn't happen if they are already a member, 
+        // but for safety), we clean it up.
+        try {
+            val pendingInvites = invitationsCollection
+                .where("spaceId", spaceId)
+                .where("inviteeId", uid)
+                .where("status", InvitationStatus.PENDING.name)
+                .get()
+            pendingInvites.documents.forEach { it.reference.delete() }
+        } catch (e: Exception) {
+            // Ignore
+        }
     }
 
     override suspend fun transferOwnership(spaceId: String, newOwnerId: String) {

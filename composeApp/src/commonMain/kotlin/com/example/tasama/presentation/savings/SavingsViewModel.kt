@@ -271,10 +271,20 @@ class SavingsViewModel(
     }
 
     fun onInviteClick(spaceId: String) {
+        val space = _uiState.value.selectedSpace
+        val pendingIds = _uiState.value.pendingInvitations.map { it.inviteeId }
+        val memberIds = space?.memberIds ?: emptyList()
+        val ownerIds = space?.ownerIds ?: emptyList()
+        val ownerId = space?.ownerId ?: ""
+        val excludedIds = (pendingIds + memberIds + ownerIds + ownerId).toSet()
+
         _uiState.update { 
             it.copy(
                 showInviteMemberDialog = true,
-                selectedSpaceId = spaceId
+                selectedSpaceId = spaceId,
+                searchQuery = "",
+                searchedUser = null,
+                filteredContacts = it.contacts.filter { contact -> contact.id !in excludedIds }
             ) 
         }
     }
@@ -298,12 +308,22 @@ class SavingsViewModel(
             _uiState.update { it.copy(searchedUser = null) }
         }
 
+        val space = _uiState.value.selectedSpace
+        val pendingIds = _uiState.value.pendingInvitations.map { it.inviteeId }
+        val memberIds = space?.memberIds ?: emptyList()
+        val ownerIds = space?.ownerIds ?: emptyList()
+        val ownerId = space?.ownerId ?: ""
+        
+        val excludedIds = (pendingIds + memberIds + ownerIds + ownerId).toSet()
+
         val filtered = if (query.isEmpty()) {
-            _uiState.value.contacts
+            _uiState.value.contacts.filter { it.id !in excludedIds }
         } else {
             _uiState.value.contacts.filter { 
-                it.name.contains(query, ignoreCase = true) || 
-                it.email.contains(query, ignoreCase = true) 
+                (it.name.contains(query, ignoreCase = true) || 
+                it.shortId.contains(query) ||
+                it.id.contains(query, ignoreCase = true)) &&
+                it.id !in excludedIds
             }
         }
         _uiState.update { it.copy(filteredContacts = filtered) }
@@ -314,9 +334,19 @@ class SavingsViewModel(
             _uiState.update { it.copy(isSearching = true) }
             val user = authRepository.getUserIdByName(query)?.let { authRepository.getUser(it) }
                 ?: authRepository.getUserIdFromShortId(query)?.let { authRepository.getUser(it) }
+            
+            val space = _uiState.value.selectedSpace
+            val pendingIds = _uiState.value.pendingInvitations.map { it.inviteeId }
+            val memberIds = space?.memberIds ?: emptyList()
+            val ownerIds = space?.ownerIds ?: emptyList()
+            val ownerId = space?.ownerId ?: ""
+            val excludedIds = (pendingIds + memberIds + ownerIds + ownerId).toSet()
+
+            val filteredUser = if (user != null && user.id in excludedIds) null else user
+
             _uiState.update { 
                 it.copy(
-                    searchedUser = user,
+                    searchedUser = filteredUser,
                     isSearching = false
                 ) 
             }

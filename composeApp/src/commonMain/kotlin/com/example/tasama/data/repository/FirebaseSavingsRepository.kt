@@ -97,8 +97,11 @@ class FirebaseSavingsRepository(
         val members = mutableListOf<SavingsMember>()
         val memberIds = mutableListOf<String>()
 
+        val ownerIds = mutableListOf<String>()
+
         // Add creator as owner/member
         memberIds.add(uid)
+        ownerIds.add(uid)
         members.add(SavingsMember(
             userId = uid,
             name = user.name,
@@ -114,6 +117,7 @@ class FirebaseSavingsRepository(
             
             if (!memberIds.contains(partnerId)) {
                 memberIds.add(partnerId)
+                ownerIds.add(partnerId)
                 members.add(SavingsMember(
                     userId = partnerId,
                     name = partner.name,
@@ -127,6 +131,7 @@ class FirebaseSavingsRepository(
         val finalSpace = space.copy(
             id = id,
             ownerId = uid,
+            ownerIds = ownerIds,
             memberIds = memberIds,
             members = members,
             createdAt = now,
@@ -150,7 +155,8 @@ class FirebaseSavingsRepository(
         val uid = authRepository.getCurrentUserId() ?: return
         val space = spacesCollection.document(id).get().data<SavingsSpace>()
         
-        if (space.ownerId != uid) throw Exception("Only owner can delete the space")
+        val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+        if (!isOwner) throw Exception("Only owner can delete the space")
         
         spacesCollection.document(id).delete()
     }
@@ -416,8 +422,11 @@ class FirebaseSavingsRepository(
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()
         
-        if (space.ownerId != currentUid) throw Exception("Only owner can remove members")
-        if (userId == space.ownerId) throw Exception("Owner cannot be removed")
+        val isOwner = space.members.any { it.userId == currentUid && it.role == MemberRole.OWNER }
+        if (!isOwner) throw Exception("Only owner can remove members")
+        
+        val targetIsOwner = space.members.any { it.userId == userId && it.role == MemberRole.OWNER }
+        if (targetIsOwner) throw Exception("Owners cannot be removed")
         
         val updatedMemberIds = space.memberIds - userId
         val updatedMembers = space.members.filter { it.userId != userId }
@@ -437,7 +446,8 @@ class FirebaseSavingsRepository(
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()
         
-        if (space.ownerId == uid) throw Exception("Owner must transfer ownership before leaving")
+        val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+        if (isOwner) throw Exception("Owner must transfer ownership before leaving")
         
         val updatedMemberIds = space.memberIds - uid
         val updatedMembers = space.members.filter { it.userId != uid }
@@ -456,7 +466,8 @@ class FirebaseSavingsRepository(
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()
         
-        if (space.ownerId != currentUid) throw Exception("Only owner can transfer ownership")
+        val isOwner = space.members.any { it.userId == currentUid && it.role == MemberRole.OWNER }
+        if (!isOwner) throw Exception("Only owner can transfer ownership")
         if (!space.memberIds.contains(newOwnerId)) throw Exception("New owner must be a member")
         
         val updatedMembers = space.members.map { 
@@ -466,9 +477,12 @@ class FirebaseSavingsRepository(
                 else -> it
             }
         }
+
+        val newOwnerIds = updatedMembers.filter { it.role == MemberRole.OWNER }.map { it.userId }
         
         spaceDoc.set(space.copy(
             ownerId = newOwnerId,
+            ownerIds = newOwnerIds,
             members = updatedMembers,
             updatedAt = Clock.System.now().toEpochMilliseconds()
         ))
@@ -495,8 +509,9 @@ class FirebaseSavingsRepository(
                 val space = spaceSnapshot.data<SavingsSpace>()
                 println("DEBUG: Convert to Group - Step 9: Savings Space document read successfully: ${space.name}")
                 
-                if (space.ownerId != uid) {
-                    println("ERROR: Convert to Group - Step 10: Validation failed. Current user $uid is not owner ${space.ownerId}")
+                val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+                if (!isOwner) {
+                    println("ERROR: Convert to Group - Step 10: Validation failed. Current user $uid is not an owner")
                     throw Exception("Only owner can convert the space")
                 }
                 
@@ -552,7 +567,8 @@ class FirebaseSavingsRepository(
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()
         
-        if (space.ownerId != uid) throw Exception("Only owner can archive the space")
+        val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+        if (!isOwner) throw Exception("Only owner can archive the space")
         
         spaceDoc.update("isArchived" to true)
     }

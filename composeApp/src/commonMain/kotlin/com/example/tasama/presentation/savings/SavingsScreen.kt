@@ -1042,111 +1042,271 @@ fun AddSpaceDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialSpace == null) "Create Savings Space" else "Edit Savings Space") },
+        title = {
+            Text(
+                text = if (initialSpace == null) "Create Savings Space" else "Edit Savings Space",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Choose Icon", style = MaterialTheme.typography.labelLarge)
-                Row(
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                // =========================
+                // ICON SELECTOR
+                // =========================
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    icons.take(6).forEach { emoji ->
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (icon == emoji) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                                .border(1.dp, if (icon == emoji) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.3f), CircleShape)
-                                .clickable { icon = emoji },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(emoji, fontSize = 20.sp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        icons.take(6).forEach { emoji ->
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (icon == emoji)
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        else
+                                            Color.Transparent
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (icon == emoji)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            Color.Gray.copy(alpha = 0.3f),
+                                        CircleShape
+                                    )
+                                    .clickable {
+                                        icon = emoji
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = emoji,
+                                    fontSize = 17.sp
+                                )
+                            }
                         }
                     }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    icons.drop(6).forEach { emoji ->
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (icon == emoji) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                                .border(1.dp, if (icon == emoji) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.3f), CircleShape)
-                                .clickable { icon = emoji },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(emoji, fontSize = 20.sp)
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        icons.drop(6).forEach { emoji ->
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (icon == emoji)
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        else
+                                            Color.Transparent
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (icon == emoji)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            Color.Gray.copy(alpha = 0.3f),
+                                        CircleShape
+                                    )
+                                    .clickable {
+                                        icon = emoji
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = emoji,
+                                    fontSize = 17.sp
+                                )
+                            }
                         }
                     }
                 }
 
+                // =========================
+                // NAME
+                // =========================
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = {
+                        Text(
+                            text = "Name",
+                            fontSize = 12.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 14.sp
+                    )
                 )
+
+                // =========================
+                // TARGET AMOUNT
+                // =========================
                 OutlinedTextField(
                     value = targetText,
-                    onValueChange = { targetText = it.filter { c -> c.isDigit() } },
-                    label = { Text("Target Amount (Optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    onValueChange = {
+                        targetText = it.filter { c -> c.isDigit() }
+                    },
+                    label = {
+                        Text(
+                            text = "Target Amount (Optional)",
+                            fontSize = 12.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
                     visualTransformation = CurrencyVisualTransformation(),
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 14.sp
+                    ),
                     trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+                        Row(
+                            modifier = Modifier.padding(end = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             if (targetDate != null && showDueDate) {
                                 val date = Instant.fromEpochMilliseconds(targetDate!!)
-                                    .toLocalDateTime(TimeZone.currentSystemDefault()).date
+                                    .toLocalDateTime(TimeZone.currentSystemDefault())
+                                    .date
+
                                 Text(
-                                    text = "${date.day.toString().padStart(2, '0')}/${date.month.number.toString().padStart(2, '0')}/${date.year.toString().takeLast(2)}",
+                                    text = "${date.day.toString().padStart(2, '0')}/" +
+                                            "${date.month.number.toString().padStart(2, '0')}/" +
+                                            date.year.toString().takeLast(2),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(end = 4.dp)
+                                    modifier = Modifier.padding(end = 2.dp)
                                 )
                             }
+
                             IconButton(
                                 onClick = { showDatePicker = true },
-                                enabled = showDueDate
+                                enabled = showDueDate,
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.DateRange,
+                                    imageVector = Icons.Default.DateRange,
                                     contentDescription = "Set due date",
-                                    tint = if (showDueDate) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (showDueDate)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        Color.Gray.copy(alpha = 0.5f)
                                 )
                             }
                         }
                     }
                 )
 
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description (Optional)") }, modifier = Modifier.fillMaxWidth())
-                
+                // =========================
+                // DESCRIPTION
+                // =========================
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = {
+                        Text(
+                            text = "Description (Optional)",
+                            fontSize = 12.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 14.sp
+                    )
+                )
+
+                // =========================
+                // SPACE TYPE
+                // =========================
                 if (initialSpace == null) {
-                    Text("Space Type", style = MaterialTheme.typography.labelLarge)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         SavingsSpaceType.entries.forEach { spaceType ->
+
                             val isCouple = spaceType == SavingsSpaceType.COUPLE
                             val enabled = !isCouple || hasPartner
-                            
-                            FilterChip(
-                                selected = type == spaceType,
-                                onClick = { 
-                                    if (enabled) {
+                            val selected = type == spaceType
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (selected)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            Color.Transparent
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (selected)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.outline.copy(
+                                                alpha = if (enabled) 0.5f else 0.2f
+                                            ),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable(enabled = enabled) {
                                         type = spaceType
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = spaceType.name,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    color = when {
+                                        !enabled ->
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+
+                                        selected ->
+                                            MaterialTheme.colorScheme.onPrimary
+
+                                        else ->
+                                            MaterialTheme.colorScheme.onSurface
                                     }
-                                },
-                                label = { Text(spaceType.name) },
-                                enabled = enabled
-                            )
+                                )
+                            }
                         }
                     }
+
                     if (!hasPartner) {
                         Text(
-                            "Link a partner first to use Couple Savings",
+                            text = "Link a partner first to use Couple Savings",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -1154,6 +1314,7 @@ fun AddSpaceDialog(
                 }
             }
         },
+
         confirmButton = {
             Button(
                 onClick = {
@@ -1168,10 +1329,27 @@ fun AddSpaceDialog(
                             currency
                         )
                     }
-                }
-            ) { Text(if (initialSpace == null) "Create" else "Save") }
+                },
+                modifier = Modifier.height(40.dp)
+            ) {
+                Text(
+                    text = if (initialSpace == null) "Create" else "Save",
+                    fontSize = 13.sp
+                )
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontSize = 13.sp
+                )
+            }
+        }
     )
 
     if (showDatePicker) {

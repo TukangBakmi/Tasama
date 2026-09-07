@@ -29,6 +29,7 @@ data class SavingsSpace(
     val icon: String = "💰",
     val type: SavingsSpaceType = SavingsSpaceType.PERSONAL,
     val ownerId: String = "",
+    val ownerIds: List<String> = emptyList(),
     val memberIds: List<String> = emptyList(),
     val members: List<SavingsMember> = emptyList(),
     val targetAmount: Long? = null,

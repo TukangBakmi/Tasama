@@ -526,7 +526,7 @@ class SavingsViewModel(
 
     fun isOwner(space: SavingsSpace?): Boolean {
         val uid = authRepository.getCurrentUserId()
-        return space?.ownerId == uid
+        return space?.members?.any { it.userId == uid && it.role == MemberRole.OWNER } == true
     }
     
     fun onMemberClick(member: SavingsMember) {

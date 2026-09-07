@@ -383,7 +383,7 @@ fun MainScreen(
                                         )
                                     }
                                 ) { backStackEntry ->
-                                    val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
+                                    val channelId = backStackEntry.savedStateHandle.get<String>("channelId") ?: ""
                                     ChatScreen(
                                         channelId = channelId,
                                         onBackClick = { navController.popBackStack() },
@@ -419,7 +419,7 @@ fun MainScreen(
                                         )
                                     }
                                 ) { backStackEntry ->
-                                    val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                                    val userId = backStackEntry.savedStateHandle.get<String>("userId") ?: ""
                                     UserDetailScreen(
                                         uid = userId,
                                         onBackClick = { navController.popBackStack() }
@@ -447,7 +447,7 @@ fun MainScreen(
                                         )
                                     }
                                 ) { backStackEntry ->
-                                    val spaceId = backStackEntry.arguments?.getString("spaceId") ?: ""
+                                    val spaceId = backStackEntry.savedStateHandle.get<String>("spaceId") ?: ""
                                     val savingsViewModel: com.example.tasama.presentation.savings.SavingsViewModel = koinViewModel()
                                     val chatListViewModel: com.example.tasama.presentation.chat.ChatListViewModel = koinViewModel()
                                     
@@ -456,80 +456,98 @@ fun MainScreen(
                                     }
                                     
                                     val uiState by savingsViewModel.uiState.collectAsState()
+                                    
+                                    LaunchedEffect(Unit) {
+                                        savingsViewModel.events.collect { event ->
+                                            when (event) {
+                                                is com.example.tasama.presentation.savings.SavingsEvent.NavigateToSavingsList -> {
+                                                    println("DEBUG: [Savings] Navigation event received in MainScreen")
+                                                    navController.popBackStack("tabs", inclusive = false)
+                                                    println("DEBUG: [Savings] Savings list screen should be displayed")
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Reset state when leaving this screen context
+                                    DisposableEffect(Unit) {
+                                        onDispose {
+                                            savingsViewModel.onSpaceHandled()
+                                            savingsViewModel.onDismissSpaceDetails()
+                                        }
+                                    }
+
                                     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
                                     val feedbackHandler = LocalTransientFeedbackHandler.current
                                     val scope = rememberCoroutineScope()
                                     
-                                    LaunchedEffect(uiState.hasLeftSpace, uiState.showRemovedFromSpaceDialog) {
-                                        if (uiState.hasLeftSpace || (uiState.showRemovedFromSpaceDialog && uiState.showSpaceDetails)) {
-                                            savingsViewModel.onDismissSpaceDetails()
+                                    LaunchedEffect(uiState.showRemovedFromSpaceDialog) {
+                                        if (uiState.showRemovedFromSpaceDialog && uiState.showSpaceDetails) {
                                             navController.popBackStack()
                                         }
                                     }
                                     
-                                    if (uiState.showSpaceDetails && uiState.selectedSpace != null) {
-                                        com.example.tasama.presentation.savings.SpaceDetailsScreen(
-                                            uiState = uiState,
-                                            isOwner = savingsViewModel.isOwner(uiState.selectedSpace),
-                                            currentUserId = savingsViewModel.getCurrentUserId() ?: "",
-                                            onBack = { 
-                                                savingsViewModel.onDismissSpaceDetails()
-                                                navController.popBackStack()
-                                            },
-                                            onAddTransaction = { savingsViewModel.onAddTransactionClick(it) },
-                                            onConfirmAddTransaction = { amount, type, note ->
-                                                savingsViewModel.addTransaction(amount, type, note)
-                                            },
-                                            onDismissAddTransaction = { savingsViewModel.onDismissAddTransaction() },
-                                            onDeleteTransaction = { savingsViewModel.deleteTransaction(it.id) },
-                                            onInvite = { savingsViewModel.onInviteClick(it) },
-                                            onRemoveMember = { savingsViewModel.removeMember(it) },
-                                            onTransferOwnership = { savingsViewModel.transferOwnership(it) },
-                                            onCancelInvitation = { savingsViewModel.cancelInvitation(it) },
-                                            onDelete = { savingsViewModel.deleteSpace(it) },
-                                            onEdit = { savingsViewModel.updateSpace(it) },
-                                            onLeave = { savingsViewModel.leaveSpace() },
-                                            onConvertToGroup = { savingsViewModel.onConvertToGroupClick() },
-                                            onDismissConvertToGroup = { savingsViewModel.onDismissConvertToGroup() },
-                                            onConfirmConvertToGroup = { savingsViewModel.convertToGroupSpace() },
-                                            onMemberClick = { savingsViewModel.onMemberClick(it) },
-                                            onDismissMemberProfile = { savingsViewModel.onDismissMemberProfile() },
-                                            onOpenChat = { otherUserId ->
-                                                chatListViewModel.createChannel(otherUserId) { channelId ->
-                                                    if (channelId != null) {
-                                                        navController.navigate("chat_room/$channelId")
-                                                    }
+                                    com.example.tasama.presentation.savings.SpaceDetailsScreen(
+                                        uiState = uiState,
+                                        isOwner = savingsViewModel.isOwner(uiState.selectedSpace),
+                                        currentUserId = savingsViewModel.getCurrentUserId() ?: "",
+                                        onBack = { 
+                                            savingsViewModel.onDismissSpaceDetails()
+                                            navController.popBackStack()
+                                        },
+                                        onAddTransaction = { savingsViewModel.onAddTransactionClick(it) },
+                                        onConfirmAddTransaction = { amount, type, note ->
+                                            savingsViewModel.addTransaction(amount, type, note)
+                                        },
+                                        onDismissAddTransaction = { savingsViewModel.onDismissAddTransaction() },
+                                        onDeleteTransaction = { savingsViewModel.deleteTransaction(it.id) },
+                                        onInvite = { savingsViewModel.onInviteClick(it) },
+                                        onRemoveMember = { savingsViewModel.removeMember(it) },
+                                        onTransferOwnership = { savingsViewModel.transferOwnership(it) },
+                                        onCancelInvitation = { savingsViewModel.cancelInvitation(it) },
+                                        onDelete = { savingsViewModel.deleteSpace(it, feedbackHandler) },
+                                        onEdit = { savingsViewModel.updateSpace(it) },
+                                        onLeave = { savingsViewModel.leaveSpace() },
+                                        onConvertToGroup = { savingsViewModel.onConvertToGroupClick() },
+                                        onDismissConvertToGroup = { savingsViewModel.onDismissConvertToGroup() },
+                                        onConfirmConvertToGroup = { savingsViewModel.convertToGroupSpace() },
+                                        onMemberClick = { savingsViewModel.onMemberClick(it) },
+                                        onDismissMemberProfile = { savingsViewModel.onDismissMemberProfile() },
+                                        onOpenChat = { otherUserId ->
+                                            chatListViewModel.createChannel(otherUserId) { channelId ->
+                                                if (channelId != null) {
+                                                    navController.navigate("chat_room/$channelId")
                                                 }
-                                            },
-                                            onCopyUserId = { userId ->
-                                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(userId))
-                                                feedbackHandler(TransientFeedback.Copy("User ID copied to clipboard"))
                                             }
+                                        },
+                                        onCopyUserId = { userId ->
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(userId))
+                                            feedbackHandler(TransientFeedback.Copy("User ID copied to clipboard"))
+                                        }
+                                    )
+
+                                    if (uiState.showInviteMemberDialog) {
+                                        com.example.tasama.presentation.savings.InviteMemberDialog(
+                                            uiState = uiState,
+                                            onDismiss = { savingsViewModel.onDismissInvite() },
+                                            onQueryChange = { savingsViewModel.onSearchQueryChange(it) },
+                                            onInvite = { savingsViewModel.inviteMember(it, feedbackHandler) }
                                         )
+                                    }
 
-                                        if (uiState.showInviteMemberDialog) {
-                                            com.example.tasama.presentation.savings.InviteMemberDialog(
-                                                uiState = uiState,
-                                                onDismiss = { savingsViewModel.onDismissInvite() },
-                                                onQueryChange = { savingsViewModel.onSearchQueryChange(it) },
-                                                onInvite = { savingsViewModel.inviteMember(it, feedbackHandler) }
-                                            )
-                                        }
-
-                                        LaunchedEffect(Unit) {
-                                            snapshotFlow { uiState.error }
-                                                .filterNotNull()
-                                                .collect { error ->
-                                                    savingsViewModel.clearError()
-                                                    snackbarHostState.showSnackbar(error)
-                                                }
-                                        }
+                                    LaunchedEffect(Unit) {
+                                        snapshotFlow { uiState.error }
+                                            .filterNotNull()
+                                            .collect { error ->
+                                                savingsViewModel.clearError()
+                                                snackbarHostState.showSnackbar(error)
+                                            }
                                     }
                                 }
                             }
                         }
                     }
-                    
+
                     // Render the feedback overlay at the end of the root Box 
                     // to ensure it stays on top of all other components
                     AppTransientFeedbackOverlay(showUndoBanner = false)

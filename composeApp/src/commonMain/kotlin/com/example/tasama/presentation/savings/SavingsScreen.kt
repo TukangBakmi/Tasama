@@ -376,7 +376,27 @@ fun SpaceDetailsScreen(
     onOpenChat: (String) -> Unit = {},
     onCopyUserId: (String) -> Unit = {}
 ) {
-    val space = uiState.selectedSpace ?: return
+    val space = uiState.selectedSpace ?: run {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+            }
+        }
+        return
+    }
     val isPersonal = space.type == SavingsSpaceType.PERSONAL
     val isCouple = space.type == SavingsSpaceType.COUPLE
     
@@ -1024,6 +1044,13 @@ fun AddSpaceDialog(
     var icon by remember { mutableStateOf(initialSpace?.icon ?: "💰") }
     var type by remember { mutableStateOf(initialSpace?.type ?: SavingsSpaceType.PERSONAL) }
     var currency by remember { mutableStateOf(initialSpace?.currency ?: userCurrency) }
+
+    // Reactively disable Couple type if partner is removed
+    LaunchedEffect(hasPartner) {
+        if (!hasPartner && type == SavingsSpaceType.COUPLE) {
+            type = SavingsSpaceType.PERSONAL
+        }
+    }
     var targetDate by remember { mutableStateOf(initialSpace?.targetDate) }
     var showDatePicker by remember { mutableStateOf(false) }
 

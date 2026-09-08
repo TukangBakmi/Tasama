@@ -507,8 +507,10 @@ fun ChannelItem(
                     val otherId = channel.participantIds.find { it != currentUserId }
                     if (otherId != null) {
                         val isRead = channel.lastMessageReadBy.containsKey(otherId)
+                        val isDelivered = channel.lastMessageDeliveredTo.containsKey(otherId)
                         MessageStatusIcon(
                             isRead = isRead,
+                            isDelivered = isDelivered,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             modifier = Modifier.padding(end = 4.dp)
                         )

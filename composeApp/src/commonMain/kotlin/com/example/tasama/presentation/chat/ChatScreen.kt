@@ -692,7 +692,12 @@ fun MessageBubble(
                         if (isUser) {
                             Spacer(modifier = Modifier.width(4.dp))
                             val isRead = message.readBy.filterKeys { it != message.userId }.isNotEmpty()
-                            MessageStatusIcon(isRead = isRead, tint = contentColor.copy(alpha = 0.6f))
+                            val isDelivered = message.deliveredTo.filterKeys { it != message.userId }.isNotEmpty()
+                            MessageStatusIcon(
+                                isRead = isRead,
+                                isDelivered = isDelivered,
+                                tint = contentColor.copy(alpha = 0.6f)
+                            )
                         }
                     }
                 }
@@ -702,8 +707,13 @@ fun MessageBubble(
 }
 
 @Composable
-fun MessageStatusIcon(isRead: Boolean, tint: Color, modifier: Modifier = Modifier) {
-    val icon = if (isRead) Icons.Default.DoneAll else Icons.Default.Check
+fun MessageStatusIcon(
+    isRead: Boolean,
+    isDelivered: Boolean,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    val icon = if (isRead || isDelivered) Icons.Default.DoneAll else Icons.Default.Check
     val color = if (isRead) Color(0xFF34B7F1) else tint
     Icon(
         imageVector = icon,

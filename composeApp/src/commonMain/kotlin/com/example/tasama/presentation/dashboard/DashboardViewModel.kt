@@ -2,26 +2,30 @@ package com.example.tasama.presentation.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.ChatChannel
+import com.example.tasama.domain.model.InvitationStatus
+import com.example.tasama.domain.model.SavingsInvitation
+import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
+import com.example.tasama.util.formatAmount
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.minus
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
 
 class DashboardViewModel(
     private val repository: TransactionRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val savingsRepository: SavingsRepository,
+    private val chatRepository: ChatRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -40,6 +44,8 @@ class DashboardViewModel(
                     dataJob?.cancel()
                     _uiState.value = DashboardUiState()
                 } else {
+                    val user = authRepository.getUser(uid)
+                    _uiState.update { it.copy(userName = user?.name) }
                     observeData()
                 }
             }
@@ -49,18 +55,23 @@ class DashboardViewModel(
     private fun observeData() {
         dataJob?.cancel()
         dataJob = viewModelScope.launch {
-            repository.getTransactionsFlow().collect { transactions ->
-                updateDashboardWith(transactions)
-            }
+            combine(
+                repository.getTransactionsFlow(),
+                savingsRepository.getSavingsSpaces(),
+                savingsRepository.getMyInvitations(),
+                chatRepository.getChannels()
+            ) { transactions, spaces, invitations, channels ->
+                updateDashboardWith(transactions, spaces, invitations, channels)
+            }.collect { }
         }
     }
 
-    private fun updateDashboardWith(transactions: List<Transaction>) {
-        if (transactions.isEmpty()) {
-            _uiState.update { DashboardUiState() }
-            return
-        }
-
+    private fun updateDashboardWith(
+        transactions: List<Transaction>,
+        spaces: List<SavingsSpace>,
+        invitations: List<SavingsInvitation>,
+        channels: List<ChatChannel>
+    ) {
         val income = transactions
             .filter { it.type == TransactionType.INCOME }
             .sumOf { it.amount }
@@ -69,95 +80,53 @@ class DashboardViewModel(
             .filter { it.type == TransactionType.EXPENSE }
             .sumOf { it.amount }
 
-        // Calculate weekly spending (last 7 days)
-        val nowEpoch = Clock.System.now().toEpochMilliseconds()
-        val systemTZ = TimeZone.currentSystemDefault()
-        val today = kotlin.time.Instant.fromEpochMilliseconds(nowEpoch).toLocalDateTime(systemTZ).date
+        val totalSavingsBalance = spaces.sumOf { it.balance }
+        val recentSpaces = spaces.sortedByDescending { it.updatedAt }.take(2)
+        val pendingInvitations = invitations.filter { it.status == InvitationStatus.PENDING }
 
-        val last7Days = (0..6).map { i ->
-            today.minus(i, DateTimeUnit.DAY)
-        }.reversed()
-
-        val expenseTransactions = transactions.filter { it.type == TransactionType.EXPENSE }
-
-        val weeklySpending = last7Days.map { date ->
-            val dayAmount = expenseTransactions.filter {
-                kotlin.time.Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date == date
-            }.sumOf { it.amount }
-
-            DailySpending(
-                day = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
-                amount = dayAmount
+        // Combine activities
+        val activities = mutableListOf<DashboardActivity>()
+        
+        // Add recent transactions
+        transactions.take(5).forEach { tx ->
+            activities.add(
+                DashboardActivity(
+                    id = tx.id,
+                    title = if (tx.type == TransactionType.INCOME) "Received Money" else "Spent Money",
+                    description = "${tx.note} • Rp ${tx.amount.formatAmount()}",
+                    icon = getCategoryEmoji(tx.category, tx.type),
+                    timestamp = tx.createdAt,
+                    type = DashboardActivityType.TRANSACTION
+                )
             )
         }
 
-        // Calculate category spending
-        val totalExpense = expenseTransactions.sumOf { it.amount }
-        val categorySpending = if (totalExpense > 0) {
-            expenseTransactions
-                .groupBy { it.category }
-                .map { (category, txs) ->
-                    val amount = txs.sumOf { it.amount }
-                    CategorySpending(
-                        category = category,
-                        amount = amount,
-                        percentage = amount.toFloat() / totalExpense
-                    )
-                }
-                .sortedByDescending { it.amount }
-        } else {
-            emptyList()
-        }
-
-        // Calculate monthly trends (last 6 months)
-        val last6Months = (0..5).map { i ->
-            val monthDate = today.minus(i, DateTimeUnit.MONTH)
-            monthDate.year to monthDate.month
-        }.reversed()
-
-        val monthlyTrends = last6Months.map { (year, month) ->
-            val monthTransactions = transactions.filter {
-                val txDate = kotlin.time.Instant.fromEpochMilliseconds(it.createdAt).toLocalDateTime(systemTZ).date
-                txDate.year == year && txDate.month == month
-            }
-            val monthIncome = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-            val monthExpense = monthTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-
-            MonthlyTrend(
-                month = month.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
-                income = monthIncome,
-                expense = monthExpense
+        // Add recent chat messages
+        channels.filter { it.lastMessage.isNotEmpty() }.take(3).forEach { channel ->
+            activities.add(
+                DashboardActivity(
+                    id = channel.id,
+                    title = "New Message",
+                    description = channel.lastMessage,
+                    icon = "💬",
+                    timestamp = channel.lastMessageTimestamp,
+                    type = DashboardActivityType.CHAT
+                )
             )
         }
 
-        // Calculate balance history (last 7 days cumulative)
-        val sortedTxs = transactions.sortedBy { it.createdAt }
-        val balanceHistory = last7Days.map { date ->
-            val endOfDay = kotlin.time.Instant.fromEpochMilliseconds(
-                date.atStartOfDayIn(systemTZ).toEpochMilliseconds() + 86400000 - 1
-            ).toEpochMilliseconds()
+        val sortedActivities = activities.sortedByDescending { it.timestamp }.take(10)
 
-            val balanceAtDate = sortedTxs.filter { it.createdAt <= endOfDay }
-                .sumOf { if (it.type == TransactionType.INCOME) it.amount else -it.amount }
-
-            BalancePoint(
-                label = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
-                balance = balanceAtDate
-            )
-        }
-
-        _uiState.update { it ->
-            it.copy(
-                balance = income - expense,
-                income = income,
-                expense = expense,
-                transactions = transactions.sortedByDescending { it.createdAt }.take(10),
-                weeklySpending = weeklySpending,
-                categorySpending = categorySpending,
-                monthlyTrends = monthlyTrends,
-                balanceHistory = balanceHistory
-            )
-        }
+        _uiState.update { it.copy(
+            balance = income - expense,
+            income = income,
+            expense = expense,
+            transactions = transactions.sortedByDescending { it.createdAt }.take(5),
+            totalSavingsBalance = totalSavingsBalance,
+            recentSavingsSpaces = recentSpaces,
+            pendingInvitations = pendingInvitations,
+            recentActivities = sortedActivities
+        ) }
     }
 
     fun addTransaction(transaction: Transaction) {
@@ -180,5 +149,23 @@ class DashboardViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    private fun getCategoryEmoji(category: String, type: TransactionType): String {
+        if (type == TransactionType.INCOME) return "💰"
+        
+        return when (category.lowercase()) {
+            "food", "makan", "minum", "restoran" -> "🍔"
+            "transport", "transportasi", "ojek", "bensin" -> "🚗"
+            "shopping", "belanja" -> "🛍️"
+            "entertainment", "hiburan", "nonton" -> "🎬"
+            "bills", "tagihan", "listrik", "air" -> "🧾"
+            "health", "kesehatan", "obat" -> "🏥"
+            "education", "pendidikan", "sekolah", "kuliah" -> "🎓"
+            "gift", "hadiah" -> "🎁"
+            "salary", "gaji" -> "💸"
+            "investment", "investasi" -> "📈"
+            else -> "📦"
+        }
     }
 }

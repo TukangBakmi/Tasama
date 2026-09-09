@@ -294,7 +294,25 @@ fun MainScreen(
                                             ) {
                                                 when (items[page]) {
                                                     BottomNavItem.Dashboard -> DashboardScreen(
-                                                        onTransactionClick = {})
+                                                        onNavigateToSavings = {
+                                                            scope.launch {
+                                                                pagerState.animateScrollToPage(1)
+                                                            }
+                                                        },
+                                                        onNavigateToChat = {
+                                                            scope.launch {
+                                                                pagerState.animateScrollToPage(2)
+                                                            }
+                                                        },
+                                                        onNavigateToTransactions = {
+                                                            // We don't have a dedicated full history screen yet, 
+                                                            // but for now we could stay here or go to a relevant tab.
+                                                            // For now, let's just keep it empty or navigate to a relevant place.
+                                                        },
+                                                        onNavigateToSavingsDetail = { spaceId ->
+                                                            navController.navigate("savings_detail/$spaceId")
+                                                        }
+                                                    )
 
                                                     BottomNavItem.Savings -> NavHost(
                                                         navController = rememberNavController(),

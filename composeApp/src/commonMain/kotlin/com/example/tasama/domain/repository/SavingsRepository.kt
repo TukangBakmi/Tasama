@@ -31,5 +31,6 @@ interface SavingsRepository : SessionCleanupRepository {
     
     // Activity / History
     fun getActivityHistory(spaceId: String): Flow<List<SavingsActivity>>
+    fun getGlobalActivityHistory(): Flow<List<SavingsActivity>>
     suspend fun archiveSpace(spaceId: String)
 }

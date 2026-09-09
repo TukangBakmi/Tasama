@@ -225,12 +225,10 @@ fun MainScreen(
                                                                             badge = {
                                                                                 Badge(
                                                                                     modifier = Modifier
+                                                                                        .size(8.dp)
                                                                                         .offset(x = 4.dp, y = (-4).dp),
-                                                                                    containerColor = MaterialTheme.colorScheme.primary,
-                                                                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                                                                ) {
-                                                                                    Text(unreadCount.toString())
-                                                                                }
+                                                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                                                )
                                                                             }
                                                                         ) {
                                                                             Text(item.emoji)
@@ -241,7 +239,7 @@ fun MainScreen(
                                                                             badge = {
                                                                                 Badge(
                                                                                     modifier = Modifier
-                                                                                        .size(12.dp)
+                                                                                        .size(8.dp)
                                                                                         .offset(x = 4.dp, y = (-4).dp),
                                                                                     containerColor = MaterialTheme.colorScheme.primary
                                                                                 )
@@ -255,7 +253,7 @@ fun MainScreen(
                                                                             badge = {
                                                                                 Badge(
                                                                                     modifier = Modifier
-                                                                                        .size(12.dp)
+                                                                                        .size(8.dp)
                                                                                         .offset(x = 4.dp, y = (-4).dp),
                                                                                     containerColor = MaterialTheme.colorScheme.primary
                                                                                 )
@@ -302,6 +300,11 @@ fun MainScreen(
                                                         onNavigateToChat = {
                                                             scope.launch {
                                                                 pagerState.animateScrollToPage(2)
+                                                            }
+                                                        },
+                                                        onNavigateToPartner = {
+                                                            scope.launch {
+                                                                pagerState.animateScrollToPage(3)
                                                             }
                                                         },
                                                         onNavigateToTransactions = {

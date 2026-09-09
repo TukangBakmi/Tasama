@@ -3,6 +3,7 @@ package com.example.tasama.data.repository
 import com.example.tasama.domain.model.*
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import com.example.tasama.util.formatAmount
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
 import dev.gitlive.firebase.firestore.Direction
@@ -236,7 +237,7 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
             set(transRef, finalTransaction)
         }
-        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_ADDED, "Added transaction: ${transaction.note}")
+        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_ADDED, "Added contribution: ${transaction.note} • Rp ${transaction.amount.formatAmount()}")
     }
 
     override suspend fun updateTransaction(spaceId: String, transaction: SavingsTransaction) {
@@ -268,6 +269,7 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now, currency = space.currency))
             set(transRef, transaction.copy(currency = space.currency))
         }
+        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_UPDATED, "Edited contribution: ${transaction.note} • Rp ${transaction.amount.formatAmount()}")
     }
 
     override suspend fun deleteTransaction(spaceId: String, transactionId: String) {
@@ -291,7 +293,7 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
             delete(transRef)
         }
-        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_DELETED, "Deleted a transaction")
+        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_DELETED, "Deleted a contribution")
     }
 
     override suspend fun inviteMember(spaceId: String, inviteeId: String) {
@@ -617,6 +619,18 @@ class FirebaseSavingsRepository(
                         }
                         emit(emptyList())
                     }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getGlobalActivityHistory(): Flow<List<SavingsActivity>> {
+        return getSavingsSpaces().flatMapLatest { spaces ->
+            if (spaces.isEmpty()) return@flatMapLatest flowOf(emptyList())
+            
+            val activityFlows = spaces.map { getActivityHistory(it.id) }
+            combine(activityFlows) { arrays ->
+                arrays.flatMap { it }.sortedByDescending { it.timestamp }
             }
         }
     }

@@ -28,14 +28,17 @@ import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.util.formatAmount
+import kotlinx.datetime.*
 import kotlinx.coroutines.flow.filterNotNull
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.time.Clock
 
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = koinViewModel(),
     onNavigateToSavings: () -> Unit = {},
     onNavigateToChat: () -> Unit = {},
+    onNavigateToPartner: () -> Unit = {},
     onNavigateToTransactions: () -> Unit = {},
     onNavigateToSavingsDetail: (String) -> Unit = {}
 ) {
@@ -55,16 +58,37 @@ fun DashboardScreen(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
+        val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp, 
+                end = 16.dp, 
+                top = statusBarPadding + 16.dp,
+                bottom = 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // 1. Header Section
             item {
-                DashboardHeader(userName = uiState.userName ?: "User")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DashboardHeader(
+                        userName = uiState.userName ?: "User",
+                        hasUnread = uiState.hasUnreadNotifications,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    if (uiState.isLoading) {
+                        ThreeGrayDotsLoading(modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
             }
 
             // 2. Savings Overview
@@ -86,22 +110,30 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Pending Invitations (Conditional)
-            if (uiState.pendingInvitations.isNotEmpty()) {
-                item {
-                    PendingInvitationsSection(
-                        count = uiState.pendingInvitations.size,
-                        onViewInvitations = onNavigateToSavings
+            // 4. Invitations & Activity
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Pending Partner Request
+                    if (uiState.hasPendingPartnerRequest) {
+                        PendingPartnerRequestSection(
+                            onViewPartner = onNavigateToPartner
+                        )
+                    }
+
+                    // Pending Invitations (Conditional)
+                    if (uiState.pendingInvitations.isNotEmpty()) {
+                        PendingInvitationsSection(
+                            count = uiState.pendingInvitations.size,
+                            onViewInvitations = onNavigateToSavings
+                        )
+                    }
+
+                    // Recent Activity
+                    RecentActivitySection(
+                        activities = uiState.recentActivities,
+                        onViewAll = onNavigateToTransactions
                     )
                 }
-            }
-
-            // 5. Recent Activity
-            item {
-                RecentActivitySection(
-                    activities = uiState.recentActivities,
-                    onViewAll = onNavigateToTransactions
-                )
             }
             
             item {
@@ -122,37 +154,60 @@ fun DashboardScreen(
 }
 
 @Composable
-fun DashboardHeader(userName: String) {
+fun DashboardHeader(
+    userName: String,
+    hasUnread: Boolean,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy((-4).dp)
+        ) {
             Text(
                 text = "Hello,",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = userName,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         
-        IconButton(
-            onClick = { /* TODO: Notifications */ },
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Icon(
-                imageVector = Icons.Default.Notifications,
-                contentDescription = "Notifications",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Box {
+            IconButton(
+                onClick = { /* TODO: Notifications */ },
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Notifications",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            if (hasUnread) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
         }
     }
 }
@@ -189,7 +244,7 @@ fun SavingsOverviewCard(
 
             Text(
                 text = "Rp ${totalBalance.formatAmount()}",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp),
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -244,28 +299,35 @@ fun MiniSpaceCard(
 ) {
     Surface(
         modifier = modifier.clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
+        tonalElevation = 1.dp
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = space.icon,
-                fontSize = 24.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+                fontSize = 18.sp,
+                modifier = Modifier.padding(end = 8.dp)
             )
-            Text(
-                text = space.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "Rp ${space.balance.formatAmount()}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = space.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Rp ${space.balance.formatAmount()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -283,24 +345,21 @@ fun QuickActionsRow(
         QuickActionButton(
             label = "Add Expense",
             icon = Icons.Default.Add,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            accentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1.3f),
             onClick = onAddTransaction
         )
         QuickActionButton(
             label = "Savings",
             icon = Icons.Default.Wallet,
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            accentColor = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.weight(1f),
             onClick = onViewSavings
         )
         QuickActionButton(
             label = "Chat",
-            icon = Icons.Default.Notifications, // Replace with appropriate chat icon if available
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            icon = Icons.Default.Notifications,
+            accentColor = MaterialTheme.colorScheme.tertiary,
             modifier = Modifier.weight(1f),
             onClick = onChat
         )
@@ -311,15 +370,14 @@ fun QuickActionsRow(
 fun QuickActionButton(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    containerColor: Color,
-    contentColor: Color,
+    accentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(16.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
         onClick = onClick
     ) {
         Row(
@@ -330,7 +388,7 @@ fun QuickActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = contentColor,
+                tint = accentColor,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -338,8 +396,62 @@ fun QuickActionButton(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = contentColor,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun PendingPartnerRequestSection(
+    onViewPartner: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onViewPartner() },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, 
+            MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSecondary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Pending partner request",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = "View",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
     }
@@ -355,45 +467,46 @@ fun PendingInvitationsSection(
             .fillMaxWidth()
             .clickable { onViewInvitations() },
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         border = androidx.compose.foundation.BorderStroke(
             1.dp, 
-            MaterialTheme.colorScheme.errorContainer
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
         )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.error),
+                        .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = count.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onError
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Pending Savings Invitations",
+                    text = "Pending invitations",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(20.dp)
+            Text(
+                text = "View",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
     }
@@ -407,8 +520,7 @@ fun RecentActivitySection(
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -444,7 +556,7 @@ fun RecentActivitySection(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
                     activities.forEachIndexed { index, activity ->
                         ActivityItem(
                             activity = activity,
@@ -458,45 +570,107 @@ fun RecentActivitySection(
 }
 
 @Composable
+fun ThreeGrayDotsLoading(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+            )
+        }
+    }
+}
+
+@Composable
 fun ActivityItem(
     activity: DashboardActivity,
     showDivider: Boolean
 ) {
+    val timeString = remember(activity.timestamp) {
+        try {
+            val instant = Instant.fromEpochMilliseconds(activity.timestamp)
+            val tz = TimeZone.currentSystemDefault()
+            val localDateTime = instant.toLocalDateTime(tz)
+            val now = Clock.System.now().toLocalDateTime(tz)
+            val today = now.date
+            val yesterday = today.minus(1, DateTimeUnit.DAY)
+
+            when (localDateTime.date) {
+                today -> {
+                    val hour = localDateTime.hour.toString().padStart(2, '0')
+                    val minute = localDateTime.minute.toString().padStart(2, '0')
+                    "$hour:$minute"
+                }
+                yesterday -> "Yesterday"
+                else -> {
+                    val day = localDateTime.dayOfMonth.toString().padStart(2, '0')
+                    val monthName = when (localDateTime.monthNumber) {
+                        1 -> "Jan"; 2 -> "Feb"; 3 -> "Mar"; 4 -> "Apr"
+                        5 -> "May"; 6 -> "Jun"; 7 -> "Jul"; 8 -> "Aug"
+                        9 -> "Sep"; 10 -> "Oct"; 11 -> "Nov"; 12 -> "Dec"
+                        else -> ""
+                    }
+                    "$day $monthName"
+                }
+            }
+        } catch (_: Exception) { "" }
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = activity.icon, fontSize = 20.sp)
+                Text(text = activity.icon, fontSize = 16.sp)
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = activity.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = activity.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = timeString,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        fontWeight = FontWeight.Normal
+                    )
+                }
                 Text(
                     text = activity.description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            
-            // Time could be added here if needed
         }
         
         if (showDivider) {

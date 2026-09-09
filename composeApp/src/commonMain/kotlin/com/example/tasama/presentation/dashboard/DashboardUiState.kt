@@ -20,6 +20,9 @@ data class DashboardUiState(
     val recentSavingsSpaces: List<SavingsSpace> = emptyList(),
     val recentActivities: List<DashboardActivity> = emptyList(),
     val pendingInvitations: List<SavingsInvitation> = emptyList(),
+    val hasPendingPartnerRequest: Boolean = false,
+    val hasUnreadNotifications: Boolean = false,
+    val isLoading: Boolean = false,
     
     val showAddTransactionDialog: Boolean = false,
     val error: String? = null
@@ -31,7 +34,8 @@ data class DashboardActivity(
     val description: String,
     val icon: String,
     val timestamp: Long,
-    val type: DashboardActivityType
+    val type: DashboardActivityType,
+    val isUnread: Boolean = false
 )
 
 enum class DashboardActivityType {

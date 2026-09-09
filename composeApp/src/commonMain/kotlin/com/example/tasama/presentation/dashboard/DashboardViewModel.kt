@@ -4,20 +4,25 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.InvitationStatus
+import com.example.tasama.domain.model.SavingsActivity
+import com.example.tasama.domain.model.SavingsActivityType
 import com.example.tasama.domain.model.SavingsInvitation
 import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
+import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import com.example.tasama.util.formatAmount
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -52,16 +57,33 @@ class DashboardViewModel(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeData() {
         dataJob?.cancel()
         dataJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            val userFlow = authRepository.userId.flatMapLatest { uid ->
+                if (uid != null) authRepository.getUserFlow(uid) else kotlinx.coroutines.flow.flowOf(null)
+            }
+
             combine(
                 repository.getTransactionsFlow(),
                 savingsRepository.getSavingsSpaces(),
                 savingsRepository.getMyInvitations(),
-                chatRepository.getChannels()
-            ) { transactions, spaces, invitations, channels ->
-                updateDashboardWith(transactions, spaces, invitations, channels)
+                savingsRepository.getGlobalActivityHistory(),
+                chatRepository.getChannels(),
+                userFlow
+            ) { args: Array<Any?> ->
+                val transactions = args[0] as List<Transaction>
+                val spaces = args[1] as List<SavingsSpace>
+                val invitations = args[2] as List<SavingsInvitation>
+                val activities = args[3] as List<SavingsActivity>
+                val channels = args[4] as List<ChatChannel>
+                val user = args[5] as User?
+
+                updateDashboardWith(transactions, spaces, invitations, activities, channels, user)
+                _uiState.update { it.copy(isLoading = false) }
             }.collect { }
         }
     }
@@ -70,7 +92,9 @@ class DashboardViewModel(
         transactions: List<Transaction>,
         spaces: List<SavingsSpace>,
         invitations: List<SavingsInvitation>,
-        channels: List<ChatChannel>
+        savingsActivities: List<SavingsActivity>,
+        channels: List<ChatChannel>,
+        user: User?
     ) {
         val income = transactions
             .filter { it.type == TransactionType.INCOME }
@@ -83,39 +107,39 @@ class DashboardViewModel(
         val totalSavingsBalance = spaces.sumOf { it.balance }
         val recentSpaces = spaces.sortedByDescending { it.updatedAt }.take(2)
         val pendingInvitations = invitations.filter { it.status == InvitationStatus.PENDING }
+        val hasPendingPartnerRequest = user?.partnerRequestFrom != null
+
+        val currentUid = authRepository.getCurrentUserId()
 
         // Combine activities
-        val activities = mutableListOf<DashboardActivity>()
-        
-        // Add recent transactions
-        transactions.take(5).forEach { tx ->
-            activities.add(
-                DashboardActivity(
-                    id = tx.id,
-                    title = if (tx.type == TransactionType.INCOME) "Received Money" else "Spent Money",
-                    description = "${tx.note} • Rp ${tx.amount.formatAmount()}",
-                    icon = getCategoryEmoji(tx.category, tx.type),
-                    timestamp = tx.createdAt,
-                    type = DashboardActivityType.TRANSACTION
-                )
-            )
-        }
-
-        // Add recent chat messages
-        channels.filter { it.lastMessage.isNotEmpty() }.take(3).forEach { channel ->
-            activities.add(
-                DashboardActivity(
-                    id = channel.id,
-                    title = "New Message",
-                    description = channel.lastMessage,
-                    icon = "💬",
-                    timestamp = channel.lastMessageTimestamp,
-                    type = DashboardActivityType.CHAT
-                )
+        val activities = savingsActivities.map { act ->
+            DashboardActivity(
+                id = act.id,
+                title = when (act.type) {
+                    SavingsActivityType.TRANSACTION_ADDED -> "Contribution Added"
+                    SavingsActivityType.TRANSACTION_UPDATED -> "Contribution Edited"
+                    SavingsActivityType.TRANSACTION_DELETED -> "Contribution Removed"
+                    SavingsActivityType.SPACE_CREATED -> "Space Created"
+                    SavingsActivityType.SPACE_UPDATED -> "Space Updated"
+                    SavingsActivityType.INVITATION_SENT -> "Invitation Sent"
+                    SavingsActivityType.INVITATION_ACCEPTED -> "New Member Joined"
+                    SavingsActivityType.INVITATION_DECLINED -> "Invitation Declined"
+                    SavingsActivityType.MEMBER_JOINED -> "Member Joined"
+                    SavingsActivityType.MEMBER_LEFT -> "Member Left"
+                    SavingsActivityType.MEMBER_REMOVED -> "Member Removed"
+                    SavingsActivityType.OWNERSHIP_TRANSFERRED -> "Ownership Transferred"
+                },
+                description = act.details,
+                icon = getSavingsActivityIcon(act.type),
+                timestamp = act.timestamp,
+                type = DashboardActivityType.SAVINGS
             )
         }
 
         val sortedActivities = activities.sortedByDescending { it.timestamp }.take(10)
+        val hasUnread = pendingInvitations.isNotEmpty() || 
+                       hasPendingPartnerRequest ||
+                       channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
 
         _uiState.update { it.copy(
             balance = income - expense,
@@ -125,8 +149,27 @@ class DashboardViewModel(
             totalSavingsBalance = totalSavingsBalance,
             recentSavingsSpaces = recentSpaces,
             pendingInvitations = pendingInvitations,
-            recentActivities = sortedActivities
+            hasPendingPartnerRequest = hasPendingPartnerRequest,
+            recentActivities = sortedActivities,
+            hasUnreadNotifications = hasUnread
         ) }
+    }
+
+    private fun getSavingsActivityIcon(type: SavingsActivityType): String {
+        return when (type) {
+            SavingsActivityType.TRANSACTION_ADDED -> "📥"
+            SavingsActivityType.TRANSACTION_UPDATED -> "📝"
+            SavingsActivityType.TRANSACTION_DELETED -> "🗑️"
+            SavingsActivityType.SPACE_CREATED -> "✨"
+            SavingsActivityType.SPACE_UPDATED -> "⚙️"
+            SavingsActivityType.INVITATION_SENT -> "✉️"
+            SavingsActivityType.INVITATION_ACCEPTED -> "🤝"
+            SavingsActivityType.INVITATION_DECLINED -> "❌"
+            SavingsActivityType.MEMBER_JOINED -> "👤"
+            SavingsActivityType.MEMBER_LEFT -> "🚪"
+            SavingsActivityType.MEMBER_REMOVED -> "🚫"
+            SavingsActivityType.OWNERSHIP_TRANSFERRED -> "👑"
+        }
     }
 
     fun addTransaction(transaction: Transaction) {

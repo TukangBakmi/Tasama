@@ -314,6 +314,9 @@ fun MainScreen(
                                                         },
                                                         onNavigateToSavingsDetail = { spaceId ->
                                                             navController.navigate("savings_detail/$spaceId")
+                                                        },
+                                                        onNavigateToAI = {
+                                                            navController.navigate("ai_chat")
                                                         }
                                                     )
 

@@ -11,9 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +39,8 @@ fun DashboardScreen(
     onNavigateToChat: () -> Unit = {},
     onNavigateToPartner: () -> Unit = {},
     onNavigateToTransactions: () -> Unit = {},
-    onNavigateToSavingsDetail: (String) -> Unit = {}
+    onNavigateToSavingsDetail: (String) -> Unit = {},
+    onNavigateToAI: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
@@ -104,9 +104,7 @@ fun DashboardScreen(
             // 3. Quick Actions
             item {
                 QuickActionsRow(
-                    onAddTransaction = { viewModel.onAddTransactionClick() },
-                    onViewSavings = onNavigateToSavings,
-                    onChat = onNavigateToChat
+                    onAskAI = onNavigateToAI
                 )
             }
 
@@ -334,70 +332,63 @@ fun MiniSpaceCard(
 
 @Composable
 fun QuickActionsRow(
-    onAddTransaction: () -> Unit,
-    onViewSavings: () -> Unit,
-    onChat: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        QuickActionButton(
-            label = "Add Expense",
-            icon = Icons.Default.Add,
-            accentColor = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1.3f),
-            onClick = onAddTransaction
-        )
-        QuickActionButton(
-            label = "Savings",
-            icon = Icons.Default.Wallet,
-            accentColor = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.weight(1f),
-            onClick = onViewSavings
-        )
-        QuickActionButton(
-            label = "Chat",
-            icon = Icons.Default.Notifications,
-            accentColor = MaterialTheme.colorScheme.tertiary,
-            modifier = Modifier.weight(1f),
-            onClick = onChat
-        )
-    }
-}
-
-@Composable
-fun QuickActionButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onAskAI: () -> Unit
 ) {
     Surface(
-        modifier = modifier.height(56.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-        onClick = onClick
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        onClick = onAskAI
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Ask Tasama AI",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "Get help with your savings and expenses",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = accentColor,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
                 modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
             )
         }
     }

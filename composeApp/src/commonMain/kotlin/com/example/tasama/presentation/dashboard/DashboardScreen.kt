@@ -1,16 +1,14 @@
 package com.example.tasama.presentation.dashboard
 
-import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.*
@@ -18,27 +16,28 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.SavingsSpace
-import com.example.tasama.presentation.components.UserAvatar
 import com.example.tasama.util.formatAmount
-import kotlinx.datetime.*
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.flow.filterNotNull
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.time.Instant
 import kotlin.time.Clock
 
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = koinViewModel(),
     onNavigateToSavings: () -> Unit = {},
-    onNavigateToChat: () -> Unit = {},
     onNavigateToPartner: () -> Unit = {},
-    onNavigateToTransactions: () -> Unit = {},
     onNavigateToSavingsDetail: (String) -> Unit = {},
     onNavigateToAI: () -> Unit = {}
 ) {
@@ -82,6 +81,7 @@ fun DashboardScreen(
                     DashboardHeader(
                         userName = uiState.userName ?: "User",
                         hasUnread = uiState.hasUnreadNotifications,
+                        onNotificationsClick = { viewModel.onNotificationsClick() },
                         modifier = Modifier.weight(1f)
                     )
                     
@@ -93,44 +93,50 @@ fun DashboardScreen(
 
             // 2. Savings Overview
             item {
+                val recentSpaces = uiState.recentSavingsSpaces.sortedByDescending { it.updatedAt }.take(2)
                 SavingsOverviewCard(
                     totalBalance = uiState.totalSavingsBalance,
-                    recentSpaces = uiState.recentSavingsSpaces,
+                    recentSpaces = recentSpaces,
                     onViewAll = onNavigateToSavings,
                     onSpaceClick = onNavigateToSavingsDetail
                 )
             }
 
-            // 3. Quick Actions
+            // 3. Financial Overview
+            item {
+                FinancialOverviewSection(
+                    summary = uiState.financialSummary,
+                    trends = uiState.trendChartData,
+                    spaces = uiState.recentSavingsSpaces,
+                    selectedSpaceId = uiState.selectedSpaceId,
+                    selectedPeriod = uiState.selectedPeriod,
+                    onSpaceSelect = { viewModel.onSpaceFilterSelected(it) },
+                    onPeriodSelect = { viewModel.onPeriodFilterSelected(it) }
+                )
+            }
+
+            // 4. Quick Actions
             item {
                 QuickActionsRow(
                     onAskAI = onNavigateToAI
                 )
             }
 
-            // 4. Invitations & Activity
+            // 5. Invitations & Requests
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Pending Partner Request
                     if (uiState.hasPendingPartnerRequest) {
                         PendingPartnerRequestSection(
                             onViewPartner = onNavigateToPartner
                         )
                     }
 
-                    // Pending Invitations (Conditional)
                     if (uiState.pendingInvitations.isNotEmpty()) {
                         PendingInvitationsSection(
                             count = uiState.pendingInvitations.size,
                             onViewInvitations = onNavigateToSavings
                         )
                     }
-
-                    // Recent Activity
-                    RecentActivitySection(
-                        activities = uiState.recentActivities,
-                        onViewAll = onNavigateToTransactions
-                    )
                 }
             }
             
@@ -139,12 +145,12 @@ fun DashboardScreen(
             }
         }
 
-        if (uiState.showAddTransactionDialog) {
-            AddTransactionDialog(
-                onDismiss = { viewModel.onDismissAddTransaction() },
-                onConfirm = { transaction ->
-                    viewModel.addTransaction(transaction)
-                    viewModel.onDismissAddTransaction()
+        if (uiState.showNotificationsPanel) {
+            NotificationsBottomSheet(
+                activities = uiState.recentActivities,
+                onDismiss = { viewModel.onDismissNotifications() },
+                onActivityClick = { activity ->
+                    viewModel.markActivityAsRead(activity.id)
                 }
             )
         }
@@ -155,6 +161,7 @@ fun DashboardScreen(
 fun DashboardHeader(
     userName: String,
     hasUnread: Boolean,
+    onNotificationsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -183,7 +190,7 @@ fun DashboardHeader(
         
         Box {
             IconButton(
-                onClick = { /* TODO: Notifications */ },
+                onClick = onNotificationsClick,
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
@@ -199,7 +206,7 @@ fun DashboardHeader(
             if (hasUnread) {
                 Box(
                     modifier = Modifier
-                        .size(12.dp)
+                        .size(10.dp)
                         .align(Alignment.TopEnd)
                         .padding(2.dp)
                         .clip(CircleShape)
@@ -269,21 +276,6 @@ fun SavingsOverviewCard(
                         )
                     }
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No savings spaces yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }
@@ -324,6 +316,197 @@ fun MiniSpaceCard(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FinancialOverviewSection(
+    summary: FinancialSummary,
+    trends: List<MonthlyTrend>,
+    spaces: List<SavingsSpace>,
+    selectedSpaceId: String?,
+    selectedPeriod: FinancialPeriod,
+    onSpaceSelect: (String?) -> Unit,
+    onPeriodSelect: (FinancialPeriod) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Financial Overview",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            FilterRow(
+                spaces = spaces,
+                selectedSpaceId = selectedSpaceId,
+                selectedPeriod = selectedPeriod,
+                onSpaceSelect = onSpaceSelect,
+                onPeriodSelect = onPeriodSelect
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    FinancialMetricItem("Income", summary.income, Color(0xFF4CAF50), Modifier.weight(1f))
+                    FinancialMetricItem("Expense", summary.expense, Color(0xFFF44336), Modifier.weight(1f))
+                    FinancialMetricItem("Net", summary.net, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                TrendChart(
+                    trends = trends,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterRow(
+    spaces: List<SavingsSpace>,
+    selectedSpaceId: String?,
+    selectedPeriod: FinancialPeriod,
+    onSpaceSelect: (String?) -> Unit,
+    onPeriodSelect: (FinancialPeriod) -> Unit
+) {
+    var showSpaceMenu by remember { mutableStateOf(false) }
+    var showPeriodMenu by remember { mutableStateOf(false) }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Space Filter
+        Box {
+            FilterChip(
+                selected = true,
+                onClick = { showSpaceMenu = true },
+                label = { 
+                    Text(
+                        if (selectedSpaceId == null) "All Spaces" 
+                        else spaces.find { it.id == selectedSpaceId }?.name ?: "All Spaces",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) }
+            )
+            DropdownMenu(expanded = showSpaceMenu, onDismissRequest = { showSpaceMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("All Spaces") },
+                    onClick = { onSpaceSelect(null); showSpaceMenu = false }
+                )
+                spaces.forEach { space ->
+                    DropdownMenuItem(
+                        text = { Text(space.name) },
+                        onClick = { onSpaceSelect(space.id); showSpaceMenu = false }
+                    )
+                }
+            }
+        }
+
+        // Period Filter
+        Box {
+            FilterChip(
+                selected = true,
+                onClick = { showPeriodMenu = true },
+                label = { 
+                    Text(
+                        selectedPeriod.name.replace("_", " ").lowercase().capitalize(),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) }
+            )
+            DropdownMenu(expanded = showPeriodMenu, onDismissRequest = { showPeriodMenu = false }) {
+                FinancialPeriod.entries.forEach { period ->
+                    DropdownMenuItem(
+                        text = { Text(period.name.replace("_", " ").lowercase().capitalize()) },
+                        onClick = { onPeriodSelect(period); showPeriodMenu = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun String.capitalize() = this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+
+@Composable
+fun FinancialMetricItem(label: String, amount: Long, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = "Rp ${amount.formatAmount()}", 
+            style = MaterialTheme.typography.labelLarge, 
+            fontWeight = FontWeight.Bold,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun TrendChart(trends: List<MonthlyTrend>, modifier: Modifier = Modifier) {
+    if (trends.isEmpty()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text("No data available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    val maxAmount = remember(trends) {
+        val maxVal = trends.maxOfOrNull { maxOf(it.income, it.expense) } ?: 1L
+        (if (maxVal <= 0L) 1L else maxVal).toFloat()
+    }
+
+    Canvas(modifier = modifier.padding(vertical = 8.dp)) {
+        val width = size.width
+        val height = size.height
+        val barWidth = (width / trends.size) * 0.35f
+        val gap = (width / trends.size) * 0.05f
+
+        trends.forEachIndexed { index, trend ->
+            val xBase = index * (width / trends.size) + (width / trends.size) * 0.15f
+            
+            // Income bar (green)
+            val incomeHeight = (trend.income.toFloat() / maxAmount) * height
+            if (incomeHeight > 0) {
+                drawRect(
+                    color = Color(0xFF4CAF50).copy(alpha = 0.8f),
+                    topLeft = Offset(xBase, height - incomeHeight),
+                    size = androidx.compose.ui.geometry.Size(barWidth, incomeHeight)
+                )
+            }
+
+            // Expense bar (red)
+            val expenseHeight = (trend.expense.toFloat() / maxAmount) * height
+            if (expenseHeight > 0) {
+                drawRect(
+                    color = Color(0xFFF44336).copy(alpha = 0.8f),
+                    topLeft = Offset(xBase + barWidth + gap, height - expenseHeight),
+                    size = androidx.compose.ui.geometry.Size(barWidth, expenseHeight)
                 )
             }
         }
@@ -486,7 +669,7 @@ fun PendingInvitationsSection(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Pending invitations",
+                    text = "Pending invitations ($count)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
@@ -499,63 +682,6 @@ fun PendingInvitationsSection(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
-        }
-    }
-}
-
-@Composable
-fun RecentActivitySection(
-    activities: List<DashboardActivity>,
-    onViewAll: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Recent Activity",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            TextButton(onClick = onViewAll) {
-                Text("History")
-            }
-        }
-
-        if (activities.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "No recent activities",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                    activities.forEachIndexed { index, activity ->
-                        ActivityItem(
-                            activity = activity,
-                            showDivider = index < activities.size - 1
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -578,10 +704,67 @@ fun ThreeGrayDotsLoading(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationsBottomSheet(
+    activities: List<DashboardActivity>,
+    onDismiss: () -> Unit,
+    onActivityClick: (DashboardActivity) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = "Notifications",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            )
+
+            if (activities.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No new notifications",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    items(activities) { activity ->
+                        ActivityItem(
+                            activity = activity,
+                            showDivider = true,
+                            onClick = { onActivityClick(activity) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ActivityItem(
     activity: DashboardActivity,
-    showDivider: Boolean
+    showDivider: Boolean,
+    onClick: (() -> Unit)? = null
 ) {
     val timeString = remember(activity.timestamp) {
         try {
@@ -600,8 +783,8 @@ fun ActivityItem(
                 }
                 yesterday -> "Yesterday"
                 else -> {
-                    val day = localDateTime.dayOfMonth.toString().padStart(2, '0')
-                    val monthName = when (localDateTime.monthNumber) {
+                    val day = localDateTime.day.toString().padStart(2, '0')
+                    val monthName = when (localDateTime.month.ordinal + 1) {
                         1 -> "Jan"; 2 -> "Feb"; 3 -> "Mar"; 4 -> "Apr"
                         5 -> "May"; 6 -> "Jun"; 7 -> "Jul"; 8 -> "Aug"
                         9 -> "Sep"; 10 -> "Oct"; 11 -> "Nov"; 12 -> "Dec"
@@ -613,7 +796,11 @@ fun ActivityItem(
         } catch (_: Exception) { "" }
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -622,15 +809,18 @@ fun ActivityItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (activity.isUnread) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = activity.icon, fontSize = 16.sp)
+                Text(text = activity.icon, fontSize = 20.sp)
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -640,11 +830,12 @@ fun ActivityItem(
                 ) {
                     Text(
                         text = activity.title,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (activity.isUnread) FontWeight.Bold else FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        color = if (activity.isUnread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     )
                     Text(
                         text = timeString,
@@ -656,10 +847,20 @@ fun ActivityItem(
                 Text(
                     text = activity.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Normal,
-                    maxLines = 1,
+                    color = if (activity.isUnread) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = if (activity.isUnread) FontWeight.Medium else FontWeight.Normal,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (activity.isUnread) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
         }

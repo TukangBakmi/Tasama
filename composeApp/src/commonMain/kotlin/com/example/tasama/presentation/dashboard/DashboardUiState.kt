@@ -15,6 +15,12 @@ data class DashboardUiState(
     val monthlyTrends: List<MonthlyTrend> = emptyList(),
     val balanceHistory: List<BalancePoint> = emptyList(),
     
+    // Financial Overview
+    val selectedSpaceId: String? = null, // null means "All Spaces"
+    val selectedPeriod: FinancialPeriod = FinancialPeriod.THIS_MONTH,
+    val financialSummary: FinancialSummary = FinancialSummary(),
+    val trendChartData: List<MonthlyTrend> = emptyList(),
+
     // New fields for redesigned dashboard
     val totalSavingsBalance: Long = 0,
     val recentSavingsSpaces: List<SavingsSpace> = emptyList(),
@@ -23,7 +29,7 @@ data class DashboardUiState(
     val hasPendingPartnerRequest: Boolean = false,
     val hasUnreadNotifications: Boolean = false,
     val isLoading: Boolean = false,
-    
+    val showNotificationsPanel: Boolean = false,
     val showAddTransactionDialog: Boolean = false,
     val error: String? = null
 )
@@ -59,7 +65,17 @@ data class CategorySpending(
 )
 
 data class MonthlyTrend(
-    val month: String,
+    val label: String,
     val income: Long,
     val expense: Long
+)
+
+enum class FinancialPeriod {
+    THIS_WEEK, THIS_MONTH, LAST_MONTH, LAST_3_MONTHS, THIS_YEAR
+}
+
+data class FinancialSummary(
+    val income: Long = 0,
+    val expense: Long = 0,
+    val net: Long = 0
 )

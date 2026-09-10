@@ -635,6 +635,18 @@ class FirebaseSavingsRepository(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getGlobalTransactions(): Flow<List<SavingsTransaction>> {
+        return getSavingsSpaces().flatMapLatest { spaces ->
+            if (spaces.isEmpty()) return@flatMapLatest flowOf(emptyList())
+            
+            val transactionFlows = spaces.map { getTransactions(it.id) }
+            combine(transactionFlows) { arrays ->
+                arrays.flatMap { it }.sortedByDescending { it.timestamp }
+            }
+        }
+    }
+
     override suspend fun archiveSpace(spaceId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
         val spaceDoc = spacesCollection.document(spaceId)

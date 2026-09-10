@@ -8,6 +8,7 @@ import com.example.tasama.domain.model.SavingsActivity
 import com.example.tasama.domain.model.SavingsActivityType
 import com.example.tasama.domain.model.SavingsInvitation
 import com.example.tasama.domain.model.SavingsSpace
+import com.example.tasama.domain.model.SavingsTransaction
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.model.User
@@ -15,7 +16,6 @@ import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
-import com.example.tasama.util.formatAmount
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +25,15 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 
 class DashboardViewModel(
     private val repository: TransactionRepository,
@@ -72,6 +81,7 @@ class DashboardViewModel(
                 savingsRepository.getSavingsSpaces(),
                 savingsRepository.getMyInvitations(),
                 savingsRepository.getGlobalActivityHistory(),
+                savingsRepository.getGlobalTransactions(),
                 chatRepository.getChannels(),
                 userFlow
             ) { args: Array<Any?> ->
@@ -79,10 +89,11 @@ class DashboardViewModel(
                 val spaces = args[1] as List<SavingsSpace>
                 val invitations = args[2] as List<SavingsInvitation>
                 val activities = args[3] as List<SavingsActivity>
-                val channels = args[4] as List<ChatChannel>
-                val user = args[5] as User?
+                val savingsTransactions = args[4] as List<SavingsTransaction>
+                val channels = args[5] as List<ChatChannel>
+                val user = args[6] as User?
 
-                updateDashboardWith(transactions, spaces, invitations, activities, channels, user)
+                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user)
                 _uiState.update { it.copy(isLoading = false) }
             }.collect { }
         }
@@ -93,16 +104,24 @@ class DashboardViewModel(
         spaces: List<SavingsSpace>,
         invitations: List<SavingsInvitation>,
         savingsActivities: List<SavingsActivity>,
+        savingsTransactions: List<SavingsTransaction>,
         channels: List<ChatChannel>,
         user: User?
     ) {
-        val income = transactions
-            .filter { it.type == TransactionType.INCOME }
-            .sumOf { it.amount }
+        val currentSpaceId = _uiState.value.selectedSpaceId
+        val currentPeriod = _uiState.value.selectedPeriod
 
-        val expense = transactions
-            .filter { it.type == TransactionType.EXPENSE }
-            .sumOf { it.amount }
+        // Filter transactions based on selection
+        val filteredTransactions = if (currentSpaceId == null) {
+            savingsTransactions
+        } else {
+            savingsTransactions.filter { it.spaceId == currentSpaceId }
+        }
+
+        val periodFiltered = filterByPeriod(filteredTransactions, currentPeriod)
+        
+        val income = periodFiltered.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+        val expense = periodFiltered.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
 
         val totalSavingsBalance = spaces.sumOf { it.balance }
         val recentSpaces = spaces.sortedByDescending { it.updatedAt }.take(2)
@@ -142,17 +161,112 @@ class DashboardViewModel(
                        channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
 
         _uiState.update { it.copy(
-            balance = income - expense,
-            income = income,
-            expense = expense,
-            transactions = transactions.sortedByDescending { it.createdAt }.take(5),
+            recentSavingsSpaces = spaces, // Update all spaces for the filter
+            recentActivities = sortedActivities, // Needed for notification bell
+            financialSummary = FinancialSummary(income, expense, income - expense),
+            trendChartData = calculateTrendData(filteredTransactions, currentPeriod),
             totalSavingsBalance = totalSavingsBalance,
-            recentSavingsSpaces = recentSpaces,
             pendingInvitations = pendingInvitations,
             hasPendingPartnerRequest = hasPendingPartnerRequest,
-            recentActivities = sortedActivities,
             hasUnreadNotifications = hasUnread
         ) }
+    }
+
+    private fun filterByPeriod(transactions: List<SavingsTransaction>, period: FinancialPeriod): List<SavingsTransaction> {
+        val now = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val today = now.date
+        
+        return transactions.filter {
+            val date = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+            when (period) {
+                FinancialPeriod.THIS_WEEK -> {
+                    val daysSinceMonday = (date.dayOfWeek.ordinal - DayOfWeek.MONDAY.ordinal + 7) % 7
+                    val monday = today.minus(daysSinceMonday, DateTimeUnit.DAY)
+                    date >= monday
+                }
+                FinancialPeriod.THIS_MONTH -> date.month == today.month && date.year == today.year
+                FinancialPeriod.LAST_MONTH -> {
+                    val lastMonthDate = today.minus(1, DateTimeUnit.MONTH)
+                    date.month == lastMonthDate.month && date.year == lastMonthDate.year
+                }
+                FinancialPeriod.LAST_3_MONTHS -> {
+                    val threeMonthsAgo = today.minus(3, DateTimeUnit.MONTH)
+                    date >= threeMonthsAgo
+                }
+                FinancialPeriod.THIS_YEAR -> date.year == today.year
+            }
+        }
+    }
+
+    private fun calculateTrendData(transactions: List<SavingsTransaction>, period: FinancialPeriod): List<MonthlyTrend> {
+        val now = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val today = now.date
+
+        return when (period) {
+            FinancialPeriod.THIS_WEEK -> {
+                val daysSinceMonday = (today.dayOfWeek.ordinal - DayOfWeek.MONDAY.ordinal + 7) % 7
+                val monday = today.minus(daysSinceMonday, DateTimeUnit.DAY)
+                (0..6).map { i ->
+                    val date = monday.plus(i, DateTimeUnit.DAY)
+                    val dayTransactions = transactions.filter {
+                        Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date == date
+                    }
+                    MonthlyTrend(
+                        label = date.dayOfWeek.name.take(3),
+                        income = dayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+                        expense = dayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                    )
+                }
+            }
+            FinancialPeriod.THIS_MONTH -> {
+                val daysInMonth = 30 // Simplified
+                (1..daysInMonth step 5).map { startDay ->
+                    val endDay = (startDay + 4).coerceAtMost(daysInMonth)
+                    val periodTransactions = transactions.filter {
+                        val d = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+                        d.month == today.month && d.year == today.year && d.day in startDay..endDay
+                    }
+                    MonthlyTrend(
+                        label = "$startDay-$endDay",
+                        income = periodTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+                        expense = periodTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                    )
+                }
+            }
+            FinancialPeriod.THIS_YEAR, FinancialPeriod.LAST_3_MONTHS -> {
+                (1..12).map { monthIdx ->
+                    val month = Month(monthIdx)
+                    val monthTransactions = transactions.filter {
+                        val d = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+                        d.month == month && d.year == today.year
+                    }
+                    MonthlyTrend(
+                        label = month.name.take(3),
+                        income = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+                        expense = monthTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                    )
+                }
+            }
+            else -> emptyList()
+        }
+    }
+
+    fun onSpaceFilterSelected(spaceId: String?) {
+        _uiState.update { it.copy(selectedSpaceId = spaceId) }
+        // The observeData combine will naturally pick this up if it references _uiState,
+        // but here it doesn't. We need to manually refresh or make combine react to selection.
+        refreshData()
+    }
+
+    fun onPeriodFilterSelected(period: FinancialPeriod) {
+        _uiState.update { it.copy(selectedPeriod = period) }
+        refreshData()
+    }
+
+    private fun refreshData() {
+        // We can just call observeData again or use a StateFlow for filters and combine it.
+        // For simplicity, let's just trigger a data update.
+        observeData()
     }
 
     private fun getSavingsActivityIcon(type: SavingsActivityType): String {
@@ -194,21 +308,21 @@ class DashboardViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    private fun getCategoryEmoji(category: String, type: TransactionType): String {
-        if (type == TransactionType.INCOME) return "💰"
-        
-        return when (category.lowercase()) {
-            "food", "makan", "minum", "restoran" -> "🍔"
-            "transport", "transportasi", "ojek", "bensin" -> "🚗"
-            "shopping", "belanja" -> "🛍️"
-            "entertainment", "hiburan", "nonton" -> "🎬"
-            "bills", "tagihan", "listrik", "air" -> "🧾"
-            "health", "kesehatan", "obat" -> "🏥"
-            "education", "pendidikan", "sekolah", "kuliah" -> "🎓"
-            "gift", "hadiah" -> "🎁"
-            "salary", "gaji" -> "💸"
-            "investment", "investasi" -> "📈"
-            else -> "📦"
+    fun onNotificationsClick() {
+        _uiState.update { it.copy(showNotificationsPanel = true) }
+    }
+
+    fun onDismissNotifications() {
+        _uiState.update { it.copy(showNotificationsPanel = false) }
+    }
+
+    fun markActivityAsRead(activityId: String) {
+        _uiState.update { state ->
+            state.copy(
+                recentActivities = state.recentActivities.map {
+                    if (it.id == activityId) it.copy(isUnread = false) else it
+                }
+            )
         }
     }
 }

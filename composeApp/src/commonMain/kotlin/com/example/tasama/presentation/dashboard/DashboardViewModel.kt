@@ -15,6 +15,7 @@ import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -39,7 +40,8 @@ class DashboardViewModel(
     private val repository: TransactionRepository,
     private val authRepository: AuthRepository,
     private val savingsRepository: SavingsRepository,
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -83,7 +85,8 @@ class DashboardViewModel(
                 savingsRepository.getGlobalActivityHistory(),
                 savingsRepository.getGlobalTransactions(),
                 chatRepository.getChannels(),
-                userFlow
+                userFlow,
+                settingsRepository.settings
             ) { args: Array<Any?> ->
                 val transactions = args[0] as List<Transaction>
                 val spaces = args[1] as List<SavingsSpace>
@@ -92,8 +95,9 @@ class DashboardViewModel(
                 val savingsTransactions = args[4] as List<SavingsTransaction>
                 val channels = args[5] as List<ChatChannel>
                 val user = args[6] as User?
+                val settings = args[7] as com.example.tasama.domain.model.AppSettings
 
-                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user)
+                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user, settings)
                 _uiState.update { it.copy(isLoading = false) }
             }.collect { }
         }
@@ -106,7 +110,8 @@ class DashboardViewModel(
         savingsActivities: List<SavingsActivity>,
         savingsTransactions: List<SavingsTransaction>,
         channels: List<ChatChannel>,
-        user: User?
+        user: User?,
+        settings: com.example.tasama.domain.model.AppSettings
     ) {
         val currentSpaceId = _uiState.value.selectedSpaceId
         val currentPeriod = _uiState.value.selectedPeriod
@@ -168,7 +173,8 @@ class DashboardViewModel(
             totalSavingsBalance = totalSavingsBalance,
             pendingInvitations = pendingInvitations,
             hasPendingPartnerRequest = hasPendingPartnerRequest,
-            hasUnreadNotifications = hasUnread
+            hasUnreadNotifications = hasUnread,
+            currency = settings.currency
         ) }
     }
 
@@ -212,28 +218,60 @@ class DashboardViewModel(
                         Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date == date
                     }
                     MonthlyTrend(
-                        label = date.dayOfWeek.name.take(3),
+                        label = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
                         income = dayTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
                         expense = dayTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
                     )
                 }
             }
             FinancialPeriod.THIS_MONTH -> {
-                val daysInMonth = 30 // Simplified
-                (1..daysInMonth step 5).map { startDay ->
+                val daysInMonth = 30 // Simplified or could use Month.length(leapYear)
+                (0 until 6).map { i ->
+                    val startDay = i * 5 + 1
                     val endDay = (startDay + 4).coerceAtMost(daysInMonth)
                     val periodTransactions = transactions.filter {
                         val d = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
                         d.month == today.month && d.year == today.year && d.day in startDay..endDay
                     }
                     MonthlyTrend(
-                        label = "$startDay-$endDay",
+                        label = "$startDay", // Start day of the bracket
                         income = periodTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
                         expense = periodTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
                     )
                 }
             }
-            FinancialPeriod.THIS_YEAR, FinancialPeriod.LAST_3_MONTHS -> {
+            FinancialPeriod.LAST_MONTH -> {
+                val lastMonthDate = today.minus(1, DateTimeUnit.MONTH)
+                val daysInMonth = 30
+                (0 until 6).map { i ->
+                    val startDay = i * 5 + 1
+                    val endDay = (startDay + 4).coerceAtMost(daysInMonth)
+                    val periodTransactions = transactions.filter {
+                        val d = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+                        d.month == lastMonthDate.month && d.year == lastMonthDate.year && d.day in startDay..endDay
+                    }
+                    MonthlyTrend(
+                        label = "$startDay",
+                        income = periodTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+                        expense = periodTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                    )
+                }
+            }
+            FinancialPeriod.LAST_3_MONTHS -> {
+                (0..2).reversed().map { i ->
+                    val monthDate = today.minus(i, DateTimeUnit.MONTH)
+                    val monthTransactions = transactions.filter {
+                        val d = Instant.fromEpochMilliseconds(it.timestamp).toLocalDateTime(TimeZone.currentSystemDefault()).date
+                        d.month == monthDate.month && d.year == monthDate.year
+                    }
+                    MonthlyTrend(
+                        label = monthDate.month.name.take(3),
+                        income = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+                        expense = monthTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                    )
+                }
+            }
+            FinancialPeriod.THIS_YEAR -> {
                 (1..12).map { monthIdx ->
                     val month = Month(monthIdx)
                     val monthTransactions = transactions.filter {
@@ -247,7 +285,6 @@ class DashboardViewModel(
                     )
                 }
             }
-            else -> emptyList()
         }
     }
 

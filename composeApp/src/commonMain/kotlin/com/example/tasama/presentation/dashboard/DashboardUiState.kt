@@ -31,7 +31,8 @@ data class DashboardUiState(
     val isLoading: Boolean = false,
     val showNotificationsPanel: Boolean = false,
     val showAddTransactionDialog: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val currency: String = "IDR"
 )
 
 data class DashboardActivity(

@@ -1,5 +1,6 @@
 package com.example.tasama.presentation.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,12 +19,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.util.formatAmount
+import com.example.tasama.util.formatCurrency
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
@@ -97,6 +105,7 @@ fun DashboardScreen(
                 SavingsOverviewCard(
                     totalBalance = uiState.totalSavingsBalance,
                     recentSpaces = recentSpaces,
+                    currency = uiState.currency,
                     onViewAll = onNavigateToSavings,
                     onSpaceClick = onNavigateToSavingsDetail
                 )
@@ -110,6 +119,7 @@ fun DashboardScreen(
                     spaces = uiState.recentSavingsSpaces,
                     selectedSpaceId = uiState.selectedSpaceId,
                     selectedPeriod = uiState.selectedPeriod,
+                    currency = uiState.currency,
                     onSpaceSelect = { viewModel.onSpaceFilterSelected(it) },
                     onPeriodSelect = { viewModel.onPeriodFilterSelected(it) }
                 )
@@ -221,6 +231,7 @@ fun DashboardHeader(
 fun SavingsOverviewCard(
     totalBalance: Long,
     recentSpaces: List<SavingsSpace>,
+    currency: String,
     onViewAll: () -> Unit,
     onSpaceClick: (String) -> Unit
 ) {
@@ -248,7 +259,7 @@ fun SavingsOverviewCard(
             }
 
             Text(
-                text = "Rp ${totalBalance.formatAmount()}",
+                text = totalBalance.formatCurrency(currency),
                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp),
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary
@@ -271,6 +282,7 @@ fun SavingsOverviewCard(
                     recentSpaces.forEach { space ->
                         MiniSpaceCard(
                             space = space,
+                            currency = currency,
                             modifier = Modifier.weight(1f),
                             onClick = { onSpaceClick(space.id) }
                         )
@@ -284,6 +296,7 @@ fun SavingsOverviewCard(
 @Composable
 fun MiniSpaceCard(
     space: SavingsSpace,
+    currency: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -311,7 +324,7 @@ fun MiniSpaceCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Rp ${space.balance.formatAmount()}",
+                    text = space.balance.formatCurrency(currency),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -329,6 +342,7 @@ fun FinancialOverviewSection(
     spaces: List<SavingsSpace>,
     selectedSpaceId: String?,
     selectedPeriod: FinancialPeriod,
+    currency: String,
     onSpaceSelect: (String?) -> Unit,
     onPeriodSelect: (FinancialPeriod) -> Unit
 ) {
@@ -367,18 +381,19 @@ fun FinancialOverviewSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    FinancialMetricItem("Income", summary.income, Color(0xFF4CAF50), Modifier.weight(1f))
-                    FinancialMetricItem("Expense", summary.expense, Color(0xFFF44336), Modifier.weight(1f))
-                    FinancialMetricItem("Net", summary.net, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                    FinancialMetricItem("Income", summary.income, Color(0xFF4CAF50), currency, Modifier.weight(1f))
+                    FinancialMetricItem("Expense", summary.expense, Color(0xFFF44336), currency, Modifier.weight(1f))
+                    FinancialMetricItem("Net", summary.net, MaterialTheme.colorScheme.primary, currency, Modifier.weight(1f))
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 TrendChart(
                     trends = trends,
+                    currency = currency,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .height(90.dp) // Reduced height
                 )
             }
         }
@@ -409,7 +424,16 @@ fun FilterRow(
                         style = MaterialTheme.typography.labelSmall
                     )
                 },
-                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) }
+                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = true,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                )
             )
             DropdownMenu(expanded = showSpaceMenu, onDismissRequest = { showSpaceMenu = false }) {
                 DropdownMenuItem(
@@ -431,17 +455,40 @@ fun FilterRow(
                 selected = true,
                 onClick = { showPeriodMenu = true },
                 label = { 
+                    val periodLabel = when (selectedPeriod) {
+                        FinancialPeriod.THIS_WEEK -> "This week"
+                        FinancialPeriod.THIS_MONTH -> "This month"
+                        FinancialPeriod.LAST_MONTH -> "Last month"
+                        FinancialPeriod.LAST_3_MONTHS -> "Last 3 months"
+                        FinancialPeriod.THIS_YEAR -> "This year"
+                    }
                     Text(
-                        selectedPeriod.name.replace("_", " ").lowercase().capitalize(),
+                        periodLabel,
                         style = MaterialTheme.typography.labelSmall
                     )
                 },
-                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) }
+                trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.size(16.dp)) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = true,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                )
             )
             DropdownMenu(expanded = showPeriodMenu, onDismissRequest = { showPeriodMenu = false }) {
                 FinancialPeriod.entries.forEach { period ->
+                    val periodLabel = when (period) {
+                        FinancialPeriod.THIS_WEEK -> "This week"
+                        FinancialPeriod.THIS_MONTH -> "This month"
+                        FinancialPeriod.LAST_MONTH -> "Last month"
+                        FinancialPeriod.LAST_3_MONTHS -> "Last 3 months"
+                        FinancialPeriod.THIS_YEAR -> "This year"
+                    }
                     DropdownMenuItem(
-                        text = { Text(period.name.replace("_", " ").lowercase().capitalize()) },
+                        text = { Text(periodLabel) },
                         onClick = { onPeriodSelect(period); showPeriodMenu = false }
                     )
                 }
@@ -450,14 +497,14 @@ fun FilterRow(
     }
 }
 
-private fun String.capitalize() = this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+private fun String.capitalizeWords(): String = this.split(" ").joinToString(" ") { it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase() else char.toString() } }
 
 @Composable
-fun FinancialMetricItem(label: String, amount: Long, color: Color, modifier: Modifier = Modifier) {
+fun FinancialMetricItem(label: String, amount: Long, color: Color, currency: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            text = "Rp ${amount.formatAmount()}", 
+            text = amount.formatCurrency(currency),
             style = MaterialTheme.typography.labelLarge, 
             fontWeight = FontWeight.Bold,
             color = color,
@@ -468,7 +515,11 @@ fun FinancialMetricItem(label: String, amount: Long, color: Color, modifier: Mod
 }
 
 @Composable
-fun TrendChart(trends: List<MonthlyTrend>, modifier: Modifier = Modifier) {
+fun TrendChart(
+    trends: List<MonthlyTrend>,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
     if (trends.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text("No data available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -476,40 +527,155 @@ fun TrendChart(trends: List<MonthlyTrend>, modifier: Modifier = Modifier) {
         return
     }
 
+    var selectedIndex by remember(trends) { mutableStateOf<Int?>(null) }
+    var tooltipOffset by remember { mutableStateOf(Offset.Zero) }
+
     val maxAmount = remember(trends) {
         val maxVal = trends.maxOfOrNull { maxOf(it.income, it.expense) } ?: 1L
         (if (maxVal <= 0L) 1L else maxVal).toFloat()
     }
 
-    Canvas(modifier = modifier.padding(vertical = 8.dp)) {
-        val width = size.width
-        val height = size.height
-        val barWidth = (width / trends.size) * 0.35f
-        val gap = (width / trends.size) * 0.05f
+    Column(modifier = modifier) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(trends) {
+                        detectTapGestures { offset ->
+                            val spacing = size.width / trends.size
+                            val index = (offset.x / spacing).toInt().coerceIn(0, trends.size - 1)
+                            
+                            if (selectedIndex == index) {
+                                selectedIndex = null
+                            } else {
+                                selectedIndex = index
+                                val xBase = index * spacing + spacing / 2
+                                tooltipOffset = Offset(xBase.toFloat(), offset.y)
+                            }
+                        }
+                    }
+            ) {
+                val width = size.width
+                val height = size.height
+                val spacing = width / trends.size
+                val barWidth = spacing * 0.3f
+                val innerGap = spacing * 0.05f
 
-        trends.forEachIndexed { index, trend ->
-            val xBase = index * (width / trends.size) + (width / trends.size) * 0.15f
-            
-            // Income bar (green)
-            val incomeHeight = (trend.income.toFloat() / maxAmount) * height
-            if (incomeHeight > 0) {
-                drawRect(
-                    color = Color(0xFF4CAF50).copy(alpha = 0.8f),
-                    topLeft = Offset(xBase, height - incomeHeight),
-                    size = androidx.compose.ui.geometry.Size(barWidth, incomeHeight)
-                )
+                trends.forEachIndexed { index, trend ->
+                    val xBase = index * spacing + (spacing - (barWidth * 2 + innerGap)) / 2
+
+                    // Income bar
+                    val incomeHeight = (trend.income.toFloat() / maxAmount) * height
+                    if (incomeHeight > 0) {
+                        drawRoundRect(
+                            color = Color(0xFF4CAF50),
+                            topLeft = Offset(xBase, height - incomeHeight),
+                            size = androidx.compose.ui.geometry.Size(barWidth, incomeHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                        )
+                    }
+
+                    // Expense bar
+                    val expenseHeight = (trend.expense.toFloat() / maxAmount) * height
+                    if (expenseHeight > 0) {
+                        drawRoundRect(
+                            color = Color(0xFFF44336),
+                            topLeft = Offset(xBase + barWidth + innerGap, height - expenseHeight),
+                            size = androidx.compose.ui.geometry.Size(barWidth, expenseHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                        )
+                    }
+                }
             }
 
-            // Expense bar (red)
-            val expenseHeight = (trend.expense.toFloat() / maxAmount) * height
-            if (expenseHeight > 0) {
-                drawRect(
-                    color = Color(0xFFF44336).copy(alpha = 0.8f),
-                    topLeft = Offset(xBase + barWidth + gap, height - expenseHeight),
-                    size = androidx.compose.ui.geometry.Size(barWidth, expenseHeight)
+            selectedIndex?.let { index ->
+                val trend = trends[index]
+                if (trend.income > 0 || trend.expense > 0) {
+                    Popup(
+                        onDismissRequest = { selectedIndex = null },
+                        offset = IntOffset(tooltipOffset.x.toInt(), 0),
+                        properties = PopupProperties(focusable = false)
+                    ) {
+                        ChartTooltip(trend, currency)
+                    }
+                }
+            }
+        }
+        
+        // X-Axis Labels
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            trends.forEach { trend ->
+                Text(
+                    text = trend.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ChartTooltip(
+    trend: MonthlyTrend,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.widthIn(min = 120.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp),
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = trend.label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TooltipMetric("Income", trend.income, Color(0xFF4CAF50), currency)
+            TooltipMetric("Expense", trend.expense, Color(0xFFF44336), currency)
+            
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+            
+            val net = trend.income - trend.expense
+            TooltipMetric("Net", net, if (net >= 0) Color(0xFF4CAF50) else Color(0xFFF44336), currency)
+        }
+    }
+}
+
+@Composable
+private fun TooltipMetric(label: String, amount: Long, color: Color, currency: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = amount.formatCurrency(currency),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
     }
 }
 

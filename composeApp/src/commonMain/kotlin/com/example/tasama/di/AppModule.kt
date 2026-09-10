@@ -89,7 +89,7 @@ val appModule = module {
 
     single { GeofenceMonitor(lazy { get<AuthRepository>() }, get(), MainScope()) }
 
-    viewModel { DashboardViewModel(get(), get(), get(), get()) }
+    viewModel { DashboardViewModel(get(), get(), get(), get(), get()) }
     viewModel { TransactionViewModel(get(), get()) }
     viewModel { AIViewModel(get(), get(), get(), get(), get()) }
     viewModel { SavingsViewModel(get(), get(), get()) }

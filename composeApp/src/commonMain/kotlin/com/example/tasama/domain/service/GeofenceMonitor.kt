@@ -1,7 +1,10 @@
 package com.example.tasama.domain.service
 
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.SessionCleanupRepository
@@ -12,6 +15,7 @@ import kotlin.math.*
 class GeofenceMonitor(
     private val authRepository: Lazy<AuthRepository>,
     private val placeRepository: PlaceRepository,
+    private val activityRepository: ActivityRepository,
     private val scope: CoroutineScope
 ) : SessionCleanupRepository {
     private val userStates = mutableMapOf<String, MutableMap<String, Boolean>>() // userId -> {placeId -> isInside}
@@ -117,11 +121,24 @@ class GeofenceMonitor(
             "👋 $userName left $placeName"
         }
         
-        sendPushNotification(partnerId, message)
+        sendPushNotification(user, partnerId, message)
     }
 
-    private fun sendPushNotification(targetUserId: String, message: String) {
+    private fun sendPushNotification(user: User, targetUserId: String, message: String) {
         scope.launch {
+            // Log to unified activity stream
+            activityRepository.logActivity(
+                Activity(
+                    userId = user.id,
+                    userName = user.name,
+                    category = ActivityCategory.PARTNER,
+                    type = "PLACE_ALERT",
+                    title = "Place Update",
+                    details = message
+                    // timestamp will be handled by repository if it's 0 (serverTimestamp)
+                )
+            )
+
             authRepository.value.sendNotification(
                 targetUid = targetUserId,
                 title = "Place Update",
@@ -130,6 +147,7 @@ class GeofenceMonitor(
             )
         }
     }
+
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val r = 6371000.0 // Earth radius in meters

@@ -12,6 +12,7 @@ import com.example.tasama.domain.model.SavingsTransaction
 import com.example.tasama.domain.model.Transaction
 import com.example.tasama.domain.model.TransactionType
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SavingsRepository
@@ -41,6 +42,7 @@ class DashboardViewModel(
     private val authRepository: AuthRepository,
     private val savingsRepository: SavingsRepository,
     private val chatRepository: ChatRepository,
+    private val activityRepository: ActivityRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
@@ -86,7 +88,8 @@ class DashboardViewModel(
                 savingsRepository.getGlobalTransactions(),
                 chatRepository.getChannels(),
                 userFlow,
-                settingsRepository.settings
+                settingsRepository.settings,
+                activityRepository.hasUnread()
             ) { args: Array<Any?> ->
                 val transactions = args[0] as List<Transaction>
                 val spaces = args[1] as List<SavingsSpace>
@@ -96,8 +99,9 @@ class DashboardViewModel(
                 val channels = args[5] as List<ChatChannel>
                 val user = args[6] as User?
                 val settings = args[7] as com.example.tasama.domain.model.AppSettings
+                val hasUnifiedUnread = args[8] as Boolean
 
-                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user, settings)
+                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user, settings, hasUnifiedUnread)
                 _uiState.update { it.copy(isLoading = false) }
             }.collect { }
         }
@@ -111,7 +115,8 @@ class DashboardViewModel(
         savingsTransactions: List<SavingsTransaction>,
         channels: List<ChatChannel>,
         user: User?,
-        settings: com.example.tasama.domain.model.AppSettings
+        settings: com.example.tasama.domain.model.AppSettings,
+        hasUnifiedUnread: Boolean
     ) {
         val currentSpaceId = _uiState.value.selectedSpaceId
         val currentPeriod = _uiState.value.selectedPeriod
@@ -135,39 +140,13 @@ class DashboardViewModel(
 
         val currentUid = authRepository.getCurrentUserId()
 
-        // Combine activities
-        val activities = savingsActivities.map { act ->
-            DashboardActivity(
-                id = act.id,
-                title = when (act.type) {
-                    SavingsActivityType.TRANSACTION_ADDED -> "Contribution Added"
-                    SavingsActivityType.TRANSACTION_UPDATED -> "Contribution Edited"
-                    SavingsActivityType.TRANSACTION_DELETED -> "Contribution Removed"
-                    SavingsActivityType.SPACE_CREATED -> "Space Created"
-                    SavingsActivityType.SPACE_UPDATED -> "Space Updated"
-                    SavingsActivityType.INVITATION_SENT -> "Invitation Sent"
-                    SavingsActivityType.INVITATION_ACCEPTED -> "New Member Joined"
-                    SavingsActivityType.INVITATION_DECLINED -> "Invitation Declined"
-                    SavingsActivityType.MEMBER_JOINED -> "Member Joined"
-                    SavingsActivityType.MEMBER_LEFT -> "Member Left"
-                    SavingsActivityType.MEMBER_REMOVED -> "Member Removed"
-                    SavingsActivityType.OWNERSHIP_TRANSFERRED -> "Ownership Transferred"
-                },
-                description = act.details,
-                icon = getSavingsActivityIcon(act.type),
-                timestamp = act.timestamp,
-                type = DashboardActivityType.SAVINGS
-            )
-        }
-
-        val sortedActivities = activities.sortedByDescending { it.timestamp }.take(10)
-        val hasUnread = pendingInvitations.isNotEmpty() || 
+        val hasUnread = hasUnifiedUnread || 
+                       pendingInvitations.isNotEmpty() ||
                        hasPendingPartnerRequest ||
                        channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
 
         _uiState.update { it.copy(
             recentSavingsSpaces = spaces, // Update all spaces for the filter
-            recentActivities = sortedActivities, // Needed for notification bell
             financialSummary = FinancialSummary(income, expense, income - expense),
             trendChartData = calculateTrendData(filteredTransactions, currentPeriod),
             totalSavingsBalance = totalSavingsBalance,
@@ -345,21 +324,4 @@ class DashboardViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    fun onNotificationsClick() {
-        _uiState.update { it.copy(showNotificationsPanel = true) }
-    }
-
-    fun onDismissNotifications() {
-        _uiState.update { it.copy(showNotificationsPanel = false) }
-    }
-
-    fun markActivityAsRead(activityId: String) {
-        _uiState.update { state ->
-            state.copy(
-                recentActivities = state.recentActivities.map {
-                    if (it.id == activityId) it.copy(isUnread = false) else it
-                }
-            )
-        }
-    }
 }

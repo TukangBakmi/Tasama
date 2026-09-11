@@ -24,30 +24,14 @@ data class DashboardUiState(
     // New fields for redesigned dashboard
     val totalSavingsBalance: Long = 0,
     val recentSavingsSpaces: List<SavingsSpace> = emptyList(),
-    val recentActivities: List<DashboardActivity> = emptyList(),
     val pendingInvitations: List<SavingsInvitation> = emptyList(),
     val hasPendingPartnerRequest: Boolean = false,
     val hasUnreadNotifications: Boolean = false,
     val isLoading: Boolean = false,
-    val showNotificationsPanel: Boolean = false,
     val showAddTransactionDialog: Boolean = false,
     val error: String? = null,
     val currency: String = "IDR"
 )
-
-data class DashboardActivity(
-    val id: String,
-    val title: String,
-    val description: String,
-    val icon: String,
-    val timestamp: Long,
-    val type: DashboardActivityType,
-    val isUnread: Boolean = false
-)
-
-enum class DashboardActivityType {
-    SAVINGS, CHAT, TRANSACTION, SYSTEM
-}
 
 data class BalancePoint(
     val label: String,

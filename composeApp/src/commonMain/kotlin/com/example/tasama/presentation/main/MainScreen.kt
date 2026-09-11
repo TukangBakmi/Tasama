@@ -39,6 +39,7 @@ import com.example.tasama.presentation.components.TransientFeedback
 import com.example.tasama.presentation.components.TransientFeedbackOverlay
 import com.example.tasama.presentation.dashboard.DashboardScreen
 import com.example.tasama.presentation.login.LoginScreen
+import com.example.tasama.presentation.notifications.NotificationsScreen
 import com.example.tasama.presentation.partner.PartnerScreen
 import com.example.tasama.presentation.profile.ProfileScreen
 import com.example.tasama.presentation.savings.SavingsScreen
@@ -307,6 +308,9 @@ fun MainScreen(
                                                         },
                                                         onNavigateToAI = {
                                                             navController.navigate("ai_chat")
+                                                        },
+                                                        onNavigateToNotifications = {
+                                                            navController.navigate("notifications")
                                                         }
                                                     )
 
@@ -437,6 +441,36 @@ fun MainScreen(
                                     UserDetailScreen(
                                         uid = userId,
                                         onBackClick = { navController.popBackStack() }
+                                    )
+                                }
+
+                                composable(
+                                    route = "notifications",
+                                    enterTransition = {
+                                        slideInVertically(
+                                            initialOffsetY = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    },
+                                    exitTransition = {
+                                        fadeOut(animationSpec = tween(200))
+                                    },
+                                    popEnterTransition = {
+                                        fadeIn(animationSpec = tween(200))
+                                    },
+                                    popExitTransition = {
+                                        slideOutVertically(
+                                            targetOffsetY = { it },
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                ) {
+                                    NotificationsScreen(
+                                        viewModel = koinViewModel(),
+                                        onBack = { navController.popBackStack() },
+                                        onNavigateToDetail = { route ->
+                                            navController.navigate(route)
+                                        }
                                     )
                                 }
 

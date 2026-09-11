@@ -24,11 +24,16 @@ import com.example.tasama.presentation.partner.PartnerViewModel
 import com.example.tasama.presentation.profile.ProfileViewModel
 import com.example.tasama.presentation.savings.SavingsViewModel
 import com.example.tasama.presentation.transaction.TransactionViewModel
+import com.example.tasama.data.repository.FirebaseActivityRepository
 import com.example.tasama.data.repository.FirebasePlaceRepository
 import com.example.tasama.data.repository.WeatherRepositoryImpl
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.WeatherRepository
-import com.example.tasama.domain.service.GeofenceMonitor
+import com.example.tasama.presentation.notifications.NotificationsViewModel
+import com.example.tasama.data.remote.GroqService
+import com.example.tasama.domain.service.NotificationService
+import com.example.tasama.domain.service.NoOpNotificationService
 import kotlinx.coroutines.MainScope
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -37,6 +42,7 @@ import com.example.tasama.data.repository.DataStoreDraftRepository
 import com.example.tasama.data.repository.DataStoreSettingsRepository
 import com.example.tasama.domain.repository.DraftRepository
 import com.example.tasama.domain.repository.SettingsRepository
+import com.example.tasama.domain.service.GeofenceMonitor
 
 val appModule = module {
 
@@ -48,7 +54,11 @@ val appModule = module {
     }
 
     single<SavingsRepository> {
-        FirebaseSavingsRepository(get())
+        FirebaseSavingsRepository(get(), get())
+    }
+
+    single<ActivityRepository> {
+        FirebaseActivityRepository(get())
     }
 
     single<PresenceRepository> {
@@ -87,9 +97,9 @@ val appModule = module {
         FirebaseAIChatRepository(get())
     }
 
-    single { GeofenceMonitor(lazy { get<AuthRepository>() }, get(), MainScope()) }
+    single { GeofenceMonitor(lazy { get<AuthRepository>() }, get(), get(), MainScope()) }
 
-    viewModel { DashboardViewModel(get(), get(), get(), get(), get()) }
+    viewModel { DashboardViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { TransactionViewModel(get(), get()) }
     viewModel { AIViewModel(get(), get(), get(), get(), get()) }
     viewModel { SavingsViewModel(get(), get(), get()) }
@@ -99,4 +109,5 @@ val appModule = module {
     viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { MainViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
+    viewModel { NotificationsViewModel(get(), get()) }
 }

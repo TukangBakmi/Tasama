@@ -30,11 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.tasama.domain.model.SavingsSpace
-import com.example.tasama.util.formatAmount
 import com.example.tasama.util.formatCurrency
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.flow.filterNotNull
 import org.koin.compose.viewmodel.koinViewModel
@@ -47,7 +44,8 @@ fun DashboardScreen(
     onNavigateToSavings: () -> Unit = {},
     onNavigateToPartner: () -> Unit = {},
     onNavigateToSavingsDetail: (String) -> Unit = {},
-    onNavigateToAI: () -> Unit = {}
+    onNavigateToAI: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = com.example.tasama.presentation.main.LocalSnackbarHostState.current
@@ -89,7 +87,7 @@ fun DashboardScreen(
                     DashboardHeader(
                         userName = uiState.userName ?: "User",
                         hasUnread = uiState.hasUnreadNotifications,
-                        onNotificationsClick = { viewModel.onNotificationsClick() },
+                        onNotificationsClick = onNavigateToNotifications,
                         modifier = Modifier.weight(1f)
                     )
                     
@@ -153,16 +151,6 @@ fun DashboardScreen(
             item {
                 Spacer(modifier = Modifier.height(16.dp))
             }
-        }
-
-        if (uiState.showNotificationsPanel) {
-            NotificationsBottomSheet(
-                activities = uiState.recentActivities,
-                onDismiss = { viewModel.onDismissNotifications() },
-                onActivityClick = { activity ->
-                    viewModel.markActivityAsRead(activity.id)
-                }
-            )
         }
     }
 }
@@ -865,177 +853,6 @@ fun ThreeGrayDotsLoading(modifier: Modifier = Modifier) {
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NotificationsBottomSheet(
-    activities: List<DashboardActivity>,
-    onDismiss: () -> Unit,
-    onActivityClick: (DashboardActivity) -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                text = "Notifications",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-            )
-
-            if (activities.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No new notifications",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(activities) { activity ->
-                        ActivityItem(
-                            activity = activity,
-                            showDivider = true,
-                            onClick = { onActivityClick(activity) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ActivityItem(
-    activity: DashboardActivity,
-    showDivider: Boolean,
-    onClick: (() -> Unit)? = null
-) {
-    val timeString = remember(activity.timestamp) {
-        try {
-            val instant = Instant.fromEpochMilliseconds(activity.timestamp)
-            val tz = TimeZone.currentSystemDefault()
-            val localDateTime = instant.toLocalDateTime(tz)
-            val now = Clock.System.now().toLocalDateTime(tz)
-            val today = now.date
-            val yesterday = today.minus(1, DateTimeUnit.DAY)
-
-            when (localDateTime.date) {
-                today -> {
-                    val hour = localDateTime.hour.toString().padStart(2, '0')
-                    val minute = localDateTime.minute.toString().padStart(2, '0')
-                    "$hour:$minute"
-                }
-                yesterday -> "Yesterday"
-                else -> {
-                    val day = localDateTime.day.toString().padStart(2, '0')
-                    val monthName = when (localDateTime.month.ordinal + 1) {
-                        1 -> "Jan"; 2 -> "Feb"; 3 -> "Mar"; 4 -> "Apr"
-                        5 -> "May"; 6 -> "Jun"; 7 -> "Jul"; 8 -> "Aug"
-                        9 -> "Sep"; 10 -> "Oct"; 11 -> "Nov"; 12 -> "Dec"
-                        else -> ""
-                    }
-                    "$day $monthName"
-                }
-            }
-        } catch (_: Exception) { "" }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (activity.isUnread) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = activity.icon, fontSize = 20.sp)
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = activity.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (activity.isUnread) FontWeight.Bold else FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                        color = if (activity.isUnread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
-                    Text(
-                        text = timeString,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        fontWeight = FontWeight.Normal
-                    )
-                }
-                Text(
-                    text = activity.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (activity.isUnread) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    fontWeight = if (activity.isUnread) FontWeight.Medium else FontWeight.Normal,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (activity.isUnread) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-            }
-        }
-        
-        if (showDivider) {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant
             )
         }
     }

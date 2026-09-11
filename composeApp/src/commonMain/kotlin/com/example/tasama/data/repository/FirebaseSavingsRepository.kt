@@ -1,6 +1,7 @@
 package com.example.tasama.data.repository
 
 import com.example.tasama.domain.model.*
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.util.formatAmount
@@ -14,7 +15,8 @@ import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
 class FirebaseSavingsRepository(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val activityRepository: ActivityRepository
 ) : SavingsRepository {
     private val firestore = Firebase.firestore
     private val spacesCollection = firestore.collection("savings_spaces")
@@ -677,5 +679,28 @@ class FirebaseSavingsRepository(
             timestamp = now
         )
         activitiesCollection(spaceId).document(activityId).set(activity)
+
+        // Log to unified activity repository
+        val targetUids = spacesCollection.document(spaceId).get().data<SavingsSpace>().memberIds
+        activityRepository.logActivity(
+            Activity(
+                id = activityId,
+                userId = userId,
+                userName = userName,
+                category = ActivityCategory.SAVINGS,
+                type = type.name,
+                title = when(type) {
+                    SavingsActivityType.SPACE_CREATED -> "New Space"
+                    SavingsActivityType.TRANSACTION_ADDED -> "Contribution"
+                    else -> "Savings Update"
+                },
+                details = details,
+                timestamp = now,
+                metadata = mapOf(
+                    "spaceId" to spaceId,
+                    "targetUids" to targetUids.joinToString(",")
+                )
+            )
+        )
     }
 }

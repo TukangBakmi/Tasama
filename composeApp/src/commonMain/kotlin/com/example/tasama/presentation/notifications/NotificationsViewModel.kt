@@ -1,0 +1,73 @@
+package com.example.tasama.presentation.notifications
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
+import com.example.tasama.domain.repository.ActivityRepository
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+data class NotificationsUiState(
+    val savingsActivities: List<Activity> = emptyList(),
+    val partnerActivities: List<Activity> = emptyList(),
+    val hasUnreadSavings: Boolean = false,
+    val hasUnreadPartner: Boolean = false,
+    val selectedTab: Int = 0, // 0 for Savings, 1 for Partner
+    val currentUserId: String? = null
+)
+
+class NotificationsViewModel(
+    private val activityRepository: ActivityRepository,
+    private val authRepository: com.example.tasama.domain.repository.AuthRepository
+) : ViewModel() {
+
+    private val _selectedTab = MutableStateFlow(0)
+    
+    val uiState: StateFlow<NotificationsUiState> = combine(
+        activityRepository.getActivities(ActivityCategory.SAVINGS),
+        activityRepository.getActivities(ActivityCategory.PARTNER),
+        activityRepository.hasUnread(ActivityCategory.SAVINGS),
+        activityRepository.hasUnread(ActivityCategory.PARTNER),
+        _selectedTab,
+        authRepository.userId
+    ) { flows ->
+        val savings = flows[0] as List<Activity>
+        val partner = flows[1] as List<Activity>
+        val unreadSavings = flows[2] as Boolean
+        val unreadPartner = flows[3] as Boolean
+        val tab = flows[4] as Int
+        val uid = flows[5] as String?
+
+        NotificationsUiState(
+            savingsActivities = savings,
+            partnerActivities = partner,
+            hasUnreadSavings = unreadSavings,
+            hasUnreadPartner = unreadPartner,
+            selectedTab = tab,
+            currentUserId = uid
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationsUiState())
+
+    fun onTabSelected(index: Int) {
+        val previousTab = _selectedTab.value
+        _selectedTab.value = index
+        
+        // When switching away from a tab, mark its items as read
+        if (previousTab != index) {
+            markTabAsRead(previousTab)
+        }
+    }
+
+    fun onScreenLeft() {
+        // Mark current tab as read when leaving the screen
+        markTabAsRead(_selectedTab.value)
+    }
+
+    private fun markTabAsRead(tabIndex: Int) {
+        val category = if (tabIndex == 0) ActivityCategory.SAVINGS else ActivityCategory.PARTNER
+        viewModelScope.launch {
+            activityRepository.markAllAsRead(category)
+        }
+    }
+}

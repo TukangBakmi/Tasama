@@ -5,12 +5,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +48,20 @@ fun NotificationsScreen(
     onNavigateToDetail: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val pagerState = rememberPagerState(initialPage = uiState.selectedTab, pageCount = { 2 })
+    val scope = rememberCoroutineScope()
+
+    // Sync Pager state to ViewModel when user swipes
+    LaunchedEffect(pagerState.currentPage) {
+        viewModel.onTabSelected(pagerState.currentPage)
+    }
+
+    // Sync ViewModel state to Pager (e.g. if updated from elsewhere)
+    LaunchedEffect(uiState.selectedTab) {
+        if (pagerState.currentPage != uiState.selectedTab) {
+            pagerState.animateScrollToPage(uiState.selectedTab)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -58,39 +83,53 @@ fun NotificationsScreen(
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             TabRow(
-                selectedTabIndex = uiState.selectedTab,
+                selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = PrimaryLightBlue
             ) {
                 NotificationTab(
                     text = "Savings",
-                    selected = uiState.selectedTab == 0,
+                    selected = pagerState.currentPage == 0,
                     hasUnread = uiState.hasUnreadSavings,
-                    onClick = { viewModel.onTabSelected(0) }
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(0) }
+                    }
                 )
                 NotificationTab(
                     text = "Partner",
-                    selected = uiState.selectedTab == 1,
+                    selected = pagerState.currentPage == 1,
                     hasUnread = uiState.hasUnreadPartner,
-                    onClick = { viewModel.onTabSelected(1) }
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(1) }
+                    }
                 )
             }
 
-            val activities = if (uiState.selectedTab == 0) uiState.savingsActivities else uiState.partnerActivities
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.Top
+            ) { page ->
+                val activities = if (page == 0) uiState.savingsActivities else uiState.partnerActivities
 
-            if (activities.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No notifications yet", color = Color.Gray)
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(activities) { activity ->
-                        ActivityItem(
-                            activity = activity,
-                            uid = uiState.currentUserId,
-                            onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
+                if (activities.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No notifications yet", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(activities) { activity ->
+                            ActivityItem(
+                                activity = activity,
+                                uid = uiState.currentUserId,
+                                onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                thickness = 0.5.dp,
+                                color = Color.LightGray.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
             }

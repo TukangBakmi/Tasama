@@ -35,6 +35,7 @@ import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
 import com.example.tasama.presentation.components.LocalTransientFeedback
 import com.example.tasama.presentation.components.LocalTransientFeedbackActionHandler
 import com.example.tasama.presentation.components.LocalTransientFeedbackHandler
+import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.components.TransientFeedback
 import com.example.tasama.presentation.components.TransientFeedbackOverlay
 import com.example.tasama.presentation.dashboard.DashboardScreen
@@ -195,6 +196,11 @@ fun MainScreen(
                                         ) + fadeIn(animationSpec = tween(300))
                                     }
                                 ) {
+                                    PlatformBackHandler(enabled = pagerState.currentPage != 0) {
+                                        scope.launch {
+                                            pagerState.animateScrollToPage(0)
+                                        }
+                                    }
                                     Scaffold(
                                         bottomBar = {
                                             val density = LocalDensity.current

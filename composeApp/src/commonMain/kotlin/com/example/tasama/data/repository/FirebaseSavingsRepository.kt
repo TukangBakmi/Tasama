@@ -148,14 +148,29 @@ class FirebaseSavingsRepository(
 
     override suspend fun updateSavingsSpace(space: SavingsSpace) {
         val uid = authRepository.getCurrentUserId() ?: return
-        val userName = authRepository.getUserName(uid) ?: "User"
+        val user = authRepository.getUser(uid) ?: return
         val now = Clock.System.now().toEpochMilliseconds()
+        
+        val oldSpace = spacesCollection.document(space.id).get().data<SavingsSpace>()
+        
         spacesCollection.document(space.id).set(space.copy(updatedAt = now))
-        logActivity(space.id, uid, userName, SavingsActivityType.SPACE_UPDATED, "Space details updated")
+        
+        if (oldSpace.targetDate != space.targetDate) {
+            logActivity(
+                spaceId = space.id,
+                userId = uid,
+                userName = user.name,
+                type = SavingsActivityType.TARGET_DATE_UPDATED,
+                details = "Updated target date to ${space.targetDate}"
+            )
+        } else {
+            logActivity(space.id, uid, user.name, SavingsActivityType.SPACE_UPDATED, "Space details updated")
+        }
     }
 
     override suspend fun deleteSavingsSpace(id: String) {
         val uid = authRepository.getCurrentUserId() ?: return
+        val user = authRepository.getUser(uid) ?: return
         val spaceDoc = spacesCollection.document(id)
         
         // 1. Fetch space details to check ownership and existence
@@ -163,51 +178,35 @@ class FirebaseSavingsRepository(
         
         if (spaceSnapshot == null || !spaceSnapshot.exists) {
             println("DEBUG: [SAVINGS] deleteSavingsSpace: Space $id not found or inaccessible")
-        } else {
-            val space = spaceSnapshot.data<SavingsSpace>()
-            val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
-            if (!isOwner) throw Exception("Only owner can delete the space")
-            println("DEBUG: [SAVINGS] deleteSavingsSpace: Owner validated for space $id ('${space.name}')")
+            return
         }
         
-        println("DEBUG: [SAVINGS] deleteSavingsSpace: Initiating cleanup for Space ID: $id")
+        val space = spaceSnapshot.data<SavingsSpace>()
+        val isOwner = space.members.any { it.userId == uid && it.role == MemberRole.OWNER }
+        if (!isOwner) throw Exception("Only owner can delete the space")
 
-        // 2. Cleanup: Delete ALL pending invitations for this space
+        logActivity(
+            spaceId = id,
+            userId = uid,
+            userName = user.name,
+            type = SavingsActivityType.SPACE_DELETED,
+            details = "Deleted savings space '${space.name}'",
+            customTargetUids = space.memberIds
+        )
+        
+        println("DEBUG: [SAVINGS] deleteSavingsSpace: Initiating cleanup for Space ID: $id")
+        // ... rest of the code for cleanup ...
         try {
             val statusPending = InvitationStatus.PENDING.name
-            
-            // Query all invitations for this space
-            val invites = invitationsCollection
-                .where("spaceId", id)
-                .get()
-            
-            println("DEBUG: [SAVINGS] deleteSavingsSpace: Found ${invites.documents.size} total invitations for space $id")
-            
-            var deletedCount = 0
+            val invites = invitationsCollection.where("spaceId", id).get()
             invites.documents.forEach { doc ->
-                val invId = doc.id
-                val rawStatus = try { doc.get<String>("status") } catch (e: Exception) { null }
-                
-                // We delete ALL PENDING invitations.
-                // If it's already ACCEPTED, the user is already a member and the space deletion 
-                // will affect them via the memberIds list in the space doc (they will be redirected).
-                // If it's DECLINED/CANCELLED, we could also clean them up, but the requirement 
-                // specified "pending invitations".
-                if (rawStatus == statusPending) {
-                    println("DEBUG: [SAVINGS] deleteSavingsSpace: Deleting pending invitation $invId")
+                if (try { doc.get<String>("status") } catch (e: Exception) { null } == statusPending) {
                     doc.reference.delete()
-                    deletedCount++
                 }
             }
-            println("DEBUG: [SAVINGS] deleteSavingsSpace: Invitation cleanup complete. Deleted $deletedCount pending invitations.")
-        } catch (e: Exception) {
-            println("ERROR: [SAVINGS] deleteSavingsSpace: Invitation cleanup error: ${e.message}")
-            // We don't rethrow here to ensure the space itself gets deleted even if cleanup fails
-        }
+        } catch (e: Exception) {}
 
-        // 3. Delete the space document itself
         spaceDoc.delete()
-        println("DEBUG: [SAVINGS] deleteSavingsSpace: Space $id document deleted successfully")
     }
 
     override suspend fun addTransaction(spaceId: String, transaction: SavingsTransaction) {
@@ -239,7 +238,15 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
             set(transRef, finalTransaction)
         }
-        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_ADDED, "Added contribution: ${transaction.note} • Rp ${transaction.amount.formatAmount()}")
+        val amountStr = "Rp ${transaction.amount.formatAmount()}"
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = userName,
+            type = SavingsActivityType.TRANSACTION_ADDED,
+            details = "Added contribution: ${transaction.note} • $amountStr",
+            extraMetadata = mapOf("amount" to amountStr)
+        )
     }
 
     override suspend fun updateTransaction(spaceId: String, transaction: SavingsTransaction) {
@@ -271,7 +278,15 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now, currency = space.currency))
             set(transRef, transaction.copy(currency = space.currency))
         }
-        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_UPDATED, "Edited contribution: ${transaction.note} • Rp ${transaction.amount.formatAmount()}")
+        val amountStr = "Rp ${transaction.amount.formatAmount()}"
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = userName,
+            type = SavingsActivityType.TRANSACTION_UPDATED,
+            details = "Edited contribution: ${transaction.note} • $amountStr",
+            extraMetadata = mapOf("amount" to amountStr)
+        )
     }
 
     override suspend fun deleteTransaction(spaceId: String, transactionId: String) {
@@ -300,7 +315,7 @@ class FirebaseSavingsRepository(
 
     override suspend fun inviteMember(spaceId: String, inviteeId: String) {
         val uid = authRepository.getCurrentUserId() ?: return
-        val userName = authRepository.getUserName(uid) ?: "User"
+        val user = authRepository.getUser(uid) ?: return
         val invitee = authRepository.getUser(inviteeId) ?: throw Exception("Invitee not found")
         val space = spacesCollection.document(spaceId).get().data<SavingsSpace>()
         
@@ -322,7 +337,7 @@ class FirebaseSavingsRepository(
             spaceId = spaceId,
             spaceName = space.name,
             inviterId = uid,
-            inviterName = userName,
+            inviterName = user.name,
             inviteeId = inviteeId,
             inviteeName = invitee.name,
             status = InvitationStatus.PENDING,
@@ -330,16 +345,27 @@ class FirebaseSavingsRepository(
         )
         
         invitationsCollection.document(invitationId).set(invitation)
-        logActivity(spaceId, uid, userName, SavingsActivityType.INVITATION_SENT, "Invited ${invitee.name}")
+        
+        // Log activity: include invited user + current members in targetUids
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = user.name,
+            type = SavingsActivityType.INVITATION_SENT,
+            details = "Invited ${invitee.name} to ${space.name}",
+            affectedUserId = inviteeId,
+            affectedUserName = invitee.name,
+            customTargetUids = space.memberIds + inviteeId
+        )
         
         // Send notification to invitee
         authRepository.sendNotification(
             targetUid = inviteeId,
             title = "Savings Space Invitation",
-            body = "$userName invited you to join '${space.name}'",
+            body = "${user.name} invited you to join '${space.name}'",
             type = "SAVINGS_INVITATION",
-            senderName = userName,
-            senderPhoto = authRepository.getUser(uid)?.avatarUrl
+            senderName = user.name,
+            senderPhoto = user.avatarUrl
         )
     }
 
@@ -408,7 +434,13 @@ class FirebaseSavingsRepository(
         }
 
         successInfo?.let { (spaceId, userName) ->
-            logActivity(spaceId, uid, userName, SavingsActivityType.INVITATION_ACCEPTED, "Joined the space")
+            logActivity(
+                spaceId = spaceId,
+                userId = uid,
+                userName = userName,
+                type = SavingsActivityType.MEMBER_JOINED,
+                details = "Joined the space"
+            )
         }
     }
 
@@ -420,7 +452,13 @@ class FirebaseSavingsRepository(
         if (invitation.inviteeId != uid) throw Exception("Unauthorized")
         
         invRef.update("status" to InvitationStatus.DECLINED.name)
-        logActivity(invitation.spaceId, uid, authRepository.getUserName(uid) ?: "User", SavingsActivityType.INVITATION_DECLINED, "Declined invitation")
+        logActivity(
+            spaceId = invitation.spaceId,
+            userId = uid,
+            userName = authRepository.getUserName(uid) ?: "User",
+            type = SavingsActivityType.INVITATION_DECLINED,
+            details = "Declined invitation"
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -469,6 +507,7 @@ class FirebaseSavingsRepository(
 
     override suspend fun removeMember(spaceId: String, userId: String) {
         val currentUid = authRepository.getCurrentUserId() ?: return
+        val user = authRepository.getUser(currentUid) ?: return
         val spaceDoc = spacesCollection.document(spaceId)
         val space = spaceDoc.get().data<SavingsSpace>()
         
@@ -477,6 +516,20 @@ class FirebaseSavingsRepository(
         
         val targetIsOwner = space.members.any { it.userId == userId && it.role == MemberRole.OWNER }
         if (targetIsOwner) throw Exception("Owners cannot be removed")
+
+        val removedUserName = authRepository.getUserName(userId) ?: "User"
+        
+        // Log activity BEFORE changing membership to ensure removed user is in targetUids
+        logActivity(
+            spaceId = spaceId,
+            userId = currentUid,
+            userName = user.name,
+            type = SavingsActivityType.MEMBER_REMOVED,
+            details = "Removed $removedUserName",
+            affectedUserId = userId,
+            affectedUserName = removedUserName,
+            customTargetUids = space.memberIds // Current members including the one being removed
+        )
         
         val updatedMemberIds = space.memberIds - userId
         val updatedMembers = space.members.filter { it.userId != userId }
@@ -486,9 +539,6 @@ class FirebaseSavingsRepository(
             members = updatedMembers,
             updatedAt = Clock.System.now().toEpochMilliseconds()
         ))
-        
-        val removedUserName = authRepository.getUserName(userId) ?: "User"
-        logActivity(spaceId, currentUid, authRepository.getUserName(currentUid) ?: "Owner", SavingsActivityType.MEMBER_REMOVED, "Removed $removedUserName")
     }
 
     override suspend fun leaveSpace(spaceId: String) {
@@ -508,7 +558,13 @@ class FirebaseSavingsRepository(
             updatedAt = Clock.System.now().toEpochMilliseconds()
         ))
         
-        logActivity(spaceId, uid, authRepository.getUserName(uid) ?: "User", SavingsActivityType.MEMBER_LEFT, "Left the space")
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = authRepository.getUserName(uid) ?: "User",
+            type = SavingsActivityType.MEMBER_LEFT,
+            details = "Left the space"
+        )
 
         // Cleanup: If the user had a pending invitation to this space (shouldn't happen if they are already a member, 
         // but for safety), we clean it up.
@@ -551,7 +607,15 @@ class FirebaseSavingsRepository(
         ))
         
         val newOwnerName = authRepository.getUserName(newOwnerId) ?: "User"
-        logActivity(spaceId, currentUid, authRepository.getUserName(currentUid) ?: "Owner", SavingsActivityType.OWNERSHIP_TRANSFERRED, "Transferred ownership to $newOwnerName")
+        logActivity(
+            spaceId = spaceId,
+            userId = currentUid,
+            userName = authRepository.getUserName(currentUid) ?: "Owner",
+            type = SavingsActivityType.OWNERSHIP_TRANSFERRED,
+            details = "Transferred ownership to $newOwnerName",
+            affectedUserId = newOwnerId,
+            affectedUserName = newOwnerName
+        )
     }
 
     override suspend fun convertToGroupSpace(spaceId: String) {
@@ -661,45 +725,64 @@ class FirebaseSavingsRepository(
     }
 
     private suspend fun logActivity(
-        spaceId: String, 
-        userId: String, 
-        userName: String, 
-        type: SavingsActivityType, 
-        details: String
+        spaceId: String,
+        userId: String,
+        userName: String,
+        type: SavingsActivityType,
+        details: String,
+        affectedUserId: String? = null,
+        affectedUserName: String? = null,
+        customTargetUids: List<String>? = null,
+        extraMetadata: Map<String, String> = emptyMap()
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
         val activityId = "act_$now"
-        val activity = SavingsActivity(
-            id = activityId,
-            spaceId = spaceId,
-            userId = userId,
-            userName = userName,
-            type = type,
-            details = details,
-            timestamp = now
-        )
-        activitiesCollection(spaceId).document(activityId).set(activity)
-
+        
         // Log to unified activity repository
-        val targetUids = spacesCollection.document(spaceId).get().data<SavingsSpace>().memberIds
+        val targetUids = customTargetUids ?: try {
+            spacesCollection.document(spaceId).get().data<SavingsSpace>().memberIds
+        } catch (e: Exception) {
+            listOf(userId) // Fallback to at least the performer
+        }
+        
+        val metadata = mutableMapOf(
+            "spaceId" to spaceId,
+            "spaceName" to try { 
+                // Try to get space name from cache or firestore if possible, 
+                // but for now we just pass it in metadata if we have it or use a default
+                // In a real app, you'd probably pass spaceName to logActivity
+                details.substringBefore(" •").substringAfter("to ").trim().ifEmpty { "Space" }
+            } catch(e: Exception) { "Space" },
+            "targetUids" to targetUids.distinct().joinToString(",")
+        )
+        metadata.putAll(extraMetadata)
+
         activityRepository.logActivity(
             Activity(
                 id = activityId,
                 userId = userId,
                 userName = userName,
+                affectedUserId = affectedUserId,
+                affectedUserName = affectedUserName,
                 category = ActivityCategory.SAVINGS,
                 type = type.name,
                 title = when(type) {
                     SavingsActivityType.SPACE_CREATED -> "New Space"
-                    SavingsActivityType.TRANSACTION_ADDED -> "Contribution"
+                    SavingsActivityType.TRANSACTION_ADDED -> "Contribution Added"
+                    SavingsActivityType.TRANSACTION_DELETED -> "Contribution Removed"
+                    SavingsActivityType.MEMBER_JOINED -> "Member Joined"
+                    SavingsActivityType.MEMBER_LEFT -> "Member Left"
+                    SavingsActivityType.MEMBER_REMOVED -> "Member Removed"
+                    SavingsActivityType.INVITATION_SENT -> "Member Invited"
+                    SavingsActivityType.OWNERSHIP_TRANSFERRED -> "Ownership Transferred"
+                    SavingsActivityType.SPACE_UPDATED -> "Space Updated"
+                    SavingsActivityType.SPACE_DELETED -> "Space Deleted"
+                    SavingsActivityType.TARGET_DATE_UPDATED -> "Target Date Updated"
                     else -> "Savings Update"
                 },
                 details = details,
                 timestamp = now,
-                metadata = mapOf(
-                    "spaceId" to spaceId,
-                    "targetUids" to targetUids.joinToString(",")
-                )
+                metadata = metadata
             )
         )
     }

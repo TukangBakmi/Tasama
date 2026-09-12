@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Activity
 import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.repository.ActivityRepository
+import com.example.tasama.domain.repository.AuthRepository
+import com.example.tasama.domain.repository.SavingsRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -19,7 +21,8 @@ data class NotificationsUiState(
 
 class NotificationsViewModel(
     private val activityRepository: ActivityRepository,
-    private val authRepository: com.example.tasama.domain.repository.AuthRepository
+    private val authRepository: AuthRepository,
+    private val savingsRepository: SavingsRepository
 ) : ViewModel() {
 
     private val _selectedTab = MutableStateFlow(0)
@@ -68,6 +71,57 @@ class NotificationsViewModel(
         val category = if (tabIndex == 0) ActivityCategory.SAVINGS else ActivityCategory.PARTNER
         viewModelScope.launch {
             activityRepository.markAllAsRead(category)
+        }
+    }
+
+    fun onActivityClicked(activity: Activity, onNavigate: (String) -> Unit) {
+        viewModelScope.launch {
+            val currentUid = authRepository.getCurrentUserId() ?: return@launch
+
+            // Mark as read when clicked
+            activityRepository.markAsRead(listOf(activity.id))
+
+            when (activity.category) {
+                ActivityCategory.SAVINGS -> {
+                    val spaceId = activity.metadata["spaceId"] ?: return@launch
+                    
+                    // Requirement 1: Member Invited -> Navigate to Savings main/tab screen
+                    // Only for the invitee to allow them to accept.
+                    if (activity.type == "INVITATION_SENT" && activity.affectedUserId == currentUid) {
+                        try {
+                            val invitations = savingsRepository.getMyInvitations().first()
+                            val isStillPending = invitations.any { it.spaceId == spaceId }
+                            if (isStillPending) {
+                                onNavigate("tabs/savings")
+                                return@launch
+                            }
+                        } catch (e: Exception) {
+                            // Fall through to membership check
+                        }
+                    }
+
+                    try {
+                        // Requirement 2 & 4: Open detail if member
+                        // This handles accepted invitations and other savings notifications.
+                        val space = savingsRepository.getSavingsSpace(spaceId).first()
+                        val isMember = space != null && space.memberIds.contains(currentUid)
+
+                        if (isMember) {
+                            onNavigate("savings_detail/$spaceId")
+                        } else {
+                            // Requirement 3: Invalid/Declined/Removed -> Stay on Notifications
+                            // The notification was already marked as read above.
+                        }
+                    } catch (e: Exception) {
+                        // Space no longer accessible -> Stay on Notifications
+                    }
+                }
+                ActivityCategory.PARTNER -> {
+                    // Navigate to Partner tab
+                    onNavigate("tabs/partner")
+                }
+                else -> {}
+            }
         }
     }
 }

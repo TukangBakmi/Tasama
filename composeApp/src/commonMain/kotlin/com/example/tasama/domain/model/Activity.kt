@@ -14,6 +14,8 @@ data class Activity(
     val id: String = "",
     val userId: String = "",
     val userName: String = "",
+    val affectedUserId: String? = null,
+    val affectedUserName: String? = null,
     val category: ActivityCategory,
     val type: String,
     val title: String = "",

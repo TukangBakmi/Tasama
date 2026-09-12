@@ -1,6 +1,9 @@
 package com.example.tasama.data.repository
 
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.Place
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import dev.gitlive.firebase.Firebase
@@ -11,7 +14,8 @@ import kotlin.time.Clock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FirebasePlaceRepository(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val activityRepository: ActivityRepository
 ) : PlaceRepository {
     private val firestore = Firebase.firestore
 
@@ -48,8 +52,9 @@ class FirebasePlaceRepository(
     override suspend fun addPlace(place: Place): Result<Unit> {
         return try {
             val collection = firestore.collection("places")
+            val isUpdate = place.id.isNotBlank()
             
-            val id = if (place.id.isNotBlank()) {
+            val id = if (isUpdate) {
                 place.id
             } else {
                 // Generate a random ID if none exists
@@ -63,6 +68,12 @@ class FirebasePlaceRepository(
                 updatedAt = timestamp
             )
             collection.document(id).set(newPlace)
+            
+            logPartnerActivity(
+                if (isUpdate) "PLACE_UPDATED" else "PLACE_ADDED",
+                if (isUpdate) "Updated place: ${place.name}" else "Added a new place: ${place.name}"
+            )
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -71,7 +82,12 @@ class FirebasePlaceRepository(
 
     override suspend fun deletePlace(placeId: String): Result<Unit> {
         return try {
-            firestore.collection("places").document(placeId).delete()
+            val doc = firestore.collection("places").document(placeId)
+            val snapshot = doc.get()
+            val placeName = if (snapshot.exists) snapshot.data<Place>().name else "a place"
+            
+            doc.delete()
+            logPartnerActivity("PLACE_DELETED", "Deleted place: $placeName")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -90,5 +106,30 @@ class FirebasePlaceRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun logPartnerActivity(type: String, details: String) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        val user = authRepository.getUser(uid) ?: return
+        val partnerId = user.partnerId
+        
+        activityRepository.logActivity(
+            Activity(
+                userId = uid,
+                userName = user.name,
+                category = ActivityCategory.PARTNER,
+                type = type,
+                title = when(type) {
+                    "PLACE_ADDED" -> "Place Added"
+                    "PLACE_UPDATED" -> "Place Updated"
+                    "PLACE_DELETED" -> "Place Deleted"
+                    else -> "Partner Update"
+                },
+                details = details,
+                timestamp = Clock.System.now().toEpochMilliseconds(),
+                metadata = (if (partnerId != null) mapOf("targetUids" to "$uid,$partnerId") else emptyMap()) + 
+                           mapOf("placeName" to (details.substringAfter("place: ").ifEmpty { "a place" }))
+            )
+        )
     }
 }

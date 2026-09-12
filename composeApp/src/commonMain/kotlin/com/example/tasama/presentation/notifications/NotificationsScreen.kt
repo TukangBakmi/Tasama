@@ -7,7 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -87,12 +88,7 @@ fun NotificationsScreen(
                         ActivityItem(
                             activity = activity,
                             uid = uiState.currentUserId,
-                            onClick = {
-                                val spaceId = activity.metadata["spaceId"]
-                                if (spaceId != null) {
-                                    onNavigateToDetail("savings_detail/$spaceId")
-                                }
-                            }
+                            onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
                     }
@@ -136,6 +132,101 @@ fun ActivityItem(
     onClick: () -> Unit
 ) {
     val isUnread = activity.isUnreadFor(uid)
+    val displayDetails = remember(activity, uid) {
+        val performerName = if (activity.userId == uid) "You" else activity.userName
+        val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")
+        val isPerformerMe = activity.userId == uid
+        val isAffectedMe = activity.affectedUserId == uid
+        
+        val spaceName = activity.metadata["spaceName"] ?: activity.metadata["spaceId"] ?: "dd"
+        
+        when (activity.type) {
+            "INVITATION_SENT" -> {
+                if (isPerformerMe) "You invited ${activity.affectedUserName} to $spaceName"
+                else if (isAffectedMe) "$performerName invited you to $spaceName"
+                else "$performerName invited ${activity.affectedUserName} to $spaceName"
+            }
+            "MEMBER_JOINED", "INVITATION_ACCEPTED" -> {
+                "$performerName joined $spaceName"
+            }
+            "MEMBER_LEFT" -> {
+                "$performerName left $spaceName"
+            }
+            "MEMBER_REMOVED" -> {
+                if (isAffectedMe) "You were removed from $spaceName"
+                else if (isPerformerMe) "You removed ${activity.affectedUserName} from $spaceName"
+                else "$performerName removed ${activity.affectedUserName} from $spaceName"
+            }
+            "OWNERSHIP_TRANSFERRED" -> {
+                if (isAffectedMe) "Ownership of $spaceName was transferred to you"
+                else "$performerName transferred ownership of $spaceName to $affectedName"
+            }
+            "TRANSACTION_ADDED" -> {
+                val amount = activity.metadata["amount"] ?: ""
+                "$performerName added $amount to $spaceName"
+            }
+            "TRANSACTION_UPDATED" -> {
+                "$performerName updated a contribution in $spaceName"
+            }
+            "TRANSACTION_DELETED" -> {
+                "$performerName removed a contribution from $spaceName"
+            }
+            "SPACE_CREATED" -> {
+                "$performerName created savings space $spaceName"
+            }
+            "SPACE_UPDATED" -> {
+                "$performerName updated savings space $spaceName"
+            }
+            "SPACE_DELETED" -> {
+                "$performerName deleted savings space $spaceName"
+            }
+            "TARGET_DATE_UPDATED" -> {
+                "$performerName updated the target date for $spaceName"
+            }
+            "PLACE_ALERT" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                if (activity.details.contains("arrived", ignoreCase = true)) {
+                    "$performerName arrived at $placeName"
+                } else {
+                    "$performerName left $placeName"
+                }
+            }
+            "SIGNAL_LOST" -> {
+                "$performerName lost signal"
+            }
+            "SIGNAL_RESTORED" -> {
+                if (isPerformerMe) "Your signal was restored"
+                else "$performerName's signal was restored"
+            }
+            "ANNIVERSARY_UPDATED" -> {
+                if (isPerformerMe) "You updated the anniversary date"
+                else "$performerName updated the anniversary date"
+            }
+            "PLACE_ADDED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                "$performerName added a new place: $placeName"
+            }
+            "PLACE_UPDATED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                "$performerName updated place: $placeName"
+            }
+            "PLACE_DELETED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                "$performerName deleted place: $placeName"
+            }
+            "PARTNER_REQUEST" -> {
+                if (isPerformerMe) "You sent a partner request to ${activity.affectedUserName}"
+                else if (isAffectedMe) "$performerName sent you a partner request"
+                else "$performerName sent a partner request to ${activity.affectedUserName}"
+            }
+            "PARTNER_ACCEPTED" -> {
+                if (isPerformerMe) "You and ${activity.affectedUserName} are now partners"
+                else if (isAffectedMe) "You and $performerName are now partners"
+                else "$performerName and ${activity.affectedUserName} are now partners"
+            }
+            else -> activity.details
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -145,7 +236,7 @@ fun ActivityItem(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Icon / Avatar placeholder
+        // Icon area
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -153,11 +244,7 @@ fun ActivityItem(
                 .background(SecondaryLightBlue.copy(alpha = 0.2f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = activity.userName.take(1).uppercase(),
-                color = PrimaryLightBlue,
-                fontWeight = FontWeight.Bold
-            )
+            ActivityIcon(activity)
         }
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -180,12 +267,54 @@ fun ActivityItem(
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = activity.details,
+                text = displayDetails,
                 fontSize = 13.sp,
                 color = if (isUnread) Color.Black else Color.DarkGray
             )
         }
     }
+}
+
+@Composable
+private fun ActivityIcon(activity: Activity) {
+    val icon = remember(activity.type, activity.details) {
+        when (activity.type) {
+            // Savings
+            "TRANSACTION_ADDED" -> Icons.Default.Add
+            "TRANSACTION_DELETED" -> Icons.Default.Remove
+            "INVITATION_SENT" -> Icons.Default.PersonAdd
+            "MEMBER_JOINED", "INVITATION_ACCEPTED" -> Icons.Default.Person
+            "MEMBER_REMOVED" -> Icons.Default.PersonRemove
+            "OWNERSHIP_TRANSFERRED" -> Icons.Default.SwapHoriz
+            "SPACE_CREATED" -> Icons.Default.AddCircle
+            "SPACE_UPDATED" -> Icons.Default.Edit
+            "SPACE_DELETED" -> Icons.Default.Delete
+            "TARGET_DATE_UPDATED" -> Icons.Default.Event
+            
+            // Partner
+            "PLACE_ALERT" -> {
+                if (activity.details.contains("arrived", ignoreCase = true)) Icons.Default.LocationOn
+                else Icons.Default.ExitToApp
+            }
+            "PLACE_ADDED" -> Icons.Default.AddLocation
+            "PLACE_UPDATED" -> Icons.Default.EditLocation
+            "PLACE_DELETED" -> Icons.Default.LocationOff
+            "PARTNER_REQUEST" -> Icons.Default.Person
+            "PARTNER_ACCEPTED" -> Icons.Default.Favorite
+            "SIGNAL_LOST" -> Icons.Default.SignalWifiOff
+            "SIGNAL_RESTORED" -> Icons.Default.SignalWifi4Bar
+            "ANNIVERSARY_UPDATED" -> Icons.Default.Favorite
+            
+            else -> Icons.Default.Notifications
+        }
+    }
+
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = PrimaryLightBlue,
+        modifier = Modifier.size(20.dp)
+    )
 }
 
 private fun formatTimestamp(timestamp: Long): String {

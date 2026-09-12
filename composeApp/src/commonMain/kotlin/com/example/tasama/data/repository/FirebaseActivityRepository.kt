@@ -84,7 +84,7 @@ class FirebaseActivityRepository(
             listOfNotNull(currentUid, partnerId)
         }
         
-        val data = mapOf(
+        val data = mutableMapOf(
             "id" to id,
             "userId" to activity.userId,
             "userName" to activity.userName,
@@ -97,6 +97,10 @@ class FirebaseActivityRepository(
             "metadata" to activity.metadata,
             "targetUids" to targetUids
         )
+
+        activity.affectedUserId?.let { data["affectedUserId"] = it }
+        activity.affectedUserName?.let { data["affectedUserName"] = it }
+
         activitiesCollection.document(id).set(data)
     }
 

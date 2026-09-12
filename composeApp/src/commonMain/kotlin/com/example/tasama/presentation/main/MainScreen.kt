@@ -83,6 +83,7 @@ fun MainScreen(
         BottomNavItem.Profile
     )
     val pagerState = rememberPagerState(pageCount = { items.size })
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(navigateToTab, authState) {
         if (navigateToTab != null && authState is AuthState.Authenticated) {
@@ -194,8 +195,6 @@ fun MainScreen(
                                         ) + fadeIn(animationSpec = tween(300))
                                     }
                                 ) {
-                                    val scope = rememberCoroutineScope()
-
                                     Scaffold(
                                         bottomBar = {
                                             val density = LocalDensity.current
@@ -469,7 +468,28 @@ fun MainScreen(
                                         viewModel = koinViewModel(),
                                         onBack = { navController.popBackStack() },
                                         onNavigateToDetail = { route ->
-                                            navController.navigate(route)
+                                            if (route.startsWith("tabs/")) {
+                                                val target = route.substringAfter("tabs/")
+                                                val index = when (target) {
+                                                    "dashboard" -> 0
+                                                    "savings" -> 1
+                                                    "chat" -> 2
+                                                    "partner" -> 3
+                                                    "profile" -> 4
+                                                    else -> -1
+                                                }
+                                                if (index != -1) {
+                                                    // Go back to tabs and select the target page
+                                                    if (navController.currentDestination?.route != "tabs") {
+                                                        navController.popBackStack("tabs", inclusive = false)
+                                                    }
+                                                    scope.launch {
+                                                        pagerState.animateScrollToPage(index)
+                                                    }
+                                                }
+                                            } else {
+                                                navController.navigate(route)
+                                            }
                                         }
                                     )
                                 }

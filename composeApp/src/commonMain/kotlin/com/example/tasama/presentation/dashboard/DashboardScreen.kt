@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.tasama.domain.model.SavingsSpace
+import com.example.tasama.presentation.theme.PrimaryLightBlue
 import com.example.tasama.util.formatCurrency
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -208,7 +209,7 @@ fun DashboardHeader(
                         .align(Alignment.TopEnd)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(PrimaryLightBlue)
                 )
             }
         }

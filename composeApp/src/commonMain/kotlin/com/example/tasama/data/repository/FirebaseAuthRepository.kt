@@ -1,5 +1,7 @@
 package com.example.tasama.data.repository
 
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.*
 import dev.gitlive.firebase.Firebase
@@ -18,6 +20,7 @@ class FirebaseAuthRepository(
     private val presenceRepository: Lazy<PresenceRepository>,
     private val aiChatRepository: Lazy<AIChatRepository>,
     private val placeRepository: Lazy<PlaceRepository>,
+    private val activityRepository: Lazy<ActivityRepository>,
     private val geofenceMonitor: Lazy<com.example.tasama.domain.service.GeofenceMonitor>
 ) : AuthRepository {
     private val auth = Firebase.auth
@@ -413,6 +416,22 @@ class FirebaseAuthRepository(
             firestore.collection("users").document(partnerUid).updateFields {
                 "partnerRequestFrom" to uid
             }
+
+            // Log activity for both
+            activityRepository.value.logActivity(
+                Activity(
+                    userId = uid,
+                    userName = sender.name,
+                    affectedUserId = partnerUid,
+                    affectedUserName = partner.name,
+                    category = ActivityCategory.PARTNER,
+                    type = "PARTNER_REQUEST",
+                    title = "Partner Request",
+                    details = "Sent a partner request to ${partner.name}",
+                    timestamp = Clock.System.now().toEpochMilliseconds(),
+                    metadata = mapOf("targetUids" to "$uid,$partnerUid")
+                )
+            )
 
             // Send notification
             sendNotification(

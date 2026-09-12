@@ -77,12 +77,13 @@ val appModule = module {
             lazy { get() },
             lazy { get() },
             lazy { get() },
+            lazy { get() },
             lazy { get() }
         )
     }
 
     single<PlaceRepository> {
-        FirebasePlaceRepository(get())
+        FirebasePlaceRepository(get(), get())
     }
 
     single<WeatherRepository> {
@@ -109,5 +110,5 @@ val appModule = module {
     viewModel { PartnerViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { MainViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
-    viewModel { NotificationsViewModel(get(), get()) }
+    viewModel { NotificationsViewModel(get(), get(), get()) }
 }

@@ -141,8 +141,6 @@ class DashboardViewModel(
         val currentUid = authRepository.getCurrentUserId()
 
         val hasUnread = hasUnifiedUnread || 
-                       pendingInvitations.isNotEmpty() ||
-                       hasPendingPartnerRequest ||
                        channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
 
         _uiState.update { it.copy(
@@ -299,6 +297,8 @@ class DashboardViewModel(
             SavingsActivityType.MEMBER_LEFT -> "🚪"
             SavingsActivityType.MEMBER_REMOVED -> "🚫"
             SavingsActivityType.OWNERSHIP_TRANSFERRED -> "👑"
+            SavingsActivityType.SPACE_DELETED -> "🗑️"
+            SavingsActivityType.TARGET_DATE_UPDATED -> "📅"
         }
     }
 

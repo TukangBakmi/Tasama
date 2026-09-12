@@ -142,7 +142,14 @@ class FirebaseSavingsRepository(
         )
         
         spacesCollection.document(id).set(finalSpace)
-        logActivity(id, uid, user.name, SavingsActivityType.SPACE_CREATED, "Space created")
+        logActivity(
+            spaceId = id,
+            userId = uid,
+            userName = user.name,
+            type = SavingsActivityType.SPACE_CREATED,
+            details = "Space created",
+            extraMetadata = mapOf("spaceName" to space.name)
+        )
         return id
     }
 
@@ -161,10 +168,18 @@ class FirebaseSavingsRepository(
                 userId = uid,
                 userName = user.name,
                 type = SavingsActivityType.TARGET_DATE_UPDATED,
-                details = "Updated target date to ${space.targetDate}"
+                details = "Updated target date to ${space.targetDate}",
+                extraMetadata = mapOf("spaceName" to space.name)
             )
         } else {
-            logActivity(space.id, uid, user.name, SavingsActivityType.SPACE_UPDATED, "Space details updated")
+            logActivity(
+                spaceId = space.id,
+                userId = uid,
+                userName = user.name,
+                type = SavingsActivityType.SPACE_UPDATED,
+                details = "Space details updated",
+                extraMetadata = mapOf("spaceName" to space.name)
+            )
         }
     }
 
@@ -191,7 +206,8 @@ class FirebaseSavingsRepository(
             userName = user.name,
             type = SavingsActivityType.SPACE_DELETED,
             details = "Deleted savings space '${space.name}'",
-            customTargetUids = space.memberIds
+            customTargetUids = space.memberIds,
+            extraMetadata = mapOf("spaceName" to space.name)
         )
         
         println("DEBUG: [SAVINGS] deleteSavingsSpace: Initiating cleanup for Space ID: $id")
@@ -225,10 +241,12 @@ class FirebaseSavingsRepository(
             timestamp = now
         )
         
+        var spaceName = "Space"
         firestore.runTransaction {
             val spaceDoc = spacesCollection.document(spaceId)
             val snapshot = get(spaceDoc)
             val space = snapshot.data<SavingsSpace>()
+            spaceName = space.name
             val newBalance = if (finalTransaction.type == TransactionType.INCOME) {
                 space.balance + finalTransaction.amount
             } else {
@@ -245,7 +263,7 @@ class FirebaseSavingsRepository(
             userName = userName,
             type = SavingsActivityType.TRANSACTION_ADDED,
             details = "Added contribution: ${transaction.note} • $amountStr",
-            extraMetadata = mapOf("amount" to amountStr)
+            extraMetadata = mapOf("amount" to amountStr, "spaceName" to spaceName)
         )
     }
 
@@ -255,10 +273,12 @@ class FirebaseSavingsRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         val transRef = spacesCollection.document(spaceId).collection("transactions").document(transaction.id)
         
+        var spaceName = "Space"
         firestore.runTransaction {
             val spaceDoc = spacesCollection.document(spaceId)
             val snapshot = get(spaceDoc)
             val space = snapshot.data<SavingsSpace>()
+            spaceName = space.name
             val oldTransaction = get(transRef).data<SavingsTransaction>()
             
             // Reverse old balance impact
@@ -285,7 +305,7 @@ class FirebaseSavingsRepository(
             userName = userName,
             type = SavingsActivityType.TRANSACTION_UPDATED,
             details = "Edited contribution: ${transaction.note} • $amountStr",
-            extraMetadata = mapOf("amount" to amountStr)
+            extraMetadata = mapOf("amount" to amountStr, "spaceName" to spaceName)
         )
     }
 
@@ -310,7 +330,19 @@ class FirebaseSavingsRepository(
             set(spaceDoc, space.copy(balance = newBalance, updatedAt = now))
             delete(transRef)
         }
-        logActivity(spaceId, uid, userName, SavingsActivityType.TRANSACTION_DELETED, "Deleted a contribution")
+        val spaceName = try {
+            spacesCollection.document(spaceId).get().data<SavingsSpace>().name
+        } catch (e: Exception) {
+            "Space"
+        }
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = userName,
+            type = SavingsActivityType.TRANSACTION_DELETED,
+            details = "Deleted a contribution",
+            extraMetadata = mapOf("spaceName" to spaceName)
+        )
     }
 
     override suspend fun inviteMember(spaceId: String, inviteeId: String) {
@@ -355,7 +387,11 @@ class FirebaseSavingsRepository(
             details = "Invited ${invitee.name} to ${space.name}",
             affectedUserId = inviteeId,
             affectedUserName = invitee.name,
-            customTargetUids = space.memberIds + inviteeId
+            customTargetUids = space.memberIds + inviteeId,
+            extraMetadata = mapOf(
+                "spaceName" to space.name,
+                "invitationId" to invitationId
+            )
         )
         
         // Send notification to invitee
@@ -433,13 +469,24 @@ class FirebaseSavingsRepository(
             successInfo = invitation.spaceId to inviteeUser.name
         }
 
+        var spaceName = "Space"
         successInfo?.let { (spaceId, userName) ->
+            // Try to get space name. Note: this is outside the transaction but for logging it's fine.
+            try {
+                val space = spacesCollection.document(spaceId).get().data<SavingsSpace>()
+                spaceName = space.name
+            } catch (e: Exception) {}
+
             logActivity(
                 spaceId = spaceId,
                 userId = uid,
                 userName = userName,
                 type = SavingsActivityType.MEMBER_JOINED,
-                details = "Joined the space"
+                details = "Joined the space",
+                extraMetadata = mapOf(
+                    "spaceName" to spaceName,
+                    "invitationId" to invitationId
+                )
             )
         }
     }
@@ -457,7 +504,11 @@ class FirebaseSavingsRepository(
             userId = uid,
             userName = authRepository.getUserName(uid) ?: "User",
             type = SavingsActivityType.INVITATION_DECLINED,
-            details = "Declined invitation"
+            details = "Declined invitation",
+            extraMetadata = mapOf(
+                "spaceName" to invitation.spaceName,
+                "invitationId" to invitationId
+            )
         )
     }
 
@@ -528,7 +579,8 @@ class FirebaseSavingsRepository(
             details = "Removed $removedUserName",
             affectedUserId = userId,
             affectedUserName = removedUserName,
-            customTargetUids = space.memberIds // Current members including the one being removed
+            customTargetUids = space.memberIds, // Current members including the one being removed
+            extraMetadata = mapOf("spaceName" to space.name)
         )
         
         val updatedMemberIds = space.memberIds - userId
@@ -563,7 +615,8 @@ class FirebaseSavingsRepository(
             userId = uid,
             userName = authRepository.getUserName(uid) ?: "User",
             type = SavingsActivityType.MEMBER_LEFT,
-            details = "Left the space"
+            details = "Left the space",
+            extraMetadata = mapOf("spaceName" to space.name)
         )
 
         // Cleanup: If the user had a pending invitation to this space (shouldn't happen if they are already a member, 
@@ -614,7 +667,8 @@ class FirebaseSavingsRepository(
             type = SavingsActivityType.OWNERSHIP_TRANSFERRED,
             details = "Transferred ownership to $newOwnerName",
             affectedUserId = newOwnerId,
-            affectedUserName = newOwnerName
+            affectedUserName = newOwnerName,
+            extraMetadata = mapOf("spaceName" to space.name)
         )
     }
 
@@ -664,8 +718,21 @@ class FirebaseSavingsRepository(
             throw e
         }
         
+        val spaceName = try {
+            spacesCollection.document(spaceId).get().data<SavingsSpace>().name
+        } catch (e: Exception) {
+            "Space"
+        }
+        
         println("DEBUG: Convert to Group - Step 13: Logging activity")
-        logActivity(spaceId, uid, userName, SavingsActivityType.SPACE_UPDATED, "Converted Personal Space to Group Space")
+        logActivity(
+            spaceId = spaceId,
+            userId = uid,
+            userName = userName,
+            type = SavingsActivityType.SPACE_UPDATED,
+            details = "Converted Personal Space to Group Space",
+            extraMetadata = mapOf("spaceName" to spaceName)
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -747,12 +814,6 @@ class FirebaseSavingsRepository(
         
         val metadata = mutableMapOf(
             "spaceId" to spaceId,
-            "spaceName" to try { 
-                // Try to get space name from cache or firestore if possible, 
-                // but for now we just pass it in metadata if we have it or use a default
-                // In a real app, you'd probably pass spaceName to logActivity
-                details.substringBefore(" •").substringAfter("to ").trim().ifEmpty { "Space" }
-            } catch(e: Exception) { "Space" },
             "targetUids" to targetUids.distinct().joinToString(",")
         )
         metadata.putAll(extraMetadata)

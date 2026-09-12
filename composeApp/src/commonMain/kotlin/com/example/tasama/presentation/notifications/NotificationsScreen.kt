@@ -172,99 +172,7 @@ fun ActivityItem(
 ) {
     val isUnread = activity.isUnreadFor(uid)
     val displayDetails = remember(activity, uid) {
-        val performerName = if (activity.userId == uid) "You" else activity.userName
-        val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")
-        val isPerformerMe = activity.userId == uid
-        val isAffectedMe = activity.affectedUserId == uid
-        
-        val spaceName = activity.metadata["spaceName"] ?: activity.metadata["spaceId"] ?: "dd"
-        
-        when (activity.type) {
-            "INVITATION_SENT" -> {
-                if (isPerformerMe) "You invited ${activity.affectedUserName} to $spaceName"
-                else if (isAffectedMe) "$performerName invited you to $spaceName"
-                else "$performerName invited ${activity.affectedUserName} to $spaceName"
-            }
-            "MEMBER_JOINED", "INVITATION_ACCEPTED" -> {
-                "$performerName joined $spaceName"
-            }
-            "MEMBER_LEFT" -> {
-                "$performerName left $spaceName"
-            }
-            "MEMBER_REMOVED" -> {
-                if (isAffectedMe) "You were removed from $spaceName"
-                else if (isPerformerMe) "You removed ${activity.affectedUserName} from $spaceName"
-                else "$performerName removed ${activity.affectedUserName} from $spaceName"
-            }
-            "OWNERSHIP_TRANSFERRED" -> {
-                if (isAffectedMe) "Ownership of $spaceName was transferred to you"
-                else "$performerName transferred ownership of $spaceName to $affectedName"
-            }
-            "TRANSACTION_ADDED" -> {
-                val amount = activity.metadata["amount"] ?: ""
-                "$performerName added $amount to $spaceName"
-            }
-            "TRANSACTION_UPDATED" -> {
-                "$performerName updated a contribution in $spaceName"
-            }
-            "TRANSACTION_DELETED" -> {
-                "$performerName removed a contribution from $spaceName"
-            }
-            "SPACE_CREATED" -> {
-                "$performerName created savings space $spaceName"
-            }
-            "SPACE_UPDATED" -> {
-                "$performerName updated savings space $spaceName"
-            }
-            "SPACE_DELETED" -> {
-                "$performerName deleted savings space $spaceName"
-            }
-            "TARGET_DATE_UPDATED" -> {
-                "$performerName updated the target date for $spaceName"
-            }
-            "PLACE_ALERT" -> {
-                val placeName = activity.metadata["placeName"] ?: "a place"
-                if (activity.details.contains("arrived", ignoreCase = true)) {
-                    "$performerName arrived at $placeName"
-                } else {
-                    "$performerName left $placeName"
-                }
-            }
-            "SIGNAL_LOST" -> {
-                "$performerName lost signal"
-            }
-            "SIGNAL_RESTORED" -> {
-                if (isPerformerMe) "Your signal was restored"
-                else "$performerName's signal was restored"
-            }
-            "ANNIVERSARY_UPDATED" -> {
-                if (isPerformerMe) "You updated the anniversary date"
-                else "$performerName updated the anniversary date"
-            }
-            "PLACE_ADDED" -> {
-                val placeName = activity.metadata["placeName"] ?: "a place"
-                "$performerName added a new place: $placeName"
-            }
-            "PLACE_UPDATED" -> {
-                val placeName = activity.metadata["placeName"] ?: "a place"
-                "$performerName updated place: $placeName"
-            }
-            "PLACE_DELETED" -> {
-                val placeName = activity.metadata["placeName"] ?: "a place"
-                "$performerName deleted place: $placeName"
-            }
-            "PARTNER_REQUEST" -> {
-                if (isPerformerMe) "You sent a partner request to ${activity.affectedUserName}"
-                else if (isAffectedMe) "$performerName sent you a partner request"
-                else "$performerName sent a partner request to ${activity.affectedUserName}"
-            }
-            "PARTNER_ACCEPTED" -> {
-                if (isPerformerMe) "You and ${activity.affectedUserName} are now partners"
-                else if (isAffectedMe) "You and $performerName are now partners"
-                else "$performerName and ${activity.affectedUserName} are now partners"
-            }
-            else -> activity.details
-        }
+        getActivityDescription(activity, uid)
     }
 
     Row(
@@ -289,26 +197,16 @@ fun ActivityItem(
         Spacer(modifier = Modifier.width(16.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = activity.title,
-                    fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = formatTimestamp(activity.timestamp),
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-            }
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = displayDetails,
-                fontSize = 13.sp,
-                color = if (isUnread) Color.Black else Color.DarkGray
+                fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = formatTimestamp(activity.timestamp),
+                fontSize = 12.sp,
+                color = Color.Gray
             )
         }
     }
@@ -363,9 +261,130 @@ private fun formatTimestamp(timestamp: Long): String {
     val now = kotlin.time.Clock.System.now().toLocalDateTime(timeZone)
     val yesterday = kotlin.time.Clock.System.now().minus(24, DateTimeUnit.HOUR).toLocalDateTime(timeZone)
 
+    val timeStr = "${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
+
     return when {
-        dateTime.date == now.date -> "Today"
-        dateTime.date == yesterday.date -> "Yesterday"
-        else -> "${dateTime.dayOfMonth.toString().padStart(2, '0')}/${dateTime.monthNumber.toString().padStart(2, '0')}/${dateTime.year}"
+        dateTime.date == now.date -> "Today, $timeStr"
+        dateTime.date == yesterday.date -> "Yesterday, $timeStr"
+        else -> {
+            val monthStr = when(dateTime.monthNumber) {
+                1 -> "Jan"
+                2 -> "Feb"
+                3 -> "Mar"
+                4 -> "Apr"
+                5 -> "May"
+                6 -> "Jun"
+                7 -> "Jul"
+                8 -> "Aug"
+                9 -> "Sep"
+                10 -> "Oct"
+                11 -> "Nov"
+                12 -> "Dec"
+                else -> ""
+            }
+            "$monthStr ${dateTime.dayOfMonth}, ${dateTime.year}, $timeStr"
+        }
+    }
+}
+
+fun getActivityDescription(activity: Activity, uid: String?): String {
+    val performerName = if (activity.userId == uid) "You" else activity.userName
+    val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")
+    val isPerformerMe = activity.userId == uid
+    val isAffectedMe = activity.affectedUserId == uid
+    
+    val spaceName = activity.metadata["spaceName"] ?: activity.metadata["spaceId"] ?: "Space"
+    
+    return when (activity.type) {
+        "INVITATION_SENT" -> {
+            if (isPerformerMe) "You invited ${activity.affectedUserName} to $spaceName"
+            else if (isAffectedMe) "$performerName invited you to $spaceName"
+            else "$performerName invited ${activity.affectedUserName} to $spaceName"
+        }
+        "MEMBER_JOINED", "INVITATION_ACCEPTED" -> {
+            "$performerName joined $spaceName"
+        }
+        "MEMBER_LEFT" -> {
+            "$performerName left $spaceName"
+        }
+        "MEMBER_REMOVED" -> {
+            if (isAffectedMe) "You were removed from $spaceName"
+            else if (isPerformerMe) "You removed ${activity.affectedUserName} from $spaceName"
+            else "$performerName removed ${activity.affectedUserName} from $spaceName"
+        }
+        "OWNERSHIP_TRANSFERRED" -> {
+            if (isAffectedMe) "Ownership of $spaceName was transferred to you"
+            else "$performerName transferred ownership of $spaceName to $affectedName"
+        }
+        "TRANSACTION_ADDED" -> {
+            val amount = activity.metadata["amount"] ?: ""
+            "$performerName added $amount to $spaceName"
+        }
+        "TRANSACTION_UPDATED" -> {
+            "$performerName updated a contribution in $spaceName"
+        }
+        "TRANSACTION_DELETED" -> {
+            "$performerName removed a contribution from $spaceName"
+        }
+        "SPACE_CREATED" -> {
+            "$performerName created savings space $spaceName"
+        }
+        "SPACE_UPDATED" -> {
+            "$performerName updated savings space $spaceName"
+        }
+        "SPACE_DELETED" -> {
+            "$performerName deleted savings space $spaceName"
+        }
+        "TARGET_DATE_UPDATED" -> {
+            "$performerName updated the target date for $spaceName"
+        }
+        "TARGET_AMOUNT_UPDATED" -> {
+            "$performerName updated the target amount for $spaceName"
+        }
+        "DUE_DATE_UPDATED" -> {
+            "$performerName updated the due date for $spaceName"
+        }
+        "PLACE_ALERT" -> {
+            val placeName = activity.metadata["placeName"] ?: "a place"
+            if (activity.details.contains("arrived", ignoreCase = true)) {
+                "$performerName arrived at $placeName"
+            } else {
+                "$performerName left $placeName"
+            }
+        }
+        "SIGNAL_LOST" -> {
+            "$performerName lost signal"
+        }
+        "SIGNAL_RESTORED" -> {
+            if (isPerformerMe) "Your signal was restored"
+            else "$performerName's signal was restored"
+        }
+        "ANNIVERSARY_UPDATED" -> {
+            if (isPerformerMe) "You updated the anniversary date"
+            else "$performerName updated the anniversary date"
+        }
+        "PLACE_ADDED" -> {
+            val placeName = activity.metadata["placeName"] ?: "a place"
+            "$performerName added a new place: $placeName"
+        }
+        "PLACE_UPDATED" -> {
+            val placeName = activity.metadata["placeName"] ?: "a place"
+            "$performerName updated place: $placeName"
+        }
+        "PLACE_DELETED" -> {
+            val placeName = activity.metadata["placeName"] ?: "a place"
+            "$performerName deleted place: $placeName"
+        }
+        "PARTNER_REQUEST" -> {
+            if (isPerformerMe) "You sent a partner request to ${activity.affectedUserName}"
+            else if (isAffectedMe) "$performerName sent you a partner request"
+            else "$performerName sent a partner request to ${activity.affectedUserName}"
+        }
+        "PARTNER_ACCEPTED" -> {
+            if (isPerformerMe) "You and ${activity.affectedUserName} are now partners"
+            else if (isAffectedMe) "You and $performerName are now partners"
+            else "$performerName and ${activity.affectedUserName} are now partners"
+        }
+        else -> activity.details
     }
 }

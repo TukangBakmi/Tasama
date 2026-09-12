@@ -299,6 +299,8 @@ class DashboardViewModel(
             SavingsActivityType.OWNERSHIP_TRANSFERRED -> "👑"
             SavingsActivityType.SPACE_DELETED -> "🗑️"
             SavingsActivityType.TARGET_DATE_UPDATED -> "📅"
+            SavingsActivityType.TARGET_AMOUNT_UPDATED -> "💰"
+            SavingsActivityType.DUE_DATE_UPDATED -> "📅"
         }
     }
 

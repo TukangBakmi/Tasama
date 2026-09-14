@@ -850,37 +850,145 @@ fun OverviewTab(
 fun HistoryTab(activities: List<SavingsActivity>) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        items(activities) { activity ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                Box(
-                    modifier = Modifier.size(32.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val icon = when (activity.type) {
-                        SavingsActivityType.TRANSACTION_ADDED -> "💰"
-                        SavingsActivityType.MEMBER_JOINED -> "👤"
-                        SavingsActivityType.SPACE_CREATED -> "✨"
-                        else -> "📝"
-                    }
-                    Text(icon, fontSize = 14.sp)
+        if (activities.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                    Text("No activity yet", color = Color.Gray)
                 }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(activity.details, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "${activity.userName} • ${formatTimestamp(activity.timestamp)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
-                    )
+            }
+        } else {
+            items(activities) { activity ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = getHistoryActivityIcon(activity.type),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = getHistoryActivityTitle(activity.type),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = getHistoryActivityDetails(activity),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    
+                    val formatted = formatTimestamp(activity.timestamp)
+                    val timeParts = formatted.split(", ")
+                    val dateStr = timeParts.getOrNull(0) ?: ""
+                    val timeStr = timeParts.getOrNull(1) ?: ""
+
+                    Column(
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = dateStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = timeStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun getHistoryActivityIcon(type: SavingsActivityType): androidx.compose.ui.graphics.vector.ImageVector {
+    return when (type) {
+        SavingsActivityType.TRANSACTION_ADDED -> Icons.Default.Add
+        SavingsActivityType.TRANSACTION_UPDATED -> Icons.Default.Edit
+        SavingsActivityType.TRANSACTION_DELETED -> Icons.Default.Delete
+        SavingsActivityType.MEMBER_JOINED,
+        SavingsActivityType.INVITATION_ACCEPTED -> Icons.Default.Person
+        SavingsActivityType.MEMBER_LEFT,
+        SavingsActivityType.MEMBER_REMOVED -> Icons.Default.PersonRemove
+        SavingsActivityType.INVITATION_SENT -> Icons.Default.PersonAdd
+        SavingsActivityType.INVITATION_DECLINED -> Icons.Default.Close
+        SavingsActivityType.SPACE_CREATED -> Icons.Default.AddCircle
+        SavingsActivityType.SPACE_UPDATED -> Icons.Default.Edit
+        SavingsActivityType.SPACE_DELETED -> Icons.Default.Delete
+        SavingsActivityType.OWNERSHIP_TRANSFERRED -> Icons.Default.SwapHoriz
+        SavingsActivityType.TARGET_DATE_UPDATED,
+        SavingsActivityType.DUE_DATE_UPDATED -> Icons.Default.Event
+        SavingsActivityType.TARGET_AMOUNT_UPDATED -> Icons.Default.Flag
+        else -> Icons.Default.History
+    }
+}
+
+private fun getHistoryActivityTitle(type: SavingsActivityType): String {
+    return when (type) {
+        SavingsActivityType.TRANSACTION_ADDED -> "Contribution added"
+        SavingsActivityType.TRANSACTION_UPDATED -> "Contribution updated"
+        SavingsActivityType.TRANSACTION_DELETED -> "Contribution removed"
+        SavingsActivityType.MEMBER_JOINED,
+        SavingsActivityType.INVITATION_ACCEPTED -> "Member joined"
+        SavingsActivityType.MEMBER_LEFT -> "Member left"
+        SavingsActivityType.MEMBER_REMOVED -> "Member removed"
+        SavingsActivityType.INVITATION_SENT -> "Invitation sent"
+        SavingsActivityType.INVITATION_DECLINED -> "Invitation declined"
+        SavingsActivityType.SPACE_CREATED -> "Space created"
+        SavingsActivityType.SPACE_UPDATED -> "Space details updated"
+        SavingsActivityType.SPACE_DELETED -> "Space deleted"
+        SavingsActivityType.OWNERSHIP_TRANSFERRED -> "Ownership transferred"
+        SavingsActivityType.TARGET_DATE_UPDATED,
+        SavingsActivityType.DUE_DATE_UPDATED -> "Due date updated"
+        SavingsActivityType.TARGET_AMOUNT_UPDATED -> "Target amount updated"
+        else -> "Savings update"
+    }
+}
+
+private fun getHistoryActivityDetails(activity: SavingsActivity): String {
+    return when (activity.type) {
+        SavingsActivityType.TRANSACTION_ADDED,
+        SavingsActivityType.TRANSACTION_UPDATED -> {
+            val details = activity.details
+                .replace("Added contribution: ", "")
+                .replace("Edited contribution: ", "")
+            "${activity.userName} · $details"
+        }
+        SavingsActivityType.TRANSACTION_DELETED -> {
+            "${activity.userName} · Removed a contribution"
+        }
+        SavingsActivityType.MEMBER_JOINED,
+        SavingsActivityType.INVITATION_ACCEPTED -> {
+            activity.userName
+        }
+        SavingsActivityType.MEMBER_LEFT -> {
+            activity.userName
+        }
+        SavingsActivityType.MEMBER_REMOVED -> {
+            activity.details
+        }
+        SavingsActivityType.INVITATION_SENT -> {
+            activity.details
+        }
+        else -> activity.details
     }
 }
 
@@ -1527,16 +1635,33 @@ private fun formatTimestamp(timestamp: Long): String {
     val timeZone = TimeZone.currentSystemDefault()
     val dateTime = instant.toLocalDateTime(timeZone)
     val now = Clock.System.now().toLocalDateTime(timeZone)
-    val yesterday = Clock.System.now().minus(24, DateTimeUnit.HOUR).toLocalDateTime(timeZone)
-
-    val dateStr = when {
-        dateTime.date == now.date -> "Today"
-        dateTime.date == yesterday.date -> "Yesterday"
-        else -> "${dateTime.day.toString().padStart(2, '0')}/${dateTime.month.number.toString().padStart(2, '0')}/${dateTime.year}"
-    }
+    val today = now.date
+    val yesterday = today.minus(1, DateTimeUnit.DAY)
 
     val timeStr = "${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
-    return "$dateStr $timeStr"
+
+    return when {
+        dateTime.date == today -> "Today, $timeStr"
+        dateTime.date == yesterday -> "Yesterday, $timeStr"
+        else -> {
+            val monthStr = when (dateTime.month) {
+                Month.JANUARY -> "Jan"
+                Month.FEBRUARY -> "Feb"
+                Month.MARCH -> "Mar"
+                Month.APRIL -> "Apr"
+                Month.MAY -> "May"
+                Month.JUNE -> "Jun"
+                Month.JULY -> "Jul"
+                Month.AUGUST -> "Aug"
+                Month.SEPTEMBER -> "Sep"
+                Month.OCTOBER -> "Oct"
+                Month.NOVEMBER -> "Nov"
+                Month.DECEMBER -> "Dec"
+                else -> ""
+            }
+            "$monthStr ${dateTime.dayOfMonth}, $timeStr"
+        }
+    }
 }
 
 private fun parseNumericInput(input: String): Long? {

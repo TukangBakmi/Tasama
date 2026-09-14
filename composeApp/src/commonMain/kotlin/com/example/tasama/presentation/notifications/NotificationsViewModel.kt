@@ -30,27 +30,61 @@ class NotificationsViewModel(
     val uiState: StateFlow<NotificationsUiState> = combine(
         activityRepository.getActivities(ActivityCategory.SAVINGS),
         activityRepository.getActivities(ActivityCategory.PARTNER),
-        activityRepository.hasUnread(ActivityCategory.SAVINGS),
-        activityRepository.hasUnread(ActivityCategory.PARTNER),
         _selectedTab,
         authRepository.userId
     ) { flows ->
-        val savings = flows[0] as List<Activity>
-        val partner = flows[1] as List<Activity>
-        val unreadSavings = flows[2] as Boolean
-        val unreadPartner = flows[3] as Boolean
-        val tab = flows[4] as Int
-        val uid = flows[5] as String?
+        val allSavings = flows[0] as List<Activity>
+        val allPartner = flows[1] as List<Activity>
+        val tab = flows[2] as Int
+        val uid = flows[3] as String?
+
+        val filteredSavings = allSavings.filter { 
+            it.type in SAVINGS_NOTIFICATION_TYPES && uid != null && it.userId != uid 
+        }
+        val filteredPartner = allPartner.filter { 
+            it.type in PARTNER_NOTIFICATION_TYPES && 
+            uid != null && 
+            it.userId != uid &&
+            (it.type != "PARTNER_REQUEST" || it.affectedUserId == uid)
+        }
+
+        val unreadSavings = filteredSavings.any { it.isUnreadFor(uid) }
+        val unreadPartner = filteredPartner.any { it.isUnreadFor(uid) }
 
         NotificationsUiState(
-            savingsActivities = savings,
-            partnerActivities = partner,
+            savingsActivities = filteredSavings,
+            partnerActivities = filteredPartner,
             hasUnreadSavings = unreadSavings,
             hasUnreadPartner = unreadPartner,
             selectedTab = tab,
             currentUserId = uid
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationsUiState())
+
+    companion object {
+        private val SAVINGS_NOTIFICATION_TYPES = setOf(
+            "INVITATION_SENT",
+            "MEMBER_JOINED",
+            "INVITATION_ACCEPTED",
+            "MEMBER_REMOVED",
+            "MEMBER_LEFT",
+            "OWNERSHIP_TRANSFERRED",
+            "SPACE_DELETED",
+            "PLACE_ADDED",
+            "PLACE_UPDATED",
+            "PLACE_DELETED"
+        )
+
+        private val PARTNER_NOTIFICATION_TYPES = setOf(
+            "PARTNER_REQUEST",
+            "PLACE_ALERT",
+            "SIGNAL_LOST",
+            "SIGNAL_RESTORED",
+            "PLACE_ADDED",
+            "PLACE_UPDATED",
+            "PLACE_DELETED"
+        )
+    }
 
     fun onTabSelected(index: Int) {
         val previousTab = _selectedTab.value

@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.InvitationStatus
 import com.example.tasama.domain.model.SavingsActivity
-import com.example.tasama.domain.model.SavingsActivityType
 import com.example.tasama.domain.model.SavingsInvitation
 import com.example.tasama.domain.model.SavingsSpace
 import com.example.tasama.domain.model.SavingsTransaction
@@ -27,15 +26,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
-import kotlinx.datetime.Instant
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 class DashboardViewModel(
     private val repository: TransactionRepository,
@@ -91,27 +89,28 @@ class DashboardViewModel(
                 settingsRepository.settings,
                 activityRepository.hasUnread()
             ) { args: Array<Any?> ->
-                val transactions = args[0] as List<Transaction>
-                val spaces = args[1] as List<SavingsSpace>
-                val invitations = args[2] as List<SavingsInvitation>
-                val activities = args[3] as List<SavingsActivity>
-                val savingsTransactions = args[4] as List<SavingsTransaction>
-                val channels = args[5] as List<ChatChannel>
-                val user = args[6] as User?
-                val settings = args[7] as com.example.tasama.domain.model.AppSettings
-                val hasUnifiedUnread = args[8] as Boolean
-
-                updateDashboardWith(transactions, spaces, invitations, activities, savingsTransactions, channels, user, settings, hasUnifiedUnread)
+                @Suppress("UNCHECKED_CAST")
+                updateDashboardWith(
+                    transactions = args[0] as List<Transaction>,
+                    spaces = args[1] as List<SavingsSpace>,
+                    invitations = args[2] as List<SavingsInvitation>,
+                    savingsActivities = args[3] as List<SavingsActivity>,
+                    savingsTransactions = args[4] as List<SavingsTransaction>,
+                    channels = args[5] as List<ChatChannel>,
+                    user = args[6] as User?,
+                    settings = args[7] as com.example.tasama.domain.model.AppSettings,
+                    hasUnifiedUnread = args[8] as Boolean
+                )
                 _uiState.update { it.copy(isLoading = false) }
             }.collect { }
         }
     }
 
     private fun updateDashboardWith(
-        transactions: List<Transaction>,
+        @Suppress("UNUSED_PARAMETER") transactions: List<Transaction>,
         spaces: List<SavingsSpace>,
         invitations: List<SavingsInvitation>,
-        savingsActivities: List<SavingsActivity>,
+        @Suppress("UNUSED_PARAMETER") savingsActivities: List<SavingsActivity>,
         savingsTransactions: List<SavingsTransaction>,
         channels: List<ChatChannel>,
         user: User?,
@@ -134,7 +133,6 @@ class DashboardViewModel(
         val expense = periodFiltered.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
 
         val totalSavingsBalance = spaces.sumOf { it.balance }
-        val recentSpaces = spaces.sortedByDescending { it.updatedAt }.take(2)
         val pendingInvitations = invitations.filter { it.status == InvitationStatus.PENDING }
         val hasPendingPartnerRequest = user?.partnerRequestFrom != null
 
@@ -283,27 +281,6 @@ class DashboardViewModel(
         observeData()
     }
 
-    private fun getSavingsActivityIcon(type: SavingsActivityType): String {
-        return when (type) {
-            SavingsActivityType.TRANSACTION_ADDED -> "📥"
-            SavingsActivityType.TRANSACTION_UPDATED -> "📝"
-            SavingsActivityType.TRANSACTION_DELETED -> "🗑️"
-            SavingsActivityType.SPACE_CREATED -> "✨"
-            SavingsActivityType.SPACE_UPDATED -> "⚙️"
-            SavingsActivityType.INVITATION_SENT -> "✉️"
-            SavingsActivityType.INVITATION_ACCEPTED -> "🤝"
-            SavingsActivityType.INVITATION_DECLINED -> "❌"
-            SavingsActivityType.MEMBER_JOINED -> "👤"
-            SavingsActivityType.MEMBER_LEFT -> "🚪"
-            SavingsActivityType.MEMBER_REMOVED -> "🚫"
-            SavingsActivityType.OWNERSHIP_TRANSFERRED -> "👑"
-            SavingsActivityType.SPACE_DELETED -> "🗑️"
-            SavingsActivityType.TARGET_DATE_UPDATED -> "📅"
-            SavingsActivityType.TARGET_AMOUNT_UPDATED -> "💰"
-            SavingsActivityType.DUE_DATE_UPDATED -> "📅"
-        }
-    }
-
     fun addTransaction(transaction: Transaction) {
         viewModelScope.launch {
             try {
@@ -314,16 +291,7 @@ class DashboardViewModel(
         }
     }
 
-    fun onAddTransactionClick() {
-        _uiState.update { it.copy(showAddTransactionDialog = true) }
-    }
-
-    fun onDismissAddTransaction() {
-        _uiState.update { it.copy(showAddTransactionDialog = false) }
-    }
-
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
-
 }

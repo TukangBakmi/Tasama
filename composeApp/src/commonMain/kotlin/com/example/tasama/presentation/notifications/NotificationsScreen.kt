@@ -180,7 +180,7 @@ fun ActivityItem(
             .fillMaxWidth()
             .background(if (isUnread) PrimaryLightBlue.copy(alpha = 0.05f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Icon area
@@ -194,19 +194,19 @@ fun ActivityItem(
             ActivityIcon(activity)
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = displayDetails,
                 fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                lineHeight = 18.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = formatTimestamp(activity.timestamp),
-                fontSize = 12.sp,
-                color = Color.Gray
+                fontSize = 11.sp,
+                color = Color.Gray.copy(alpha = 0.8f)
             )
         }
     }

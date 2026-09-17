@@ -42,9 +42,9 @@ class NotificationsViewModel(
             it.type in SAVINGS_NOTIFICATION_TYPES && uid != null && it.userId != uid 
         }
         val filteredPartner = allPartner.filter { 
-            it.type in PARTNER_NOTIFICATION_TYPES && 
             uid != null && 
             it.userId != uid &&
+            it.type in PARTNER_NOTIFICATION_TYPES &&
             (it.type != "PARTNER_REQUEST" || it.affectedUserId == uid)
         }
 

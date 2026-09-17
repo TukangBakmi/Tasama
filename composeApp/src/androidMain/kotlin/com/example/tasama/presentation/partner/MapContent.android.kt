@@ -54,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.tasama.util.reverseGeocode
 import com.example.tasama.util.calculateDistance
+import com.example.tasama.util.getPointAtDistance
 import com.example.tasama.util.Location
 import com.example.tasama.util.format
 import com.example.tasama.util.clipSegmentToRect
@@ -143,9 +144,20 @@ actual fun MapContent(
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
+    var tempRadius by remember { mutableFloatStateOf(200f) }
+    var tempColor by remember { mutableStateOf(Color(0xFF2196F3)) }
+    var tempIconName by remember { mutableStateOf("Location") }
     var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(showAddPlaceSheet, editingPlace) {
+        if (showAddPlaceSheet != null) {
+            tempRadius = editingPlace?.radius?.toFloat() ?: 200f
+            tempColor = editingPlace?.color?.let { Color(it.toInt()) } ?: Color(0xFF2196F3)
+            tempIconName = editingPlace?.iconName ?: "Location"
+        }
+    }
     
     var hasInitialFit by remember { mutableStateOf(false) }
     var isMapLoaded by remember { mutableStateOf(false) }
@@ -581,6 +593,80 @@ actual fun MapContent(
                 }
             }
 
+            // Interactive Radius Editor Preview
+            if (showAddPlaceSheet != null) {
+                val center = showAddPlaceSheet!!
+                
+    Circle(
+        center = center,
+        radius = tempRadius.toDouble(),
+        fillColor = tempColor.copy(alpha = 0.15f),
+        strokeColor = tempColor.copy(alpha = 0.5f),
+        strokeWidth = 2f
+    )
+
+                val handleState = rememberMarkerState(
+                    position = LatLng(
+                        getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).latitude,
+                        getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).longitude
+                    )
+                )
+                
+                LaunchedEffect(tempRadius) {
+                    val target = getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0)
+                    val targetPos = LatLng(target.latitude, target.longitude)
+                    if (handleState.position != targetPos) {
+                        handleState.position = targetPos
+                    }
+                }
+
+                Marker(
+                    state = handleState,
+                    draggable = true,
+                    flat = true,
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
+                    alpha = 0.8f,
+                    title = "Drag to resize",
+                )
+
+                // Update radius while dragging
+                LaunchedEffect(handleState.isDragging) {
+                    if (handleState.isDragging) {
+                        while (handleState.isDragging) {
+                            val dist = calculateDistance(
+                                Location(center.latitude, center.longitude),
+                                Location(handleState.position.latitude, handleState.position.longitude)
+                            )
+                            tempRadius = dist.toFloat().coerceIn(50f, 2000f)
+                            delay(16) // ~60fps update
+                        }
+                    }
+                }
+                
+                // Radius label marker
+                val labelLoc = getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 75.0)
+                val labelPos = LatLng(labelLoc.latitude, labelLoc.longitude)
+    MarkerComposable(
+        state = rememberUpdatedMarkerState(labelPos),
+        anchor = Offset(0.5f, 0.5f)
+    ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, tempColor.copy(alpha = 0.5f)),
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Text(
+                            text = "${tempRadius.toInt()} m",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = tempColor
+                        )
+                    }
+                }
+            }
+
             markerData?.let { data ->
                 if (data.showPolyline) {
                     // Straight Dashed Line
@@ -669,6 +755,12 @@ actual fun MapContent(
                     AddPlaceSheetContent(
                         location = showAddPlaceSheet!!,
                         initialPlace = editingPlace,
+                        radiusValue = tempRadius,
+                        onRadiusChange = { tempRadius = it },
+                        selectedColor = tempColor,
+                        onColorChange = { tempColor = it },
+                        selectedIconName = tempIconName,
+                        onIconChange = { tempIconName = it },
                         onAddPlace = { place: Place ->
                             onAddPlace(place)
                             showAddPlaceSheet = null
@@ -1030,17 +1122,18 @@ actual fun MapContent(
 fun AddPlaceSheetContent(
     location: LatLng,
     initialPlace: Place? = null,
+    radiusValue: Float,
+    onRadiusChange: (Float) -> Unit,
+    selectedColor: Color,
+    onColorChange: (Color) -> Unit,
+    selectedIconName: String,
+    onIconChange: (String) -> Unit,
     onAddPlace: (Place) -> Unit
 ) {
     var name by remember { mutableStateOf(initialPlace?.name ?: "") }
     var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
-    val radius = initialPlace?.radius?.toFloat() ?: 200f
     var notifyOnEntry by remember { mutableStateOf(initialPlace?.notifyOnEntry ?: true) }
     var notifyOnExit by remember { mutableStateOf(initialPlace?.notifyOnExit ?: true) }
-    var selectedColor by remember { 
-        mutableStateOf(initialPlace?.color?.let { Color(it.toInt()) } ?: Color(0xFF2196F3)) 
-    }
-    var selectedIconName by remember { mutableStateOf(initialPlace?.iconName ?: "Location") }
 
     val colors = listOf(
         Color(0xFF2196F3), // Blue
@@ -1145,12 +1238,44 @@ fun AddPlaceSheetContent(
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Radius", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Slider(
+                    value = radiusValue,
+                    onValueChange = onRadiusChange,
+                    valueRange = 50f..1000f,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${radiusValue.toInt()}m",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.width(48.dp)
+                )
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val colors = listOf(
+                    Color(0xFF2196F3), // Blue
+                    Color(0xFF4CAF50), // Green
+                    Color(0xFFF44336), // Red
+                    Color(0xFFFFC107), // Amber
+                    Color(0xFF9C27B0), // Purple
+                    Color(0xFF795548)  // Brown
+                )
                 colors.forEach { color ->
                     val isSelected = selectedColor == color
                     Box(
@@ -1160,7 +1285,7 @@ fun AddPlaceSheetContent(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { selectedColor = color },
+                            ) { onColorChange(color) },
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -1182,6 +1307,17 @@ fun AddPlaceSheetContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                val icons = listOf(
+                    "Location" to Icons.Default.LocationOn,
+                    "Home" to Icons.Default.Home,
+                    "Work" to Icons.Default.Work,
+                    "School" to Icons.Default.School,
+                    "Shopping" to Icons.Default.ShoppingCart,
+                    "Restaurant" to Icons.Default.Restaurant,
+                    "Gym" to Icons.Default.FitnessCenter,
+                    "Hospital" to Icons.Default.LocalHospital,
+                    "Park" to Icons.Default.Park
+                )
                 icons.forEach { (iconName, icon) ->
                     Box(
                         modifier = Modifier
@@ -1192,7 +1328,7 @@ fun AddPlaceSheetContent(
                                 if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
-                            .clickable { selectedIconName = iconName },
+                            .clickable { onIconChange(iconName) },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1218,7 +1354,7 @@ fun AddPlaceSheetContent(
                         address = address,
                         latitude = location.latitude,
                         longitude = location.longitude,
-                        radius = radius.toDouble(),
+                        radius = radiusValue.toDouble(),
                         notifyOnEntry = notifyOnEntry,
                         notifyOnExit = notifyOnExit,
                         color = selectedColor.toArgb().toLong() and 0xFFFFFFFFL,

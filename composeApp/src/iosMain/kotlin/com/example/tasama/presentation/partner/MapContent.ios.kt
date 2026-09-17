@@ -176,6 +176,17 @@ actual fun MapContent(
     var showAddPlaceSheet by remember { mutableStateOf<Location?>(null) }
     var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
+    var tempRadius by remember { mutableFloatStateOf(200f) }
+    var tempColor by remember { mutableStateOf(Color(0xFF2196F3)) }
+    var tempIconName by remember { mutableStateOf("Location") }
+
+    LaunchedEffect(showAddPlaceSheet, editingPlace) {
+        if (showAddPlaceSheet != null) {
+            tempRadius = editingPlace?.radius?.toFloat() ?: 200f
+            tempColor = editingPlace?.color?.let { Color(it.toULong()) } ?: Color(0xFF2196F3)
+            tempIconName = editingPlace?.iconName ?: "Location"
+        }
+    }
     
     var currentTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
@@ -351,6 +362,13 @@ actual fun MapContent(
                         circle.setTitle(place.color?.toString() ?: "")
                         mapView.addOverlay(circle)
                     }
+                }
+
+                if (showAddPlaceSheet != null) {
+                    val centerCoord = CLLocationCoordinate2DMake(showAddPlaceSheet!!.latitude, showAddPlaceSheet!!.longitude)
+                    val circle = MKCircle.circleWithCenterCoordinate(centerCoord, tempRadius.toDouble())
+                    circle.setTitle(tempColor.toArgb().toString())
+                    mapView.addOverlay(circle)
                 }
 
                 markerData?.let { data ->
@@ -641,6 +659,12 @@ actual fun MapContent(
                     AddPlaceSheetContent(
                         location = showAddPlaceSheet!!,
                         initialPlace = editingPlace,
+                        radiusValue = tempRadius,
+                        onRadiusChange = { tempRadius = it },
+                        selectedColor = tempColor,
+                        onColorChange = { tempColor = it },
+                        selectedIconName = tempIconName,
+                        onIconChange = { tempIconName = it },
                         onAddPlace = { place: Place ->
                             onAddPlace(place)
                             showAddPlaceSheet = null
@@ -658,17 +682,18 @@ actual fun MapContent(
 fun AddPlaceSheetContent(
     location: Location,
     initialPlace: Place? = null,
+    radiusValue: Float,
+    onRadiusChange: (Float) -> Unit,
+    selectedColor: Color,
+    onColorChange: (Color) -> Unit,
+    selectedIconName: String,
+    onIconChange: (String) -> Unit,
     onAddPlace: (Place) -> Unit
 ) {
     var name by remember { mutableStateOf(initialPlace?.name ?: "") }
     var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
-    val radius = initialPlace?.radius?.toFloat() ?: 200f
     var notifyOnEntry by remember { mutableStateOf(initialPlace?.notifyOnEntry ?: true) }
     var notifyOnExit by remember { mutableStateOf(initialPlace?.notifyOnExit ?: true) }
-    var selectedColor by remember { 
-        mutableStateOf(initialPlace?.color?.let { Color(it.toULong()) } ?: Color(0xFF2196F3)) 
-    }
-    var selectedIconName by remember { mutableStateOf(initialPlace?.iconName ?: "Location") }
 
     val colors = listOf(
         Color(0xFF2196F3), // Blue
@@ -772,6 +797,30 @@ fun AddPlaceSheetContent(
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Radius", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Slider(
+                    value = radiusValue,
+                    onValueChange = onRadiusChange,
+                    valueRange = 50f..1000f,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${radiusValue.toInt()}m",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.width(48.dp)
+                )
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             
             Row(
@@ -779,7 +828,7 @@ fun AddPlaceSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 colors.forEach { color ->
-                    val isSelected = selectedColor == color
+                    val isSelected = onColorChange != {} && selectedColor == color
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -787,7 +836,7 @@ fun AddPlaceSheetContent(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { selectedColor = color },
+                            ) { onColorChange(color) },
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -819,7 +868,7 @@ fun AddPlaceSheetContent(
                                 if (selectedIconName == iconName) MaterialTheme.colorScheme.primaryContainer
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             )
-                            .clickable { selectedIconName = iconName },
+                            .clickable { onIconChange(iconName) },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -845,7 +894,7 @@ fun AddPlaceSheetContent(
                         address = address,
                         latitude = location.latitude,
                         longitude = location.longitude,
-                        radius = radius.toDouble(),
+                        radius = radiusValue.toDouble(),
                         notifyOnEntry = notifyOnEntry,
                         notifyOnExit = notifyOnExit,
                         color = selectedColor.toArgb().toLong(),

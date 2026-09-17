@@ -20,6 +20,20 @@ fun calculateDistance(p1: Location, p2: Location): Double {
     return r * c
 }
 
+fun getPointAtDistance(latitude: Double, longitude: Double, distanceMeters: Double, bearingDegrees: Double): Location {
+    val radius = 6371e3 // Earth's radius in meters
+    val dist = distanceMeters / radius
+    val brng = bearingDegrees * PI / 180
+
+    val lat1 = latitude * PI / 180
+    val lon1 = longitude * PI / 180
+
+    val lat2 = asin(sin(lat1) * cos(dist) + cos(lat1) * sin(dist) * cos(brng))
+    val lon2 = lon1 + atan2(sin(brng) * sin(dist) * cos(lat1), cos(dist) - sin(lat1) * sin(lat2))
+
+    return Location(lat2 * 180 / PI, lon2 * 180 / PI)
+}
+
 fun Double.format(digits: Int): String {
     val factor = 10.0.pow(digits)
     return (round(this * factor) / factor).toString()

@@ -151,6 +151,41 @@ fun PartnerSettingsSheet(
                             onCheckedChange = onUpdateReminderNotificationsEnabled
                         )
                     }
+
+                    if (com.example.tasama.util.isXiaomiDevice()) {
+                        SettingsSection(title = "Xiaomi / HyperOS Optimization") {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "Xiaomi Background Tracking",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "To ensure live location continues tracking when the app is cleared from Recent Apps, please enable 'Autostart' and set Battery Saver to 'No restrictions' in your device settings.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { com.example.tasama.util.openXiaomiSettings() },
+                                        modifier = Modifier.align(Alignment.End),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Text("Open Settings", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             AppTransientFeedbackOverlay()

@@ -115,15 +115,102 @@ class LocationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> startLocationService()
-            ACTION_STOP -> stopLocationService()
+        val action = intent?.action
+        println("LIVE_LOCATION_SERVICE: onStartCommand - Action: $action, Flags: $flags, StartId: $startId")
+
+        if (intent == null) {
+            println("LIVE_LOCATION_SERVICE: onStartCommand - Service restarted by system (START_STICKY)")
+        }
+
+        if (intent == null || action == ACTION_START) {
+            startLocationService()
+            scheduleRecoveryAlarm() // Default 5-minute watchdog
+        } else if (action == ACTION_STOP) {
+            println("LIVE_LOCATION_SERVICE: onStartCommand - Stopping service via ACTION_STOP")
+            cancelRecoveryAlarm()
+            stopLocationService(removeRealtimeData = true)
         }
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        println("LIVE_LOCATION_SERVICE: onTaskRemoved triggered")
+        super.onTaskRemoved(rootIntent)
+        // Immediate recovery for Xiaomi/HyperOS when app is cleared from Recent Apps
+        // This ensures the service restarts almost instantly if killed.
+        runBlocking {
+            try {
+                val settings = settingsRepository.settings.first()
+                val enabled = settings.partnerMapEnabled
+                println("LIVE_LOCATION_SERVICE: onTaskRemoved - partnerMapEnabled: $enabled")
+                
+                if (enabled) {
+                    // Try immediate restart in case process removal isn't instantaneous or service needs to stay alive
+                    val serviceIntent = Intent(applicationContext, LocationService::class.java).apply {
+                        action = ACTION_START
+                    }
+                    try {
+                        println("LIVE_LOCATION_SERVICE: onTaskRemoved - Attempting immediate startForegroundService")
+                        startForegroundService(serviceIntent)
+                    } catch (e: Exception) {
+                        println("LIVE_LOCATION_SERVICE: onTaskRemoved - immediate restart failed: ${e.message}")
+                    }
+
+                    // Schedule immediate recovery fallback (500ms) to bypass aggressive system kills
+                    println("LIVE_LOCATION_SERVICE: onTaskRemoved - Scheduling 500ms recovery alarm")
+                    scheduleRecoveryAlarm(delayMillis = 500)
+                }
+            } catch (e: Exception) {
+                println("LIVE_LOCATION_SERVICE: onTaskRemoved - Error during recovery: ${e.message}")
+            }
+        }
+    }
+
+    private fun scheduleRecoveryAlarm(delayMillis: Long = 60000 * 5) {
+        println("LIVE_LOCATION_SERVICE: scheduleRecoveryAlarm - Delay: $delayMillis ms")
+        try {
+            val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+            val recoveryIntent = android.content.Intent(this, LocationRecoveryReceiver::class.java)
+            val pendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                999, // Use a fixed ID for the watchdog/recovery
+                recoveryIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val triggerAt = System.currentTimeMillis() + delayMillis
+            alarmManager.setAndAllowWhileIdle(
+                android.app.AlarmManager.RTC_WAKEUP,
+                triggerAt,
+                pendingIntent
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun cancelRecoveryAlarm() {
+        try {
+            val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+            val recoveryIntent = android.content.Intent(this, LocationRecoveryReceiver::class.java)
+            val pendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                999,
+                recoveryIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun startLocationService() {
-        if (isServiceStarted) return
+        println("LIVE_LOCATION_SERVICE: startLocationService called. isServiceStarted: $isServiceStarted")
+        if (isServiceStarted) {
+            println("LIVE_LOCATION_SERVICE: Service already started, ensuring location updates are active")
+            requestLocationUpdates()
+            return
+        }
         isServiceStarted = true
 
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -150,7 +237,7 @@ class LocationService : Service() {
         settingsObservationJob = serviceScope.launch {
             settingsRepository.settings.collectLatest { settings ->
                 if (!settings.partnerMapEnabled) {
-                    stopLocationService()
+                    stopLocationService(removeRealtimeData = true)
                     return@collectLatest
                 }
                 
@@ -166,7 +253,7 @@ class LocationService : Service() {
         partnerObservationJob?.cancel()
         partnerObservationJob = serviceScope.launch {
             val uid = authRepository.getCurrentUserId() ?: run {
-                stopLocationService()
+                stopLocationService(removeRealtimeData = true)
                 return@launch
             }
 
@@ -449,31 +536,35 @@ class LocationService : Service() {
             BatteryMode.BATTERY_SAVER -> Triple(30000L, 15000L, Priority.PRIORITY_LOW_POWER)
         }
 
+        println("LIVE_LOCATION_SERVICE: requestLocationUpdates - Mode: $currentBatteryMode, Interval: $interval")
+
         val locationRequest = LocationRequest.Builder(priority, interval)
             .setMinUpdateIntervalMillis(minInterval)
             .build()
 
         try {
+            println("LIVE_LOCATION_SERVICE: Removing existing location updates before re-registering")
             fusedLocationClient.removeLocationUpdates(locationCallback)
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
                 locationCallback,
                 Looper.getMainLooper()
             )
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            println("LIVE_LOCATION_SERVICE: SecurityException in requestLocationUpdates: ${e.message}")
             stopSelf()
         }
     }
 
-    private fun stopLocationService() {
+    private fun stopLocationService(removeRealtimeData: Boolean = false) {
         if (!isServiceStarted) return
         isServiceStarted = false
         
         fusedLocationClient.removeLocationUpdates(locationCallback)
         
-        // Remove live location from RTDB when stopping
-        serviceScope.launch {
-            withContext(NonCancellable) {
+        if (removeRealtimeData) {
+            // Use a separate scope to ensure this completes even if serviceScope is cancelled in onDestroy
+            CoroutineScope(Dispatchers.IO + NonCancellable).launch {
                 authRepository.getCurrentUserId()?.let { uid ->
                     liveLocationRepository.removeLiveLocation(uid)
                 }
@@ -485,12 +576,18 @@ class LocationService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        stopLocationService()
-        serviceScope.launch {
+        println("LIVE_LOCATION_SERVICE: onDestroy triggered")
+        isServiceStarted = false
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        
+        // Ensure cleanup happens even if scope is cancelled
+        val cleanupScope = CoroutineScope(Dispatchers.IO + NonCancellable)
+        cleanupScope.launch {
             geofenceMonitor.cleanup()
         }
+        
         serviceScope.cancel()
+        super.onDestroy()
     }
 
     private fun getAvatarResId(avatarUrl: String?): Int {

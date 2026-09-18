@@ -99,6 +99,7 @@ class MainActivity : AppCompatActivity() {
         android.util.Log.d("TasamaTheme", "MainActivity.onCreate - UI Mode: $uiMode (Night: ${android.content.res.Configuration.UI_MODE_NIGHT_YES}, Light: ${android.content.res.Configuration.UI_MODE_NIGHT_NO})")
 
         super.onCreate(savedInstanceState)
+        com.example.tasama.util.initPlatformUtils(this)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -136,9 +137,9 @@ class MainActivity : AppCompatActivity() {
                             android.util.Log.e("FCM", "Failed to get/update token", e)
                         }
 
-                        // Monitor partner status to start/stop LocationService
-                        authRepository.getUserFlow(uid).collectLatest { user: User? ->
-                            if (user?.partnerId != null) {
+                        // Monitor settings to start/stop LocationService
+                        settingsRepository.settings.collectLatest { settings ->
+                            if (settings.partnerMapEnabled) {
                                 if (ContextCompat.checkSelfPermission(
                                         this@MainActivity,
                                         Manifest.permission.ACCESS_FINE_LOCATION
@@ -259,6 +260,43 @@ class MainActivity : AppCompatActivity() {
 
         if (permissions.isNotEmpty()) {
             requestPermissionLauncher.launch(permissions.toTypedArray())
+        }
+
+        checkXiaomiOptimization()
+    }
+
+    private fun checkXiaomiOptimization() {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        if (manufacturer == "xiaomi" || manufacturer == "redmi" || manufacturer == "poco") {
+            lifecycleScope.launch {
+                val settings = settingsRepository.settings.first()
+                if (settings.partnerMapEnabled) {
+                    // We could show a specific dialog here, or just trigger the intent if needed.
+                    // For now, let's provide a way to open settings.
+                }
+            }
+        }
+    }
+
+    fun openPowerManagementSettings() {
+        try {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                )
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent().apply {
+                    action = android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                }
+                startActivity(intent)
+            } catch (ex: Exception) {
+                val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+                startActivity(intent)
+            }
         }
     }
 

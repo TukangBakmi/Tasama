@@ -6,6 +6,7 @@ import com.example.tasama.domain.repository.AIChatRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.PresenceRepository
+import com.example.tasama.domain.repository.PresenceState
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.User
 import kotlinx.coroutines.Job
@@ -28,6 +29,12 @@ class ChatListViewModel(
 
     private val _uiState = MutableStateFlow(ChatListUiState())
     val uiState = _uiState.asStateFlow()
+
+    private val _userPresence = MutableStateFlow<Map<String, PresenceState>>(emptyMap())
+    val userPresence = _userPresence.asStateFlow()
+
+    private val _typingNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val typingNames = _typingNames.asStateFlow()
 
     private var dataJob: Job? = null
     private var usersJob: Job? = null
@@ -93,7 +100,7 @@ class ChatListViewModel(
             }
 
             if (typingFlows.isEmpty()) {
-                _uiState.update { it.copy(typingNames = emptyMap()) }
+                _typingNames.value = emptyMap()
                 return@launch
             }
 
@@ -102,7 +109,7 @@ class ChatListViewModel(
                     if (name != null) channelId to name else null
                 }.toMap()
             }.collect { typingMap ->
-                _uiState.update { it.copy(typingNames = typingMap) }
+                _typingNames.value = typingMap
             }
         }
     }
@@ -180,7 +187,7 @@ class ChatListViewModel(
             combine(presenceFlows) { presenceList ->
                 userIds.zip(presenceList).toMap()
             }.collect { presenceMap ->
-                _uiState.update { it.copy(userPresence = presenceMap) }
+                _userPresence.value = presenceMap
             }
         }
     }

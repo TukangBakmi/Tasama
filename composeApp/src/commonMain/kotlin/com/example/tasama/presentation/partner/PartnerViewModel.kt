@@ -18,9 +18,11 @@ import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
 import com.example.tasama.presentation.components.TransientFeedback
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.*
 import kotlin.time.Clock
 
@@ -101,9 +103,11 @@ class PartnerViewModel(
                 
                 // Sort by last message timestamp from chat repository
                 chatRepository.getChannels().first().let { channels ->
-                    val suggested = contacts.sortedWith(compareByDescending<User> { contact ->
-                        channels.find { channel -> channel.participantIds.contains(contact.id) }?.lastMessageTimestamp ?: 0L
-                    }.thenBy { it.name })
+                    val suggested = withContext(Dispatchers.Default) {
+                        contacts.sortedWith(compareByDescending<User> { contact ->
+                            channels.find { channel -> channel.participantIds.contains(contact.id) }?.lastMessageTimestamp ?: 0L
+                        }.thenBy { it.name })
+                    }
                     
                     _uiState.update { it.copy(suggestedContacts = suggested, filteredContacts = suggested) }
                 }
@@ -120,16 +124,17 @@ class PartnerViewModel(
         val currentUid = authRepository.getCurrentUserId()
         val isNumericId = query.length == 12 && query.all { it.isDigit() }
 
-        // Filter suggested contacts by name or ID in real-time
-        val filtered = uiState.value.suggestedContacts.filter {
-            it.name.contains(query, ignoreCase = true) || 
-            it.shortId.contains(query) ||
-            it.id.contains(query, ignoreCase = true)
-        }
-        _uiState.update { it.copy(filteredContacts = filtered) }
-
-        _uiState.update { it.copy(isSearchingUser = true, error = null, searchedUser = null) }
         viewModelScope.launch {
+            // Filter suggested contacts by name or ID in real-time
+            val filtered = withContext(Dispatchers.Default) {
+                uiState.value.suggestedContacts.filter {
+                    it.name.contains(query, ignoreCase = true) || 
+                    it.shortId.contains(query) ||
+                    it.id.contains(query, ignoreCase = true)
+                }
+            }
+            _uiState.update { it.copy(filteredContacts = filtered, isSearchingUser = true, error = null, searchedUser = null) }
+
             try {
                 var userId: String? = null
                 
@@ -370,39 +375,53 @@ class PartnerViewModel(
             BatteryMode.BATTERY_SAVER -> 50.0 to 60_000L // 50m, 60s
         }
 
-        val locationChangedSignificantly = lastDistanceRequestLocationMe?.let { calculateDistance(it.first, it.second, myLat, myLon) > distThreshold } ?: true ||
-                lastDistanceRequestLocationPartner?.let { calculateDistance(it.first, it.second, pLat, pLon) > distThreshold } ?: true
-        
-        val timePassed = now - lastDistanceTimestamp > timeThreshold
+        viewModelScope.launch {
+            val locationChangedSignificantly = withContext(Dispatchers.Default) {
+                val distMe = calculateDistance(lastDistanceRequestLocationMe?.first ?: 0.0, lastDistanceRequestLocationMe?.second ?: 0.0, myLat, myLon)
+                val distPartner = calculateDistance(lastDistanceRequestLocationPartner?.first ?: 0.0, lastDistanceRequestLocationPartner?.second ?: 0.0, pLat, pLon)
+                
+                (lastDistanceRequestLocationMe == null || distMe > distThreshold) ||
+                (lastDistanceRequestLocationPartner == null || distPartner > distThreshold)
+            }
+            
+            val timePassed = now - lastDistanceTimestamp > timeThreshold
 
-        if (force || locationChangedSignificantly || timePassed) {
-            updateDistance(myLat, myLon, pLat, pLon)
+            if (force || locationChangedSignificantly || timePassed) {
+                updateDistance(myLat, myLon, pLat, pLon)
+            }
         }
     }
 
     private fun updateDistance(myLat: Double, myLon: Double, pLat: Double, pLon: Double) {
-        lastDistanceTimestamp = Clock.System.now().toEpochMilliseconds()
-        lastDistanceRequestLocationMe = myLat to myLon
-        lastDistanceRequestLocationPartner = pLat to pLon
-        
-        val distanceInfo = directionsRepository.getDistance(pLat, pLon, myLat, myLon)
-        
-        // Filter out tiny jitter to prevent unnecessary UI updates
-        if (lastDistanceMeters != null && abs(lastDistanceMeters!! - distanceInfo.distanceMeters) < 2 && !(_uiState.value.isDistanceLoading)) {
-             return
-        }
+        distanceJob?.cancel()
+        distanceJob = viewModelScope.launch {
+            lastDistanceTimestamp = Clock.System.now().toEpochMilliseconds()
+            lastDistanceRequestLocationMe = myLat to myLon
+            lastDistanceRequestLocationPartner = pLat to pLon
+            
+            val distanceInfo = withContext(Dispatchers.Default) {
+                directionsRepository.getDistance(pLat, pLon, myLat, myLon)
+            }
+            
+            withContext(Dispatchers.Default) {
+                // Filter out tiny jitter to prevent unnecessary UI updates
+                if (lastDistanceMeters != null && abs(lastDistanceMeters!! - distanceInfo.distanceMeters) < 2 && !(_uiState.value.isDistanceLoading)) {
+                     return@withContext
+                }
 
-        val isComing = lastDistanceMeters?.let { it > distanceInfo.distanceMeters + 2 } ?: false
-        
-        _uiState.update { 
-            it.copy(
-                distanceInfo = distanceInfo, 
-                isPartnerComingToMe = isComing,
-                isDistanceLoading = false,
-                distanceError = null
-            ) 
+                val isComing = lastDistanceMeters?.let { it > distanceInfo.distanceMeters + 2 } ?: false
+                
+                _uiState.update { 
+                    it.copy(
+                        distanceInfo = distanceInfo, 
+                        isPartnerComingToMe = isComing,
+                        isDistanceLoading = false,
+                        distanceError = null
+                    ) 
+                }
+                lastDistanceMeters = distanceInfo.distanceMeters
+            }
         }
-        lastDistanceMeters = distanceInfo.distanceMeters
     }
 
     private fun checkAndFetchWeather(lat: Double, lon: Double) {
@@ -415,15 +434,19 @@ class PartnerViewModel(
             BatteryMode.BATTERY_SAVER -> 3000.0 to 60 * 60 * 1000L // 3km, 1h
         }
 
-        val lastLoc = lastWeatherRequestLocation
-        val distance = if (lastLoc != null) {
-            calculateDistance(lat, lon, lastLoc.first, lastLoc.second)
-        } else {
-            Double.MAX_VALUE
-        }
+        viewModelScope.launch {
+            val distance = withContext(Dispatchers.Default) {
+                val lastLoc = lastWeatherRequestLocation
+                if (lastLoc != null) {
+                    calculateDistance(lat, lon, lastLoc.first, lastLoc.second)
+                } else {
+                    Double.MAX_VALUE
+                }
+            }
 
-        if (lastWeatherRequestLocation == null || distance > distThreshold || (now - lastWeatherTimestamp) > timeThreshold) {
-            fetchWeather(lat, lon)
+            if (lastWeatherRequestLocation == null || distance > distThreshold || (now - lastWeatherTimestamp) > timeThreshold) {
+                fetchWeather(lat, lon)
+            }
         }
     }
 

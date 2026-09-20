@@ -7,7 +7,6 @@ import com.example.tasama.domain.repository.PresenceState
 data class ChatListUiState(
     val channels: List<ChatChannel> = emptyList(),
     val channelUsers: Map<String, User> = emptyMap(),
-    val userPresence: Map<String, PresenceState> = emptyMap(),
     val contacts: List<User> = emptyList(),
     val filteredContacts: List<User> = emptyList(),
     val isLoading: Boolean = false,
@@ -18,7 +17,6 @@ data class ChatListUiState(
     val selectedChannelIds: Set<String> = emptySet(),
     val showDeleteConfirmation: Boolean = false,
     val contactToDelete: User? = null,
-    val typingNames: Map<String, String> = emptyMap(),
     val drafts: Map<String, String> = emptyMap()
 )
 

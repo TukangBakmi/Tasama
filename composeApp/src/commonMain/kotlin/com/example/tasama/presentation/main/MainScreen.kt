@@ -319,18 +319,11 @@ fun MainScreen(
                                                         }
                                                     )
 
-                                                    BottomNavItem.Savings -> NavHost(
-                                                        navController = rememberNavController(),
-                                                        startDestination = "savings_main"
-                                                    ) {
-                                                        composable("savings_main") {
-                                                            SavingsScreen(
-                                                                onNavigateToDetail = { spaceId: String ->
-                                                                    navController.navigate("savings_detail/$spaceId")
-                                                                }
-                                                            )
+                                                    BottomNavItem.Savings -> SavingsScreen(
+                                                        onNavigateToDetail = { spaceId: String ->
+                                                            navController.navigate("savings_detail/$spaceId")
                                                         }
-                                                    }
+                                                    )
                                                     BottomNavItem.Chat -> ChatListScreen(
                                                         onChannelClick = { channelId ->
                                                             navController.navigate("chat_room/$channelId")

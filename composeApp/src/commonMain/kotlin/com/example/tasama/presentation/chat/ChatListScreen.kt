@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,6 +117,9 @@ fun ChatListScreen(
             }
         }
 
+        val userPresence by viewModel.userPresence.collectAsState()
+        val typingNames by viewModel.typingNames.collectAsState()
+
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -201,8 +205,8 @@ fun ChatListScreen(
                         items(displayItems, key = { it.third }) { (user, channel, _) ->
                             var showMenu by remember { mutableStateOf(false) }
                             val isSelected = uiState.selectedChannelIds.contains(channel.id)
-                            val presence = user?.id?.let { uiState.userPresence[it] } ?: PresenceState.Offline(0L)
-                            val typingName = uiState.typingNames[channel.id]
+                            val presence = user?.id?.let { userPresence[it] } ?: PresenceState.Offline(0L)
+                            val typingName = typingNames[channel.id]
 
                             Box {
                                 ChannelItem(

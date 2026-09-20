@@ -17,6 +17,7 @@ import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.TransactionRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,8 +26,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Month
@@ -100,68 +104,77 @@ class DashboardViewModel(
                 settingsFlow,
                 unreadFlow
             ) { args: Array<Any?> ->
-                @Suppress("UNCHECKED_CAST")
-                updateDashboardWith(
-                    transactions = args[0] as List<Transaction>,
-                    spaces = args[1] as List<SavingsSpace>,
-                    invitations = args[2] as List<SavingsInvitation>,
-                    savingsActivities = args[3] as List<SavingsActivity>,
-                    savingsTransactions = args[4] as List<SavingsTransaction>,
-                    channels = args[5] as List<ChatChannel>,
-                    user = args[6] as User?,
-                    settings = args[7] as com.example.tasama.domain.model.AppSettings,
-                    hasUnifiedUnread = args[8] as Boolean
-                )
+                val transactions = args[0] as List<Transaction>
+                val spaces = args[1] as List<SavingsSpace>
+                val invitations = args[2] as List<SavingsInvitation>
+                val savingsActivities = args[3] as List<SavingsActivity>
+                val savingsTransactions = args[4] as List<SavingsTransaction>
+                val channels = args[5] as List<ChatChannel>
+                val user = args[6] as User?
+                val settings = args[7] as com.example.tasama.domain.model.AppSettings
+                val hasUnifiedUnread = args[8] as Boolean
+                
+                DataSnapshot(transactions, spaces, invitations, savingsActivities, savingsTransactions, channels, user, settings, hasUnifiedUnread)
+            }
+            .flowOn(Dispatchers.Default)
+            .collect { snapshot ->
+                updateDashboardWith(snapshot)
                 _uiState.update { it.copy(isLoading = false) }
-            }.collect { }
+            }
         }
     }
 
-    private fun updateDashboardWith(
-        @Suppress("UNUSED_PARAMETER") transactions: List<Transaction>,
-        spaces: List<SavingsSpace>,
-        invitations: List<SavingsInvitation>,
-        @Suppress("UNUSED_PARAMETER") savingsActivities: List<SavingsActivity>,
-        savingsTransactions: List<SavingsTransaction>,
-        channels: List<ChatChannel>,
-        user: User?,
-        settings: com.example.tasama.domain.model.AppSettings,
-        hasUnifiedUnread: Boolean
-    ) {
+    private data class DataSnapshot(
+        val transactions: List<Transaction>,
+        val spaces: List<SavingsSpace>,
+        val invitations: List<SavingsInvitation>,
+        val savingsActivities: List<SavingsActivity>,
+        val savingsTransactions: List<SavingsTransaction>,
+        val channels: List<ChatChannel>,
+        val user: User?,
+        val settings: com.example.tasama.domain.model.AppSettings,
+        val hasUnifiedUnread: Boolean
+    )
+
+    private suspend fun updateDashboardWith(snapshot: DataSnapshot) {
         val currentSpaceId = _uiState.value.selectedSpaceId
         val currentPeriod = _uiState.value.selectedPeriod
 
-        // Filter transactions based on selection
-        val filteredTransactions = if (currentSpaceId == null) {
-            savingsTransactions
-        } else {
-            savingsTransactions.filter { it.spaceId == currentSpaceId }
+        withContext(Dispatchers.Default) {
+            // Filter transactions based on selection
+            val filteredTransactions = if (currentSpaceId == null) {
+                snapshot.savingsTransactions
+            } else {
+                snapshot.savingsTransactions.filter { it.spaceId == currentSpaceId }
+            }
+
+            val periodFiltered = filterByPeriod(filteredTransactions, currentPeriod)
+            
+            val income = periodFiltered.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+            val expense = periodFiltered.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+            val totalSavingsBalance = snapshot.spaces.sumOf { it.balance }
+            val pendingInvitations = snapshot.invitations.filter { it.status == InvitationStatus.PENDING }
+            val hasPendingPartnerRequest = snapshot.user?.partnerRequestFrom != null
+
+            val currentUid = authRepository.getCurrentUserId()
+
+            val hasUnread = snapshot.hasUnifiedUnread || 
+                           snapshot.channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
+
+            val trendChartData = calculateTrendData(filteredTransactions, currentPeriod)
+
+            _uiState.update { it.copy(
+                recentSavingsSpaces = snapshot.spaces, // Update all spaces for the filter
+                financialSummary = FinancialSummary(income, expense, income - expense),
+                trendChartData = trendChartData,
+                totalSavingsBalance = totalSavingsBalance,
+                pendingInvitations = pendingInvitations,
+                hasPendingPartnerRequest = hasPendingPartnerRequest,
+                hasUnreadNotifications = hasUnread,
+                currency = snapshot.settings.currency
+            ) }
         }
-
-        val periodFiltered = filterByPeriod(filteredTransactions, currentPeriod)
-        
-        val income = periodFiltered.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-        val expense = periodFiltered.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-
-        val totalSavingsBalance = spaces.sumOf { it.balance }
-        val pendingInvitations = invitations.filter { it.status == InvitationStatus.PENDING }
-        val hasPendingPartnerRequest = user?.partnerRequestFrom != null
-
-        val currentUid = authRepository.getCurrentUserId()
-
-        val hasUnread = hasUnifiedUnread || 
-                       channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
-
-        _uiState.update { it.copy(
-            recentSavingsSpaces = spaces, // Update all spaces for the filter
-            financialSummary = FinancialSummary(income, expense, income - expense),
-            trendChartData = calculateTrendData(filteredTransactions, currentPeriod),
-            totalSavingsBalance = totalSavingsBalance,
-            pendingInvitations = pendingInvitations,
-            hasPendingPartnerRequest = hasPendingPartnerRequest,
-            hasUnreadNotifications = hasUnread,
-            currency = settings.currency
-        ) }
     }
 
     private fun filterByPeriod(transactions: List<SavingsTransaction>, period: FinancialPeriod): List<SavingsTransaction> {

@@ -10,6 +10,7 @@ import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.service.GeofenceMonitor
 import com.example.tasama.presentation.components.TransientFeedback
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -77,7 +79,8 @@ class MainViewModel(
                 (channel.unreadCounts[userId] ?: 0) > 0
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val authState: StateFlow<AuthState> = authRepository.userId

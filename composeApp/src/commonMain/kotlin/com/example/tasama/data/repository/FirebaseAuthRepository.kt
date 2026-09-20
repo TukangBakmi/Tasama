@@ -28,6 +28,7 @@ class FirebaseAuthRepository(
     private val repositoryScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var _sessionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     override val sessionScope: CoroutineScope get() = _sessionScope
+    val applicationScope: CoroutineScope get() = repositoryScope
 
     private val _userId = MutableStateFlow<String?>(null)
     private val _isLoggingOut = MutableStateFlow(false)

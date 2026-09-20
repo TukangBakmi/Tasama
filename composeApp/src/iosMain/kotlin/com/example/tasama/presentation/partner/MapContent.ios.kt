@@ -56,6 +56,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.FlowPreview
 import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -228,6 +230,17 @@ actual fun MapContent(
         else Location(animatedLat.toDouble(), animatedLon.toDouble())
     }
 
+    // Optimization: Debounce camera position updates for projection-based marker calculations
+    var debouncedRegionTrigger by remember { mutableStateOf(0L) }
+    @OptIn(FlowPreview::class)
+    LaunchedEffect(mapViewInstance) {
+        snapshotFlow { mapViewInstance?.region }
+            .debounce(150)
+            .collect {
+                debouncedRegionTrigger = Clock.System.now().toEpochMilliseconds()
+            }
+    }
+
     val coordinator = remember {
         MapCoordinator(
             onMapClick = { lat, lon ->
@@ -276,7 +289,7 @@ actual fun MapContent(
         else calculateDistance(myLocation, partnerAnimatedLocation) < 25.0
     }
 
-    val markerData = remember(myLocation, partnerAnimatedLocation, isTogether, mapSize, mapViewInstance) {
+    val markerData = remember(myLocation, partnerAnimatedLocation, isTogether, mapSize, mapViewInstance, debouncedRegionTrigger) {
         mapViewInstance?.let { mapView ->
             val pMe = myLocation?.let { loc ->
                 val coord = CLLocationCoordinate2DMake(loc.latitude, loc.longitude)

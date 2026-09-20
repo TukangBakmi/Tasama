@@ -150,56 +150,7 @@ fun ChatScreen(
                                             maxLines = 1
                                         )
 
-                                        var nowTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
-                                        LaunchedEffect(Unit) {
-                                            while (true) {
-                                                kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
-                                                nowTime = Clock.System.now().toEpochMilliseconds()
-                                            }
-                                        }
-
-                                        val statusText = remember(uiState.presence, nowTime) {
-                                            when (val presence = uiState.presence) {
-                                                is PresenceState.Online -> "online"
-                                                is PresenceState.Offline -> {
-                                                    val lastSeen = presence.lastSeen
-                                                    if (lastSeen == 0L) return@remember ""
-                                                    try {
-                                                        val instant = Instant.fromEpochMilliseconds(lastSeen)
-                                                        val tz = TimeZone.currentSystemDefault()
-                                                        val lastActiveDateTime = instant.toLocalDateTime(tz)
-                                                        val nowDateTime = Instant.fromEpochMilliseconds(nowTime).toLocalDateTime(tz)
-
-                                                        val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
-
-                                                        when (lastActiveDateTime.date) {
-                                                            nowDateTime.date -> {
-                                                                "last seen today at $timeStr"
-                                                            }
-                                                            nowDateTime.date.minus(DatePeriod(days = 1)) -> {
-                                                                "last seen yesterday at $timeStr"
-                                                            }
-                                                            else -> {
-                                                                val day = lastActiveDateTime.day.toString().padStart(2, '0')
-                                                                val month = lastActiveDateTime.month.ordinal.plus(1).toString().padStart(2, '0')
-                                                                val year = lastActiveDateTime.year
-                                                                "last seen $day/$month/$year"
-                                                            }
-                                                        }
-                                                    } catch (_: Exception) {
-                                                        "offline"
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if (statusText.isNotEmpty()) {
-                                            Text(
-                                                statusText,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                        PresenceStatusText(presence = uiState.presence)
                                     }
                                 }
                             }
@@ -703,6 +654,61 @@ fun MessageBubble(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PresenceStatusText(presence: PresenceState, modifier: Modifier = Modifier) {
+    var nowTime by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30000) // Refresh every 30 seconds
+            nowTime = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
+    val statusText = remember(presence, nowTime) {
+        when (presence) {
+            is PresenceState.Online -> "online"
+            is PresenceState.Offline -> {
+                val lastSeen = presence.lastSeen
+                if (lastSeen == 0L) return@remember ""
+                try {
+                    val instant = Instant.fromEpochMilliseconds(lastSeen)
+                    val tz = TimeZone.currentSystemDefault()
+                    val lastActiveDateTime = instant.toLocalDateTime(tz)
+                    val nowDateTime = Instant.fromEpochMilliseconds(nowTime).toLocalDateTime(tz)
+
+                    val timeStr = "${lastActiveDateTime.hour.toString().padStart(2, '0')}:${lastActiveDateTime.minute.toString().padStart(2, '0')}"
+
+                    when (lastActiveDateTime.date) {
+                        nowDateTime.date -> {
+                            "last seen today at $timeStr"
+                        }
+                        nowDateTime.date.minus(DatePeriod(days = 1)) -> {
+                            "last seen yesterday at $timeStr"
+                        }
+                        else -> {
+                            val day = lastActiveDateTime.day.toString().padStart(2, '0')
+                            val month = lastActiveDateTime.month.ordinal.plus(1).toString().padStart(2, '0')
+                            val year = lastActiveDateTime.year
+                            "last seen $day/$month/$year"
+                        }
+                    }
+                } catch (_: Exception) {
+                    "offline"
+                }
+            }
+        }
+    }
+
+    if (statusText.isNotEmpty()) {
+        Text(
+            statusText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier
+        )
     }
 }
 

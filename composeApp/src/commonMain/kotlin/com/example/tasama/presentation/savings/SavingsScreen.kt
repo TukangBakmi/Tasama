@@ -539,7 +539,7 @@ fun SpaceDetailsScreen(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.weight(1f),
-                    beyondViewportPageCount = 2
+                    beyondViewportPageCount = 0
                 ) { page ->
                     when (page) {
                         0 -> OverviewTab(
@@ -839,7 +839,7 @@ fun OverviewTab(
                 }
             }
         } else {
-            items(transactions.take(10)) { tx ->
+            items(transactions.take(10), key = { it.id }) { tx ->
                 TransactionListItem(tx, onDelete = { onDeleteTransaction(tx) })
             }
         }
@@ -860,7 +860,7 @@ fun HistoryTab(activities: List<SavingsActivity>) {
                 }
             }
         } else {
-            items(activities) { activity ->
+            items(activities, key = { it.id }) { activity ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top
@@ -1051,7 +1051,7 @@ fun MembersTab(
         item {
             Text("Members", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-        items(space.members) { member ->
+        items(space.members, key = { it.userId }) { member ->
             val isCurrentUser = member.userId == currentUserId
             Row(
                 modifier = Modifier

@@ -79,14 +79,16 @@ class MainActivity : AppCompatActivity() {
         val splashScreen = installSplashScreen()
         android.util.Log.d("TasamaSplash", "MainActivity.onCreate - Started")
         
-        var appSettings by mutableStateOf<AppSettings?>(null)
+        var isSettingsLoaded by mutableStateOf(false)
         
         // Block splash screen until settings are loaded
-        splashScreen.setKeepOnScreenCondition { appSettings == null }
+        splashScreen.setKeepOnScreenCondition { !isSettingsLoaded }
 
         lifecycleScope.launch {
-            appSettings = settingsRepository.settings.first()
-            appSettings?.let { setNightMode(it.theme) }
+            settingsRepository.settings.collectLatest { settings ->
+                setNightMode(settings.theme)
+                isSettingsLoaded = true
+            }
         }
 
         // Ensure authState flow is active by subscribing to it
@@ -158,7 +160,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             App(
-                initialTheme = appSettings?.theme,
+                initialTheme = settings.theme,
                 initialChannelId = initialChannelId,
                 navigateToTab = navigateToTab,
                 onChannelNavigated = { initialChannelId = null },

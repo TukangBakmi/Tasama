@@ -28,8 +28,10 @@ import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PlaceRepository
 import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.service.GeofenceMonitor
+import android.location.Location
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import org.koin.android.ext.android.inject
 import java.util.*
@@ -56,6 +58,15 @@ class LocationService : Service() {
     private var isAvatarLoading = false
     private var isServiceStarted = false
 
+    private var lastFirestoreUpdateLocation: Pair<Double, Double>? = null
+    private var lastFirestoreUpdateTime = 0L
+    private var lastRtdbUpdateLocation: Pair<Double, Double>? = null
+    private var lastRtdbUpdateTime = 0L
+
+    private val locationChannel = Channel<Location>(Channel.CONFLATED)
+    private var locationWorkerJob: Job? = null
+    private var activeWorkerCount = 0
+
     private val contentIntent by lazy {
         val intent = Intent(this, MainActivity::class.java).apply {
             putExtra("navigate_to", "partner")
@@ -75,42 +86,76 @@ class LocationService : Service() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
         geofenceMonitor.startMonitoring()
+        startLocationWorker()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                val uid = authRepository.getCurrentUserId()
-                if (uid == null) {
-                    println("LIVE_LOCATION_SERVICE: UID is null, skipping update")
-                    return
-                }
-                
-                println("LIVE_LOCATION_SERVICE: Received ${locationResult.locations.size} locations")
                 for (location in locationResult.locations) {
-                    val speed = if (location.hasSpeed()) location.speed else null
-                    val accuracy = if (location.hasAccuracy()) location.accuracy else null
-                    val heading = if (location.hasBearing()) location.bearing else null
-                    val timestamp = System.currentTimeMillis()
-
-                    serviceScope.launch {
-                        println("LIVE_LOCATION_SERVICE: Updating location for $uid at ${location.latitude}, ${location.longitude}")
-                        // Update Firestore (Persistent/History)
-                        authRepository.updateLocation(uid, location.latitude, location.longitude, speed, accuracy)
-                        
-                        // Update RTDB (Real-time)
-                        liveLocationRepository.updateLiveLocation(
-                            uid,
-                            LiveLocation(
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                accuracy = accuracy,
-                                heading = heading,
-                                speed = speed,
-                                timestamp = timestamp
-                            )
-                        )
-                    }
+                    locationChannel.trySend(location)
                 }
             }
+        }
+    }
+
+    private fun startLocationWorker() {
+        locationWorkerJob?.cancel()
+        locationWorkerJob = serviceScope.launch {
+            activeWorkerCount++
+            println("DEBUG: [LOCATION] Worker STARTED. Total active workers: $activeWorkerCount")
+            try {
+                for (location in locationChannel) {
+                    processLocationUpdate(location)
+                }
+            } finally {
+                activeWorkerCount--
+                println("DEBUG: [LOCATION] Worker STOPPED. Total active workers: $activeWorkerCount")
+            }
+        }
+    }
+
+    private suspend fun processLocationUpdate(location: android.location.Location) {
+        val uid = authRepository.getCurrentUserId() ?: return
+        
+        val speed = if (location.hasSpeed()) location.speed else null
+        val accuracy = if (location.hasAccuracy()) location.accuracy else null
+        val heading = if (location.hasBearing()) location.bearing else null
+        val timestamp = System.currentTimeMillis()
+
+        // Update RTDB (Real-time) - Throttled
+        val rtdbDistance = lastRtdbUpdateLocation?.let { (lat, lon) ->
+            calculateDistance(location.latitude, location.longitude, lat, lon)
+        } ?: Float.MAX_VALUE
+
+        val rtdbTimeElapsed = timestamp - lastRtdbUpdateTime
+
+        if (rtdbDistance > 2 || rtdbTimeElapsed > 10000) {
+            println("DEBUG: [LOCATION] RTDB Update triggered. Distance: $rtdbDistance, Time: $rtdbTimeElapsed")
+            liveLocationRepository.updateLiveLocation(
+                uid,
+                LiveLocation(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracy = accuracy,
+                    heading = heading,
+                    speed = speed,
+                    timestamp = timestamp
+                )
+            )
+            lastRtdbUpdateLocation = location.latitude to location.longitude
+            lastRtdbUpdateTime = timestamp
+        }
+
+        // Update Firestore (Persistent/History) - Throttled
+        val distance = lastFirestoreUpdateLocation?.let { (lat, lon) ->
+            calculateDistance(location.latitude, location.longitude, lat, lon)
+        } ?: Float.MAX_VALUE
+
+        val timeElapsed = timestamp - lastFirestoreUpdateTime
+
+        if (distance > 50 || timeElapsed > 300000) {
+            authRepository.updateLocation(uid, location.latitude, location.longitude, speed, accuracy)
+            lastFirestoreUpdateLocation = location.latitude to location.longitude
+            lastFirestoreUpdateTime = timestamp
         }
     }
 

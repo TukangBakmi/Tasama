@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -127,10 +128,11 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        // Save draft before clearing
+        // Save draft before clearing using non-cancellable/session scope to avoid data loss
         currentChannelId?.let { channelId ->
-            viewModelScope.launch {
-                draftRepository.saveDraft(channelId, _uiState.value.inputText)
+            val text = _uiState.value.inputText
+            authRepository.sessionScope.launch {
+                draftRepository.saveDraft(channelId, text)
             }
         }
         // Clear active channel when leaving the chat
@@ -265,7 +267,15 @@ class ChatViewModel(
 
     private fun markAsRead(channelId: String) {
         viewModelScope.launch {
-            repository.markChannelAsRead(channelId)
+            val currentUserId = authRepository.getCurrentUserId() ?: return@launch
+            // Optimization: Only mark as read if there are actually unread messages for this user
+            // This prevents redundant database writes on every screen focus or message receipt
+            val currentChannel = repository.getChannel(channelId).firstOrNull()
+            val unreadCount = currentChannel?.unreadCounts?.get(currentUserId) ?: 0
+            
+            if (unreadCount > 0) {
+                repository.markChannelAsRead(channelId)
+            }
         }
     }
 
@@ -286,8 +296,14 @@ class ChatViewModel(
                 // Mark unread messages as read ONLY if the app is currently in foreground
                 if (_isResumed.value) {
                     val currentUserId = repository.getCurrentUserId()
-                    messages.filter { it.userId != currentUserId && !it.readBy.containsKey(currentUserId) }.forEach { msg ->
-                        repository.markMessageAsRead(channelId, msg.id)
+                    val unreadMessages = messages.filter { it.userId != currentUserId && !it.readBy.containsKey(currentUserId) }
+                    
+                    if (unreadMessages.isNotEmpty()) {
+                        unreadMessages.forEach { msg ->
+                            repository.markMessageAsRead(channelId, msg.id)
+                        }
+                        // Also ensure the channel summary unread count is reset
+                        markAsRead(channelId)
                     }
                 }
             }
@@ -326,6 +342,8 @@ class ChatViewModel(
         }
     }
 
+    private var draftSaveJob: Job? = null
+
     fun onTextFieldValueChange(newValue: androidx.compose.ui.text.input.TextFieldValue) {
         _uiState.update { it.copy(
             textFieldValue = newValue,
@@ -334,7 +352,9 @@ class ChatViewModel(
         updateTypingStatus(newValue.text.isNotEmpty())
         
         currentChannelId?.let { channelId ->
-            viewModelScope.launch {
+            draftSaveJob?.cancel()
+            draftSaveJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(500) // 500ms debounce as per key knowledge
                 draftRepository.saveDraft(channelId, newValue.text)
             }
         }

@@ -67,9 +67,14 @@ class ChatListViewModel(
         dataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             repository.getChannels().collectLatest { channels ->
+                val prevChannels = _uiState.value.channels
                 _uiState.update { it.copy(channels = channels, isLoading = false) }
-                observeUsersStatus(channels)
-                observeTypingStatuses(channels)
+                
+                // Only restart tracking listeners if the list of channel IDs changed
+                if (prevChannels.map { it.id } != channels.map { it.id }) {
+                    observeUsersStatus(channels)
+                    observeTypingStatuses(channels)
+                }
             }
         }
     }
@@ -145,6 +150,9 @@ class ChatListViewModel(
         val allOtherUserIds = (channelUserIds + contactIds).distinct()
 
         if (allOtherUserIds.isEmpty()) return
+
+        val prevUserIds = _uiState.value.channelUsers.keys
+        if (prevUserIds == allOtherUserIds.toSet()) return
 
         usersJob = viewModelScope.launch {
             val userFlows = allOtherUserIds.map { uid ->

@@ -1,6 +1,7 @@
 package com.example.tasama.domain.model
 
 import kotlinx.serialization.Serializable
+import com.example.tasama.util.FlexibleLongSerializer
 
 @Serializable
 data class User(
@@ -13,9 +14,11 @@ data class User(
     val partnerId: String? = null,
     val partnerRequestFrom: String? = null, // UID of user who sent a request
     val partnerRequestTo: String? = null,   // UID of user to whom request was sent
+    @Serializable(with = FlexibleLongSerializer::class)
     val anniversaryDate: Long? = null,      // Anniversary timestamp
     val latitude: Double? = null,
     val longitude: Double? = null,
+    @Serializable(with = FlexibleLongSerializer::class)
     val lastLocationUpdate: Long? = null,
     val batteryLevel: Float? = null,
     val isCharging: Boolean? = null,

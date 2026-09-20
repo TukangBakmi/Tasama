@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -75,19 +76,29 @@ class DashboardViewModel(
             _uiState.update { it.copy(isLoading = true) }
             
             val userFlow = authRepository.userId.flatMapLatest { uid ->
-                if (uid != null) authRepository.getUserFlow(uid) else kotlinx.coroutines.flow.flowOf(null)
+                if (uid != null) authRepository.getUserFlow(uid).distinctUntilChanged() else kotlinx.coroutines.flow.flowOf(null)
             }
 
+            // Separate flows to reduce massive combine re-execution frequency
+            val transactionsFlow = repository.getTransactionsFlow().distinctUntilChanged()
+            val spacesFlow = savingsRepository.getSavingsSpaces().distinctUntilChanged()
+            val invitationsFlow = savingsRepository.getMyInvitations().distinctUntilChanged()
+            val activitiesFlow = savingsRepository.getGlobalActivityHistory().distinctUntilChanged()
+            val savingsTransactionsFlow = savingsRepository.getGlobalTransactions().distinctUntilChanged()
+            val channelsFlow = chatRepository.getChannels().distinctUntilChanged()
+            val settingsFlow = settingsRepository.settings.distinctUntilChanged()
+            val unreadFlow = activityRepository.hasUnread().distinctUntilChanged()
+
             combine(
-                repository.getTransactionsFlow(),
-                savingsRepository.getSavingsSpaces(),
-                savingsRepository.getMyInvitations(),
-                savingsRepository.getGlobalActivityHistory(),
-                savingsRepository.getGlobalTransactions(),
-                chatRepository.getChannels(),
+                transactionsFlow,
+                spacesFlow,
+                invitationsFlow,
+                activitiesFlow,
+                savingsTransactionsFlow,
+                channelsFlow,
                 userFlow,
-                settingsRepository.settings,
-                activityRepository.hasUnread()
+                settingsFlow,
+                unreadFlow
             ) { args: Array<Any?> ->
                 @Suppress("UNCHECKED_CAST")
                 updateDashboardWith(

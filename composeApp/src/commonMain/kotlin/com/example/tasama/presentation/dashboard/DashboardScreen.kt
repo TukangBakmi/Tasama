@@ -79,7 +79,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // 1. Header Section
-            item {
+            item(key = "header") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -99,7 +99,7 @@ fun DashboardScreen(
             }
 
             // 2. Savings Overview
-            item {
+            item(key = "savings_overview") {
                 val recentSpaces = uiState.recentSavingsSpaces.sortedByDescending { it.updatedAt }.take(2)
                 SavingsOverviewCard(
                     totalBalance = uiState.totalSavingsBalance,
@@ -111,7 +111,7 @@ fun DashboardScreen(
             }
 
             // 3. Financial Overview
-            item {
+            item(key = "financial_overview") {
                 FinancialOverviewSection(
                     summary = uiState.financialSummary,
                     trends = uiState.trendChartData,
@@ -125,14 +125,14 @@ fun DashboardScreen(
             }
 
             // 4. Quick Actions
-            item {
+            item(key = "quick_actions") {
                 QuickActionsRow(
                     onAskAI = onNavigateToAI
                 )
             }
 
             // 5. Invitations & Requests
-            item {
+            item(key = "notifications_section") {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (uiState.hasPendingPartnerRequest) {
                         PendingPartnerRequestSection(

@@ -17,7 +17,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlin.time.Clock
 
 class FirebaseChatRepository(
@@ -26,22 +31,27 @@ class FirebaseChatRepository(
     private val firestore = Firebase.firestore
     private val database = Firebase.database
     private val channelsCollection = firestore.collection("chat_channels")
-
-    override suspend fun cleanup() {
-        println("DEBUG: [SESSION] Cleaning up FirebaseChatRepository")
-        // No longer managing its own scope, tied to sessionScope
-    }
+    private var activeChannelsListenerCount = 0
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun getChannels(): Flow<List<ChatChannel>> {
-        return authRepository.userId.flatMapLatest { uid ->
+    private val sharedChannels: StateFlow<List<ChatChannel>> = authRepository.userId
+        .flatMapLatest { uid ->
             if (uid == null) flowOf(emptyList())
             else {
                 channelsCollection.where { "participantIds" contains uid }
                     .snapshots
+                    .onStart {
+                        activeChannelsListenerCount++
+                        println("DEBUG: [CHAT] Firestore getChannels listener STARTED. Total active: $activeChannelsListenerCount")
+                    }
+                    .onCompletion {
+                        activeChannelsListenerCount--
+                        println("DEBUG: [CHAT] Firestore getChannels listener STOPPED. Total active: $activeChannelsListenerCount")
+                    }
                     .map { snapshot ->
+                        println("DEBUG: [CHAT] Firestore getChannels snapshot received for $uid. Documents: ${snapshot.documents.size}")
                         snapshot.documents.map { it.data(ChatChannel.serializer()) }
-                            .filter { channel -> 
+                            .filter { channel ->
                                 val deletedAt = channel.deletedAt[uid] ?: 0L
                                 deletedAt < channel.lastMessageTimestamp
                             }
@@ -57,7 +67,18 @@ class FirebaseChatRepository(
                     }
             }
         }
+        .stateIn(
+            scope = (authRepository as FirebaseAuthRepository).applicationScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    override suspend fun cleanup() {
+        println("DEBUG: [SESSION] Cleaning up FirebaseChatRepository")
+        // No longer managing its own scope, tied to sessionScope
     }
+
+    override fun getChannels(): Flow<List<ChatChannel>> = sharedChannels
 
     override fun getChannel(channelId: String): Flow<ChatChannel?> {
         return authRepository.userId.flatMapLatest { uid ->
@@ -96,30 +117,44 @@ class FirebaseChatRepository(
                         .limit(20)
                         .snapshots()
                         .map { snapshot ->
-                            snapshot.documents.map { doc ->
+                            val now = Clock.System.now().toEpochMilliseconds()
+                            
+                            // Optimization: Identify messages that need delivery acknowledgment
+                            val undeliveredDocs = snapshot.documents.filter { doc ->
                                 val msg = doc.data(ChatMessage.serializer())
-                                
-                                // Auto-update deliveredTo when fetched by recipient
-                                if (msg.userId != uid && !msg.deliveredTo.containsKey(uid)) {
-                                    authRepository.sessionScope.launch {
-                                        try {
-                                            val now = Clock.System.now().toEpochMilliseconds()
-                                            doc.reference.updateFields {
+                                msg.userId != uid && !msg.deliveredTo.containsKey(uid)
+                            }
+
+                            if (undeliveredDocs.isNotEmpty()) {
+                                authRepository.sessionScope.launch {
+                                    try {
+                                        val batch = firestore.batch()
+                                        undeliveredDocs.forEach { doc ->
+                                            batch.updateFields(doc.reference) {
                                                 "deliveredTo.$uid" to now
                                             }
-                                            
-                                            // Update channel's lastMessageDeliveredTo if this is the last message
-                                            val channelData = channelRef.get().data(ChatChannel.serializer())
-                                            if (channelData.lastMessageId == msg.id) {
-                                                channelRef.updateFields {
-                                                    "lastMessageDeliveredTo.$uid" to now
-                                                }
+                                        }
+                                        
+                                        // Update channel's lastMessageDeliveredTo if any of these are the last message
+                                        val channelData = try { channelRef.get().data(ChatChannel.serializer()) } catch (_: Exception) { null }
+                                        if (channelData != null && undeliveredDocs.any { it.id == channelData.lastMessageId }) {
+                                            batch.updateFields(channelRef) {
+                                                "lastMessageDeliveredTo.$uid" to now
                                             }
-                                        } catch (_: Exception) {}
-                                    }
+                                        }
+                                        batch.commit()
+                                    } catch (_: Exception) {}
                                 }
+                            }
 
-                                msg.copy(isFromMe = msg.userId == uid)
+                            snapshot.documents.mapNotNull { doc ->
+                                try {
+                                    val msg = doc.data(ChatMessage.serializer())
+                                    msg.copy(isFromMe = msg.userId == uid)
+                                } catch (e: Exception) {
+                                    println("ERROR: [CHAT] Message decoding failed for ${doc.id}: ${e.message}")
+                                    null
+                                }
                             }
                             .filter { !it.deletedFor.contains(uid) }
                             .sortedBy { it.timestamp }
@@ -149,9 +184,14 @@ class FirebaseChatRepository(
                 .limit(limit)
                 .get()
                 .documents
-                .map {
-                    val msg = it.data(ChatMessage.serializer())
-                    msg.copy(isFromMe = msg.userId == uid)
+                .mapNotNull { doc ->
+                    try {
+                        val msg = doc.data(ChatMessage.serializer())
+                        msg.copy(isFromMe = msg.userId == uid)
+                    } catch (e: Exception) {
+                        println("ERROR: [CHAT] getMoreMessages decoding failed for ${doc.id}: ${e.message}")
+                        null
+                    }
                 }
                 .filter { !it.deletedFor.contains(uid) }
                 .sortedBy { it.timestamp }
@@ -260,30 +300,43 @@ class FirebaseChatRepository(
         val newUnreadCounts = channel.unreadCounts.toMutableMap()
         newUnreadCounts[userId] = 0
         
-        channelRef.updateFields { "unreadCounts" to newUnreadCounts }
-        
         // Also mark all messages in this channel as read for this user
         val now = Clock.System.now().toEpochMilliseconds()
-        val messages = channelRef.collection("messages")
-            .where { "userId" notEqualTo userId }
+        
+        // Optimization: Only query messages that haven't been read by this user yet
+        // We query from lastReadTime. The loop below will handle !msg.readBy.containsKey(userId)
+        val lastReadTime = channel.lastMessageReadBy[userId] ?: 0L
+        val unreadMessages = channelRef.collection("messages")
+            .where { "timestamp" greaterThanOrEqualTo lastReadTime }
             .get()
             .documents
-        
-        messages.forEach { doc ->
+
+        if (unreadMessages.isEmpty() && (channel.unreadCounts[userId] ?: 0) == 0) return
+
+        val batch = firestore.batch()
+        val channelUpdates = mutableMapOf<String, Any?>()
+        channelUpdates["unreadCounts"] = newUnreadCounts
+
+        unreadMessages.forEach { doc ->
             val msg = doc.data(ChatMessage.serializer())
             if (msg.userId != userId && !msg.readBy.containsKey(userId)) {
-                doc.reference.updateFields {
+                batch.updateFields(doc.reference) {
                     "readBy.$userId" to now
                 }
                 
-                // Update channel's lastMessageReadBy if this is the last message
                 if (channel.lastMessageId == msg.id) {
-                    channelRef.updateFields {
-                        "lastMessageReadBy.$userId" to now
-                    }
+                    channelUpdates["lastMessageReadBy.$userId"] = now
                 }
             }
         }
+
+        // Single update call for the channel document
+        batch.updateFields(channelRef) {
+            channelUpdates.forEach { (field, value) ->
+                field to value
+            }
+        }
+        batch.commit()
     }
 
     override suspend fun deleteChannel(channelId: String) {

@@ -52,6 +52,8 @@ import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.FlowPreview
 import com.example.tasama.util.reverseGeocode
 import com.example.tasama.util.calculateDistance
 import com.example.tasama.util.getPointAtDistance
@@ -215,6 +217,15 @@ actual fun MapContent(
         position = CameraPosition.fromLatLngZoom(partnerLocation ?: LatLng(-6.2000, 106.8166), 12f)
     }
 
+    // Optimization: Debounce camera position updates to avoid expensive calculations during every micro-movement
+    var debouncedCameraPosition by remember { mutableStateOf(cameraPositionState.position) }
+    @OptIn(FlowPreview::class)
+    LaunchedEffect(cameraPositionState) {
+        snapshotFlow { cameraPositionState.position }
+            .debounce(150)
+            .collect { debouncedCameraPosition = it }
+    }
+
     val uiSettings = remember {
         MapUiSettings(
             zoomControlsEnabled = false,
@@ -302,11 +313,11 @@ actual fun MapContent(
         isPlacementModeEnabled = false
     }
 
-    // Derived states for real-time intersection and visibility (Optimization: Responsive to Camera Movement)
-    val markerData by remember(currentMyLocation, currentPartnerLocation, isTogether, mapSize, density) {
+    // Derived states for real-time intersection and visibility (Optimization: Responsive to Debounced Camera Movement)
+    val markerData by remember(currentMyLocation, currentPartnerLocation, isTogether, mapSize, density, debouncedCameraPosition) {
         derivedStateOf {
-            // Read position to trigger recomposition on camera movement
-            cameraPositionState.position 
+            // Using debouncedCameraPosition to trigger re-calculation only when movement slows down or stops
+            val position = debouncedCameraPosition
             val projection = cameraPositionState.projection ?: return@derivedStateOf null
 
             if (mapSize == IntSize.Zero || (currentMyLocation == null && currentPartnerLocation == null)) {

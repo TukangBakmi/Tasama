@@ -171,6 +171,7 @@ fun MainScreen(
                                 println("DEBUG: [TasamaSplash] MainScreen - AuthState.Authenticated (Navigating to Dashboard)")
                             }
                             val hasPartner by viewModel.hasPartner.collectAsState()
+                            val settings by viewModel.settings.collectAsState()
                             val unreadCount by viewModel.unreadChannelsCount.collectAsState()
                             val hasPendingRequest by viewModel.hasPendingPartnerRequest.collectAsState()
                             val hasPendingSavingsInvitations by viewModel.hasPendingSavingsInvitations.collectAsState()
@@ -198,7 +199,7 @@ fun MainScreen(
                                 ) {
                                     PlatformBackHandler(enabled = pagerState.currentPage != 0) {
                                         scope.launch {
-                                            pagerState.animateScrollToPage(0)
+                                            pagerState.scrollToPage(0)
                                         }
                                     }
                                     Scaffold(
@@ -221,7 +222,7 @@ fun MainScreen(
                                                             selected = isSelected,
                                                             onClick = {
                                                                 scope.launch {
-                                                                    pagerState.animateScrollToPage(index)
+                                                                    pagerState.scrollToPage(index)
                                                                 }
                                                             },
                                                             icon = {
@@ -283,13 +284,14 @@ fun MainScreen(
                                     ) { padding ->
                                         val currentItem = items[pagerState.currentPage]
                                         val isGuest = (authState as? AuthState.Authenticated)?.isGuest == true
+                                        val partnerMapEnabled = settings.partnerMapEnabled
 
                                         HorizontalPager(
                                             state = pagerState,
                                             modifier = Modifier.fillMaxSize(),
                                             beyondViewportPageCount = 0,
                                             userScrollEnabled = if (currentItem == BottomNavItem.Partner) {
-                                                !hasPartner
+                                                !hasPartner || !settings.partnerMapEnabled
                                             } else true
                                         ) { page ->
                                             Box(
@@ -300,12 +302,12 @@ fun MainScreen(
                                                     BottomNavItem.Dashboard -> DashboardScreen(
                                                         onNavigateToSavings = {
                                                             scope.launch {
-                                                                pagerState.animateScrollToPage(1)
+                                                                pagerState.scrollToPage(1)
                                                             }
                                                         },
                                                         onNavigateToPartner = {
                                                             scope.launch {
-                                                                pagerState.animateScrollToPage(3)
+                                                                pagerState.scrollToPage(3)
                                                             }
                                                         },
                                                         onNavigateToSavingsDetail = { spaceId ->
@@ -483,7 +485,7 @@ fun MainScreen(
                                                         navController.popBackStack("tabs", inclusive = false)
                                                     }
                                                     scope.launch {
-                                                        pagerState.animateScrollToPage(index)
+                                                        pagerState.scrollToPage(index)
                                                     }
                                                 }
                                             } else {

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import com.example.tasama.presentation.components.PlatformBackHandler
@@ -537,7 +539,7 @@ fun AIInput(
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
                 .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -545,7 +547,7 @@ fun AIInput(
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 4.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shadowElevation = 1.dp
             ) {
@@ -666,8 +668,8 @@ fun AIContent(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             reverseLayout = true,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
         ) {
             if (uiState.isTyping) {
                 item {
@@ -706,15 +708,22 @@ fun AIContent(
                     date != nextDate
                 }
 
+                val isFirstInGroup = if (index == reversedMessages.size - 1) true else {
+                    reversedMessages[index + 1].isFromMe != message.isFromMe || showHeader
+                }
+
                 Column {
                     if (showHeader) {
                         DateHeader(date)
                         Spacer(modifier = Modifier.height(8.dp))
+                    } else if (isFirstInGroup) {
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
                     val isSelected = uiState.selectedMessageIds.contains(message.id)
                     MessageBubble(
                         message = message,
                         isSelected = isSelected,
+                        isFirstInGroup = isFirstInGroup,
                         undoableTransaction = uiState.undoableTransaction,
                         onUndoClick = onUndoClick,
                         onLongClick = { onMessageLongClick(message.id) },
@@ -768,6 +777,7 @@ fun AIContent(
 fun MessageBubble(
     message: ChatMessage,
     isSelected: Boolean = false,
+    isFirstInGroup: Boolean = true,
     undoableTransaction: UndoableTransaction? = null,
     onUndoClick: (String, String) -> Unit = { _, _ -> },
     onLongClick: () -> Unit = {},
@@ -782,6 +792,9 @@ fun MessageBubble(
         isUser -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
+
+    val rowBackgroundAlpha = if (isSelected) 0.18f else 0f
+
     val contentColor = if (isUser) {
         MaterialTheme.colorScheme.onPrimaryContainer
     } else {
@@ -789,20 +802,30 @@ fun MessageBubble(
     }
 
     val shape = if (isUser) {
-        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
+        RoundedCornerShape(
+            topStart = 12.dp, 
+            topEnd = if (isFirstInGroup) 0.dp else 12.dp, 
+            bottomEnd = 12.dp, 
+            bottomStart = 12.dp
+        )
     } else {
-        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
+        RoundedCornerShape(
+            topStart = if (isFirstInGroup) 0.dp else 12.dp, 
+            topEnd = 12.dp, 
+            bottomEnd = 12.dp, 
+            bottomStart = 12.dp
+        )
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = rowBackgroundAlpha))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 20.dp, vertical = 2.dp),
         contentAlignment = alignment
     ) {
         Surface(
@@ -810,14 +833,20 @@ fun MessageBubble(
             contentColor = contentColor,
             shape = shape,
             shadowElevation = 0.5.dp,
-            modifier = Modifier.widthIn(max = 280.dp)
+            modifier = Modifier
+                .clip(shape)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Column {
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .widthIn(max = 280.dp)
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 6.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = message.text,
+                        text = message.text + "\u00A0".repeat(15),
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        modifier = Modifier.wrapContentWidth(Alignment.Start).padding(bottom = 2.dp)
                     )
 
                     val timeString = remember(message.timestamp) {
@@ -835,7 +864,9 @@ fun MessageBubble(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End,
-                        modifier = Modifier.align(Alignment.End)
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(y = 2.dp)
                     ) {
                         if (timeString.isNotEmpty()) {
                             Text(
@@ -845,22 +876,31 @@ fun MessageBubble(
                                 fontSize = 10.sp
                             )
                         }
-                    }
-
-                    if (isUndoable) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { onUndoClick(undoableTransaction.spaceId, undoableTransaction.transactionId) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                "Batal",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
+                        if (isUser) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.DoneAll,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = Color(0xFF34B7F1)
                             )
                         }
+                    }
+                }
+
+                if (isUndoable) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { onUndoClick(undoableTransaction.spaceId, undoableTransaction.transactionId) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            "Batal",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

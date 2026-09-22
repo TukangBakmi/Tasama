@@ -241,16 +241,16 @@ class ChatViewModel(
     private fun observeDraft(channelId: String) {
         draftJob?.cancel()
         draftJob = viewModelScope.launch {
-            draftRepository.getDraft(channelId).collect { draft ->
-                if (draft != null && _uiState.value.inputText.isEmpty()) {
-                    _uiState.update { it.copy(
-                        inputText = draft,
-                        textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
-                            text = draft,
-                            selection = androidx.compose.ui.text.TextRange(draft.length)
-                        )
-                    ) }
-                }
+            // Load draft only once when entering the chat to prevent race conditions with sendMessage
+            val draft = draftRepository.getDraft(channelId).firstOrNull()
+            if (!draft.isNullOrBlank() && _uiState.value.inputText.isEmpty()) {
+                _uiState.update { it.copy(
+                    inputText = draft,
+                    textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                        text = draft,
+                        selection = androidx.compose.ui.text.TextRange(draft.length)
+                    )
+                ) }
             }
         }
     }
@@ -489,14 +489,26 @@ class ChatViewModel(
 
     fun sendMessage() {
         val channelId = currentChannelId ?: return
-        val trimmedMessage = _uiState.value.inputText.trim()
+        val originalText = _uiState.value.inputText
+        val originalTextFieldValue = _uiState.value.textFieldValue
+        val trimmedMessage = originalText.trim()
         if (trimmedMessage.isEmpty() || _uiState.value.isSending) return
 
         val replyingTo = _uiState.value.replyingToMessage
 
-        // Lock sending immediately to prevent duplicates from fast taps
-        _uiState.update { it.copy(isSending = true) }
+        // Lock sending immediately, disable send button, clear input fields in the same frame
+        _uiState.update {
+            it.copy(
+                isSending = true,
+                inputText = "",
+                textFieldValue = androidx.compose.ui.text.input.TextFieldValue(""),
+                replyingToMessage = null
+            )
+        }
         updateTypingStatus(false)
+        
+        // Cancel any pending draft save to prevent it from overwriting the clear we do later
+        draftSaveJob?.cancel()
 
         viewModelScope.launch {
             try {
@@ -510,22 +522,21 @@ class ChatViewModel(
                     repliedMessageType = null, // For now, we only have text messages
                     repliedMessageTimestamp = replyingTo?.timestamp
                 )
-                // Clear input only after successful send
                 _uiState.update {
                     it.copy(
-                        isSending = false,
-                        inputText = "",
-                        textFieldValue = androidx.compose.ui.text.input.TextFieldValue(""),
-                        replyingToMessage = null
+                        isSending = false
                     )
                 }
                 // Clear draft on successful send
                 draftRepository.clearDraft(channelId)
             } catch (e: Exception) {
-                // Restore sending state on error so user can retry
+                // Restore sending state and text on error so user can retry
                 _uiState.update {
                     it.copy(
                         isSending = false,
+                        inputText = originalText,
+                        textFieldValue = originalTextFieldValue,
+                        replyingToMessage = replyingTo,
                         error = e.message ?: "Failed to send message"
                     )
                 }

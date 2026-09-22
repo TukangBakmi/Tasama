@@ -186,25 +186,6 @@ fun ChatScreen(
                                 IconButton(onClick = viewModel::showDeleteConfirmation) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
                                 }
-                            } else {
-                                var showMenu by remember { mutableStateOf(false) }
-                                IconButton(onClick = { showMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                                }
-                                DropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Hapus Chat") },
-                                        onClick = {
-                                            showMenu = false
-                                            // TODO: Implement clear history or similar if needed
-                                            // For now just show delete confirmation for all messages if supported
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                                    )
-                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -330,6 +311,19 @@ fun ChatContent(
         }
     }
 
+    // Auto-scroll to show typing indicator if near bottom when someone starts typing
+    val isTypingShowing = uiState.typingIndicatorText != null
+    LaunchedEffect(isTypingShowing) {
+        if (isTypingShowing) {
+            // If the user is near the bottom (looking at the latest messages),
+            // auto-scroll to show the typing indicator.
+            val isNearBottom = listState.firstVisibleItemIndex <= 1
+            if (isNearBottom) {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
+
     // Detect when user scrolls to the "top" (which is now the end of the list)
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -371,7 +365,29 @@ fun ChatContent(
 
     val showScrollToBottom by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 10
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) {
+                false
+            } else {
+                val firstVisibleIndex = listState.firstVisibleItemIndex
+                val firstVisibleOffset = listState.firstVisibleItemScrollOffset
+                
+                // If typing is showing, the bottom-most item is at index 0 (typing indicator).
+                // We consider "at the bottom" to be looking at the typing indicator or the first message.
+                val thresholdIndex = if (uiState.typingIndicatorText != null) 1 else 0
+                
+                if (firstVisibleIndex > thresholdIndex) {
+                    true
+                } else if (firstVisibleIndex == thresholdIndex) {
+                    // Item at thresholdIndex is currently at the bottom. 
+                    // Show FAB only if it has scrolled up by more than 100 pixels.
+                    firstVisibleOffset > 100
+                } else {
+                    // Looking at index 0 when typing is active
+                    false
+                }
+            }
         }
     }
 
@@ -381,7 +397,7 @@ fun ChatContent(
             modifier = Modifier.fillMaxSize(),
             reverseLayout = true,
             contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
         ) {
             if (uiState.typingIndicatorText != null) {
                 item {
@@ -418,10 +434,16 @@ fun ChatContent(
                     date != nextDate
                 }
 
+                val isFirstInGroup = if (index == reversedMessages.size - 1) true else {
+                    reversedMessages[index + 1].isFromMe != message.isFromMe || showHeader
+                }
+
                 Column {
                     if (showHeader) {
                         DateHeader(date, modifier = Modifier.padding(horizontal = 12.dp))
                         Spacer(modifier = Modifier.height(8.dp))
+                    } else if (isFirstInGroup) {
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
                     val isSelected = uiState.selectedMessageIds.contains(message.id)
                     val isHighlighted = uiState.highlightedMessageId == message.id
@@ -429,6 +451,7 @@ fun ChatContent(
                         message = message,
                         isSelected = isSelected,
                         isHighlighted = isHighlighted,
+                        isFirstInGroup = isFirstInGroup,
                         onLongClick = { onMessageLongClick(message.id) },
                         onClick = { onMessageClick(message.id) },
                         onSwipeToReply = { onSwipeToReply(message) },
@@ -485,6 +508,7 @@ fun MessageBubble(
     message: ChatMessage,
     isSelected: Boolean,
     isHighlighted: Boolean,
+    isFirstInGroup: Boolean = true,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
     onSwipeToReply: () -> Unit,
@@ -528,9 +552,19 @@ fun MessageBubble(
     }
 
     val shape = if (isUser) {
-        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
+        RoundedCornerShape(
+            topStart = 12.dp, 
+            topEnd = if (isFirstInGroup) 0.dp else 12.dp, 
+            bottomEnd = 12.dp, 
+            bottomStart = 12.dp
+        )
     } else {
-        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
+        RoundedCornerShape(
+            topStart = if (isFirstInGroup) 0.dp else 12.dp, 
+            topEnd = 12.dp, 
+            bottomEnd = 12.dp, 
+            bottomStart = 12.dp
+        )
     }
 
     Box(
@@ -541,7 +575,16 @@ fun MessageBubble(
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        val newOffset = (offsetX.value + dragAmount).coerceIn(0f, 150f)
+                        val resistance = if (dragAmount > 0) {
+                            when {
+                                offsetX.value > 120f -> 0.1f
+                                offsetX.value > 90f -> 0.25f
+                                else -> 0.6f
+                            }
+                        } else {
+                            1f
+                        }
+                        val newOffset = maxOf(0f, offsetX.value + (dragAmount * resistance))
                         scope.launch {
                             offsetX.snapTo(newOffset)
                         }
@@ -594,25 +637,29 @@ fun MessageBubble(
             shape = shape,
             shadowElevation = 0.5.dp,
             modifier = Modifier
-                .widthIn(max = 280.dp)
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .clip(shape)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Column {
-                    if (message.repliedMessageId != null) {
-                        ReplyPreview(
-                            senderName = message.repliedMessageSenderName ?: "Partner",
-                            text = message.repliedMessageText ?: "",
-                            modifier = Modifier.padding(bottom = 4.dp),
-                            onReplyClick = { onReplyClick(message.repliedMessageId, 0L) }
-                        )
-                    }
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .widthIn(max = 280.dp)
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 6.dp)
+            ) {
+                if (message.repliedMessageId != null) {
+                    ReplyPreview(
+                        senderName = message.repliedMessageSenderName ?: "Partner",
+                        text = message.repliedMessageText ?: "",
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        onReplyClick = { onReplyClick(message.repliedMessageId, 0L) }
+                    )
+                }
 
+                Box(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = message.text,
+                        text = message.text + "\u00A0".repeat(15),
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 18.sp),
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        modifier = Modifier.wrapContentWidth(Alignment.Start).padding(bottom = 2.dp)
                     )
 
                     val timeString = remember(message.timestamp) {
@@ -630,7 +677,9 @@ fun MessageBubble(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End,
-                        modifier = Modifier.align(Alignment.End)
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(y = 2.dp)
                     ) {
                         if (timeString.isNotEmpty()) {
                             Text(
@@ -795,14 +844,14 @@ fun ChatInput(
                 )
             }
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = 4.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shadowElevation = 1.dp
                 ) {

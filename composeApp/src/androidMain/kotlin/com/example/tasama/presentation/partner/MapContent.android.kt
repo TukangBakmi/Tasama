@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +65,7 @@ import com.example.tasama.util.findRayIntersection
 import com.example.tasama.util.applyUIAvoidance
 import com.example.tasama.util.disableHardwareBitmaps
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
@@ -142,19 +144,19 @@ actual fun MapContent(
 ) {
     val density = LocalDensity.current
 
-    var showDeletePlaceDialog by remember { mutableStateOf<Place?>(null) }
     var isPartnerInfoVisible by remember { mutableStateOf(false) }
     var showAddPlaceSheet by remember { mutableStateOf<LatLng?>(null) }
+    var radiusEditCenter by remember { mutableStateOf<LatLng?>(null) }
     var editingPlace by remember { mutableStateOf<Place?>(null) }
     var tempRadius by remember { mutableFloatStateOf(200f) }
     var tempColor by remember { mutableStateOf(Color(0xFF2196F3)) }
     var tempIconName by remember { mutableStateOf("Location") }
     var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
 
-    LaunchedEffect(showAddPlaceSheet, editingPlace) {
-        if (showAddPlaceSheet != null) {
+    LaunchedEffect(showAddPlaceSheet, radiusEditCenter, editingPlace) {
+        if (showAddPlaceSheet != null || radiusEditCenter != null) {
             tempRadius = editingPlace?.radius?.toFloat() ?: 200f
             tempColor = editingPlace?.color?.let { Color(it.toInt()) } ?: Color(0xFF2196F3)
             tempIconName = editingPlace?.iconName ?: "Location"
@@ -226,13 +228,16 @@ actual fun MapContent(
             .collect { debouncedCameraPosition = it }
     }
 
-    val uiSettings = remember {
-        MapUiSettings(
-            zoomControlsEnabled = false,
-            myLocationButtonEnabled = false,
-            compassEnabled = false,
-            mapToolbarEnabled = false
-        )
+    val uiSettings by remember(isPlacementModeEnabled, radiusEditCenter) {
+        derivedStateOf {
+            MapUiSettings(
+                compassEnabled = false,
+                myLocationButtonEnabled = false,
+                mapToolbarEnabled = false,
+                zoomControlsEnabled = false,
+                scrollGesturesEnabled = !isPlacementModeEnabled && radiusEditCenter == null
+            )
+        }
     }
 
     val distance by remember(currentMyLocation, currentPartnerLocation) {
@@ -443,20 +448,33 @@ actual fun MapContent(
             uiSettings = uiSettings,
             onMapLoaded = { isMapLoaded = true },
             onMapClick = { latLng ->
-                if (isPlacementModeEnabled) return@GoogleMap
-                println("DEBUG: Map clicked at $latLng")
-                isPartnerInfoVisible = false
-                
-                val clickedPlace = places.find { place ->
-                    val distanceValue = calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude))
-                    distanceValue <= maxOf(place.radius, 50.0) 
-                }
-                if (clickedPlace != null) {
-                    println("DEBUG: Map click detected place: ${clickedPlace.name}")
-                    editingPlace = clickedPlace
-                    showAddPlaceSheet = LatLng(clickedPlace.latitude, clickedPlace.longitude)
-                }
-            },
+            if (isPlacementModeEnabled) return@GoogleMap
+            
+            if (radiusEditCenter != null) {
+                // If user clicks anywhere while editing radius, cancel edit mode
+                radiusEditCenter = null
+                editingPlace = null
+                return@GoogleMap
+            }
+            
+            println("DEBUG: Map clicked at $latLng")
+            isPartnerInfoVisible = false
+            
+            val clickedPlace = places.find { place ->
+                val distanceValue = calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude))
+                distanceValue <= maxOf(place.radius, 50.0) 
+            }
+            if (clickedPlace != null) {
+                println("DEBUG: Map click detected place: ${clickedPlace.name}")
+                editingPlace = clickedPlace
+                radiusEditCenter = LatLng(clickedPlace.latitude, clickedPlace.longitude)
+                showAddPlaceSheet = null
+            } else {
+                editingPlace = null
+                radiusEditCenter = null
+                showAddPlaceSheet = null
+            }
+        },
             contentPadding = WindowInsets(0).asPaddingValues(),
             properties = mapProperties,
             onMapLongClick = { latLng ->
@@ -470,10 +488,13 @@ actual fun MapContent(
                     calculateDistance(Location(latLng.latitude, latLng.longitude), Location(place.latitude, place.longitude)) <= place.radius
                 }
                 if (existingPlace != null) {
-                    showDeletePlaceDialog = existingPlace
+                    editingPlace = existingPlace
+                    showAddPlaceSheet = LatLng(existingPlace.latitude, existingPlace.longitude)
+                    radiusEditCenter = null
                 } else {
                     editingPlace = null
                     showAddPlaceSheet = latLng
+                    radiusEditCenter = null
                 }
             }
         ) {
@@ -605,8 +626,8 @@ actual fun MapContent(
             }
 
             // Interactive Radius Editor Preview
-            if (showAddPlaceSheet != null) {
-                val center = showAddPlaceSheet!!
+            if (showAddPlaceSheet != null || radiusEditCenter != null) {
+                val center = radiusEditCenter ?: showAddPlaceSheet!!
                 
     Circle(
         center = center,
@@ -616,51 +637,31 @@ actual fun MapContent(
         strokeWidth = 2f
     )
 
-                val handleState = rememberMarkerState(
-                    position = LatLng(
-                        getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).latitude,
-                        getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).longitude
-                    )
-                )
-                
-                LaunchedEffect(tempRadius) {
-                    val target = getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0)
-                    val targetPos = LatLng(target.latitude, target.longitude)
-                    if (handleState.position != targetPos) {
-                        handleState.position = targetPos
-                    }
+                MarkerComposable(
+                    state = rememberUpdatedMarkerState(
+                        LatLng(
+                            getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).latitude,
+                            getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 90.0).longitude
+                        )
+                    ),
+                    anchor = Offset(0.5f, 0.5f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = tempColor,
+                        modifier = Modifier.size(16.dp),
+                        border = BorderStroke(2.dp, Color.White),
+                        shadowElevation = 2.dp
+                    ) {}
                 }
 
-                Marker(
-                    state = handleState,
-                    draggable = true,
-                    flat = true,
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-                    alpha = 0.8f,
-                    title = "Drag to resize",
-                )
-
-                // Update radius while dragging
-                LaunchedEffect(handleState.isDragging) {
-                    if (handleState.isDragging) {
-                        while (handleState.isDragging) {
-                            val dist = calculateDistance(
-                                Location(center.latitude, center.longitude),
-                                Location(handleState.position.latitude, handleState.position.longitude)
-                            )
-                            tempRadius = dist.toFloat().coerceIn(50f, 2000f)
-                            delay(16) // ~60fps update
-                        }
-                    }
-                }
-                
                 // Radius label marker
                 val labelLoc = getPointAtDistance(center.latitude, center.longitude, tempRadius.toDouble(), 75.0)
                 val labelPos = LatLng(labelLoc.latitude, labelLoc.longitude)
-    MarkerComposable(
-        state = rememberUpdatedMarkerState(labelPos),
-        anchor = Offset(0.5f, 0.5f)
-    ) {
+                MarkerComposable(
+                    state = rememberUpdatedMarkerState(labelPos),
+                    anchor = Offset(0.5f, 0.5f)
+                ) {
                     Surface(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                         shape = RoundedCornerShape(8.dp),
@@ -668,9 +669,10 @@ actual fun MapContent(
                         modifier = Modifier.padding(4.dp)
                     ) {
                         Text(
-                            text = "${tempRadius.toInt()} m",
+                            text = "${tempRadius.toInt()} m\n(Drag anywhere to resize)",
+                            textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = tempColor
                         )
@@ -762,7 +764,7 @@ actual fun MapContent(
                 },
                 sheetState = bottomSheetState
             ) {
-                Box(modifier = Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp)) {
                     AddPlaceSheetContent(
                         location = showAddPlaceSheet!!,
                         initialPlace = editingPlace,
@@ -776,9 +778,76 @@ actual fun MapContent(
                             onAddPlace(place)
                             showAddPlaceSheet = null
                             editingPlace = null
+                        },
+                        onDeletePlace = {
+                            editingPlace?.let { onDeletePlace(it.id) }
+                            showAddPlaceSheet = null
+                            editingPlace = null
                         }
                     )
                     com.example.tasama.presentation.components.AppTransientFeedbackOverlay()
+                }
+            }
+        }
+
+        // Radius Edit Overlay (Full Screen Touch Interceptor)
+        if (radiusEditCenter != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val projection = cameraPositionState.projection
+                            if (projection != null) {
+                                val currentScreenPoint = Point(change.position.x.toInt(), change.position.y.toInt())
+                                val dragLatLng = projection.fromScreenLocation(currentScreenPoint)
+                                val dist = calculateDistance(
+                                    Location(radiusEditCenter!!.latitude, radiusEditCenter!!.longitude),
+                                    Location(dragLatLng.latitude, dragLatLng.longitude)
+                                )
+                                tempRadius = dist.toFloat().coerceIn(50f, 2000f)
+                            }
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                radiusEditCenter = null
+                                editingPlace = null
+                            }
+                        )
+                    }
+            )
+        }
+
+        // Save Radius Button Overlay
+        AnimatedVisibility(
+            visible = radiusEditCenter != null && showAddPlaceSheet == null,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Button(
+                    onClick = {
+                        radiusEditCenter = null
+                        editingPlace = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = {
+                        editingPlace?.let { place ->
+                            onAddPlace(place.copy(radius = tempRadius.toDouble()))
+                        }
+                        radiusEditCenter = null
+                        editingPlace = null
+                    }
+                ) {
+                    Text("Save Radius")
                 }
             }
         }
@@ -1102,30 +1171,6 @@ actual fun MapContent(
                 }
             }
         }
-
-        if (showDeletePlaceDialog != null) {
-            AlertDialog(
-                onDismissRequest = { showDeletePlaceDialog = null },
-                title = { Text("Delete Place") },
-                text = { Text("Are you sure you want to delete \"${showDeletePlaceDialog?.name}\"? You will no longer receive notifications for this location.") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDeletePlaceDialog?.let { onDeletePlace(it.id) }
-                            showDeletePlaceDialog = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Delete")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeletePlaceDialog = null }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
     }
 }
 
@@ -1139,7 +1184,8 @@ fun AddPlaceSheetContent(
     onColorChange: (Color) -> Unit,
     selectedIconName: String,
     onIconChange: (String) -> Unit,
-    onAddPlace: (Place) -> Unit
+    onAddPlace: (Place) -> Unit,
+    onDeletePlace: (() -> Unit)? = null
 ) {
     var name by remember { mutableStateOf(initialPlace?.name ?: "") }
     var address by remember { mutableStateOf(initialPlace?.address ?: "Fetching address...") }
@@ -1185,8 +1231,7 @@ fun AddPlaceSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
@@ -1378,6 +1423,17 @@ fun AddPlaceSheetContent(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(if (initialPlace == null) "Save Place" else "Update Place")
+        }
+
+        if (initialPlace != null && onDeletePlace != null) {
+            OutlinedButton(
+                onClick = onDeletePlace,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete Place")
+            }
         }
         
         Spacer(modifier = Modifier.height(16.dp))

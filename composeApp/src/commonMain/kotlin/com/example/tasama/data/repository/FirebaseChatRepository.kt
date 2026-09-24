@@ -9,10 +9,12 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.database.database
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.firestore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -242,29 +244,48 @@ class FirebaseChatRepository(
         val newUnreadCounts = channel.unreadCounts.toMutableMap()
         
         var shouldIncrementUnread = true
+        val newDeliveredTo = mutableMapOf<String, Long>()
+        val newReadBy = mutableMapOf<String, Long>()
+
         if (otherParticipantId != null) {
             // Check if the other user has this channel as their active channel
             try {
                 val otherUserDoc = firestore.collection("users").document(otherParticipantId).get()
                 val activeChannel = otherUserDoc.get<String?>("activeChannelId")
+                
+                // If they have the channel open, mark as read immediately
                 if (activeChannel == channelId) {
                     shouldIncrementUnread = false
+                    newDeliveredTo[otherParticipantId] = now
+                    newReadBy[otherParticipantId] = now
+                } else {
+                    // Check if they are online to mark as delivered
+                    val presenceSnapshot = database.reference("status/$otherParticipantId/state").valueEvents.firstOrNull()
+                    val presenceStatus = presenceSnapshot?.value<String?>()
+                    if (presenceStatus == "online") {
+                        newDeliveredTo[otherParticipantId] = now
+                    }
                 }
             } catch (_: Exception) {}
         }
+
+        val finalMessage = newMessage.copy(
+            deliveredTo = newDeliveredTo,
+            readBy = newReadBy
+        )
 
         if (shouldIncrementUnread && otherParticipantId != null) {
             newUnreadCounts[otherParticipantId] = (newUnreadCounts[otherParticipantId] ?: 0) + 1
         }
 
-        channelRef.collection("messages").document(id).set(ChatMessage.serializer(), newMessage)
+        channelRef.collection("messages").document(id).set(ChatMessage.serializer(), finalMessage)
         channelRef.updateFields {
             "lastMessage" to (text as Any?)
             "lastMessageId" to (id as Any?)
             "lastMessageTimestamp" to (now as Any?)
             "lastMessageSenderId" to (userId as Any?)
-            "lastMessageDeliveredTo" to (emptyMap<String, Long>() as Any?)
-            "lastMessageReadBy" to (emptyMap<String, Long>() as Any?)
+            "lastMessageDeliveredTo" to (newDeliveredTo as Any?)
+            "lastMessageReadBy" to (newReadBy as Any?)
             "unreadCounts" to (newUnreadCounts as Any?)
         }
     }

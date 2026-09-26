@@ -1138,24 +1138,33 @@ actual fun MapContent(
                 horizontalAlignment = Alignment.End
             ) {
 
-                // Compass / Mata Angin Button (Resets bearing to North, rotates with map orientation)
+                // Compass / Mata Angin Button (Visible ONLY when map is rotated away from North)
                 val currentBearing = cameraPositionState.position.bearing
-                SmallFloatingActionButton(
-                    onClick = {
-                        scope.launch {
-                            val currentPos = cameraPositionState.position
-                            val newPos = CameraPosition.builder(currentPos)
-                                .bearing(0f)
-                                .tilt(0f)
-                                .build()
-                            cameraPositionState.animate(CameraUpdateFactory.newCameraPosition(newPos), 500)
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
+                val currentTilt = cameraPositionState.position.tilt
+                val isMapRotated = abs(currentBearing) > 1f || abs(currentTilt) > 1f
+
+                AnimatedVisibility(
+                    visible = isMapRotated,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut()
                 ) {
-                    CompassIcon(bearing = currentBearing)
+                    SmallFloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                val currentPos = cameraPositionState.position
+                                val newPos = CameraPosition.builder(currentPos)
+                                    .bearing(0f)
+                                    .tilt(0f)
+                                    .build()
+                                cameraPositionState.animate(CameraUpdateFactory.newCameraPosition(newPos), 500)
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape
+                    ) {
+                        CompassIcon(bearing = currentBearing)
+                    }
                 }
 
                 // Recenter/Fit User & Partner Button

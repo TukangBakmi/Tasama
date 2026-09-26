@@ -370,7 +370,7 @@ private fun getActivityIconConfig(
             containerColor = Color(0xFFFCE4EC),
             iconColor = Color(0xFFC2185B)
         )
-        "ANNIVERSARY_UPDATED" -> ActivityIconConfig(
+        "PARTNER_TOGETHER", "ANNIVERSARY_UPDATED" -> ActivityIconConfig(
             icon = Icons.Default.Favorite,
             containerColor = Color(0xFFFCE4EC),
             iconColor = Color(0xFFC2185B)
@@ -656,6 +656,12 @@ fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedStr
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
                     append(" are now partners!")
                 }
+            }
+            "PARTNER_TOGETHER" -> {
+                val partnerName = if (isPerformerMe) (activity.affectedUserName ?: "partner") else performerName
+                append("You and ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(partnerName) }
+                append(" are together now! ❤️")
             }
             else -> append(activity.details)
         }

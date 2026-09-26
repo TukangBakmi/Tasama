@@ -129,7 +129,7 @@ class LocationService : Service() {
 
         val rtdbTimeElapsed = timestamp - lastRtdbUpdateTime
 
-        if (rtdbDistance > 2 || rtdbTimeElapsed > 10000) {
+        if (rtdbDistance > 2 || rtdbTimeElapsed > 5000) {
             println("DEBUG: [LOCATION] RTDB Update triggered. Distance: $rtdbDistance, Time: $rtdbTimeElapsed")
             liveLocationRepository.updateLiveLocation(
                 uid,
@@ -146,14 +146,14 @@ class LocationService : Service() {
             lastRtdbUpdateTime = timestamp
         }
 
-        // Update Firestore (Persistent/History) - Throttled
+        // Update Firestore (Persistent/History) - Keep status LIVE (< 60s)
         val distance = lastFirestoreUpdateLocation?.let { (lat, lon) ->
             calculateDistance(location.latitude, location.longitude, lat, lon)
         } ?: Float.MAX_VALUE
 
         val timeElapsed = timestamp - lastFirestoreUpdateTime
 
-        if (distance > 50 || timeElapsed > 300000) {
+        if (distance > 5 || timeElapsed > 20000) {
             authRepository.updateLocation(uid, location.latitude, location.longitude, speed, accuracy)
             lastFirestoreUpdateLocation = location.latitude to location.longitude
             lastFirestoreUpdateTime = timestamp

@@ -270,14 +270,28 @@ actual fun MapContent(
             scope.launch {
                 val update = when {
                     hasMyLoc && hasPartnerLoc -> {
-                        if (currentMyLocation == currentPartnerLocation) {
+                        val dist = calculateDistance(
+                            Location(currentMyLocation.latitude, currentMyLocation.longitude),
+                            Location(currentPartnerLocation.latitude, currentPartnerLocation.longitude)
+                        )
+                        if (dist < 1200.0) {
+                            val center = LatLng(
+                                (currentMyLocation.latitude + currentPartnerLocation.latitude) / 2.0,
+                                (currentMyLocation.longitude + currentPartnerLocation.longitude) / 2.0
+                            )
                             CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.builder().target(currentMyLocation).zoom(followZoom).bearing(0f).tilt(0f).build()
+                                CameraPosition.builder()
+                                    .target(center)
+                                    .zoom(15.2f) // Capped zoom so it doesn't over-zoom when close together
+                                    .bearing(0f)
+                                    .tilt(0f)
+                                    .build()
                             )
                         } else {
-                            val bounds = LatLngBounds.Builder().include(currentMyLocation).include(
-                                currentPartnerLocation
-                            ).build()
+                            val bounds = LatLngBounds.Builder()
+                                .include(currentMyLocation)
+                                .include(currentPartnerLocation)
+                                .build()
                             CameraUpdateFactory.newLatLngBounds(bounds, fitPaddingPx)
                         }
                     }
@@ -1124,46 +1138,37 @@ actual fun MapContent(
                 horizontalAlignment = Alignment.End
             ) {
 
-                // Follow Mode Button
+                // Compass / Mata Angin Button (Resets bearing to North, rotates with map orientation)
+                val currentBearing = cameraPositionState.position.bearing
                 SmallFloatingActionButton(
                     onClick = {
-                        if (isFollowModeEnabled) {
-                            isFollowModeEnabled = false
-                        } else {
-                            isFollowModeEnabled = true
-                            partnerLocation?.let {
-                                scope.launch {
-                                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(it, followZoom), 1000)
-                                }
-                            }
+                        scope.launch {
+                            val currentPos = cameraPositionState.position
+                            val newPos = CameraPosition.builder(currentPos)
+                                .bearing(0f)
+                                .tilt(0f)
+                                .build()
+                            cameraPositionState.animate(CameraUpdateFactory.newCameraPosition(newPos), 500)
                         }
                     },
-                    containerColor = if (isFollowModeEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
-                    },
-                    contentColor = if (isFollowModeEnabled) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.primary,
                     shape = CircleShape
                 ) {
-                    Icon(
-                        imageVector = if (isFollowModeEnabled) Icons.Default.MyLocation else Icons.Default.LocationSearching,
-                        contentDescription = "Follow Partner"
-                    )
+                    CompassIcon(bearing = currentBearing)
                 }
 
-                // Recenter/Fit Button
+                // Recenter/Fit User & Partner Button
                 SmallFloatingActionButton(
                     onClick = { fitMarkers() },
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
                     contentColor = MaterialTheme.colorScheme.primary,
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit Markers")
+                    Icon(
+                        imageVector = Icons.Default.CenterFocusStrong,
+                        contentDescription = "Fit User and Partner"
+                    )
                 }
 
                 // Add Place Button
@@ -1536,6 +1541,65 @@ data class MarkerVisibilityData(
     val showPolyline: Boolean,
     val partnerScreenPos: Offset?
 )
+
+@Composable
+fun CompassIcon(bearing: Float, modifier: Modifier = Modifier) {
+    Canvas(
+        modifier = modifier
+            .size(24.dp)
+            .graphicsLayer {
+                rotationZ = -bearing
+            }
+    ) {
+        val centerX = size.width / 2f
+        val centerY = size.height / 2f
+        val needleWidth = 5.dp.toPx()
+        val needleLength = 10.dp.toPx()
+
+        // 1. North Left (Dark Red)
+        val northLeft = Path().apply {
+            moveTo(centerX, centerY - needleLength)
+            lineTo(centerX - needleWidth, centerY)
+            lineTo(centerX, centerY)
+            close()
+        }
+        drawPath(northLeft, Color(0xFFC62828))
+
+        // 2. North Right (Bright Red)
+        val northRight = Path().apply {
+            moveTo(centerX, centerY - needleLength)
+            lineTo(centerX + needleWidth, centerY)
+            lineTo(centerX, centerY)
+            close()
+        }
+        drawPath(northRight, Color(0xFFEF5350))
+
+        // 3. South Left (Dark Silver)
+        val southLeft = Path().apply {
+            moveTo(centerX, centerY + needleLength)
+            lineTo(centerX - needleWidth, centerY)
+            lineTo(centerX, centerY)
+            close()
+        }
+        drawPath(southLeft, Color(0xFF90A4AE))
+
+        // 4. South Right (Light Silver/White)
+        val southRight = Path().apply {
+            moveTo(centerX, centerY + needleLength)
+            lineTo(centerX + needleWidth, centerY)
+            lineTo(centerX, centerY)
+            close()
+        }
+        drawPath(southRight, Color(0xFFECEFF1))
+
+        // 5. Center Pivot Dot
+        drawCircle(
+            color = Color(0xFF263238),
+            radius = 2.5.dp.toPx(),
+            center = Offset(centerX, centerY)
+        )
+    }
+}
 
 @Composable
 fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifier) {

@@ -94,7 +94,10 @@ class GeofenceMonitor(
             if (togetherConsecutiveCount >= 2) {
                 isTogetherState = true
                 togetherConsecutiveCount = 0
-                onTogetherEvent(me, partner)
+                // Deterministic Leader Check: Only the user with smaller ID logs the event
+                if (me.id < partner.id) {
+                    onTogetherEvent(me, partner)
+                }
             }
         } else if (distance > 250.0 && isTogetherState) {
             isTogetherState = false

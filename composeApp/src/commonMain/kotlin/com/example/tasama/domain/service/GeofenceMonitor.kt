@@ -20,6 +20,8 @@ class GeofenceMonitor(
 ) : SessionCleanupRepository {
     private val userStates = mutableMapOf<String, MutableMap<String, Boolean>>() // userId -> {placeId -> isInside}
     private val consecutivePoints = mutableMapOf<String, MutableMap<String, Int>>() // userId_placeId -> count
+    private var isTogetherState = false
+    private var togetherConsecutiveCount = 0
     private var monitoringJob: Job? = null
 
     override suspend fun cleanup() {
@@ -41,20 +43,96 @@ class GeofenceMonitor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun monitorLocalUserOnly(currentUserId: String) {
-        authRepository.value.getUserFlow(currentUserId).collectLatest { me ->
+        combine(
+            authRepository.value.getUserFlow(currentUserId),
+            authRepository.value.userId.flatMapLatest { uid ->
+                if (uid != null) {
+                    authRepository.value.getUserFlow(uid).flatMapLatest { user ->
+                        val partnerId = user?.partnerId
+                        if (partnerId != null) authRepository.value.getUserFlow(partnerId) else flowOf(null)
+                    }
+                } else flowOf(null)
+            }
+        ) { me, partner ->
+            Pair(me, partner)
+        }.collectLatest { (me, partner) ->
             if (me == null) return@collectLatest
             val partnerId = me.partnerId
-            
+
             val relationshipId = if (partnerId != null) {
                 listOf(currentUserId, partnerId).sorted().joinToString("_")
             } else {
                 currentUserId
             }
 
-            placeRepository.getPlaces(relationshipId).collect { allPlaces ->
+            placeRepository.getPlaces(relationshipId).firstOrNull()?.let { allPlaces ->
                 checkUser(me, allPlaces)
             }
+
+            if (partner != null && partnerId == partner.id) {
+                checkProximity(me, partner)
+            } else {
+                isTogetherState = false
+                togetherConsecutiveCount = 0
+            }
+        }
+    }
+
+    private fun checkProximity(me: User, partner: User) {
+        val myLat = me.latitude ?: return
+        val myLon = me.longitude ?: return
+        val partnerLat = partner.latitude ?: return
+        val partnerLon = partner.longitude ?: return
+
+        val distance = calculateDistance(myLat, myLon, partnerLat, partnerLon)
+
+        // Thresholds: <= 150m is together (same as MapContent), > 250m is separated (hysteresis)
+        if (distance <= 150.0 && !isTogetherState) {
+            togetherConsecutiveCount++
+            if (togetherConsecutiveCount >= 2) {
+                isTogetherState = true
+                togetherConsecutiveCount = 0
+                onTogetherEvent(me, partner)
+            }
+        } else if (distance > 250.0 && isTogetherState) {
+            isTogetherState = false
+            togetherConsecutiveCount = 0
+        } else if (distance > 150.0 && !isTogetherState) {
+            togetherConsecutiveCount = 0
+        }
+    }
+
+    private fun onTogetherEvent(me: User, partner: User) {
+        val myName = me.name.ifEmpty { "You" }
+        val partnerName = partner.name.ifEmpty { "Partner" }
+        val message = "❤️ $myName and $partnerName are together now!"
+
+        scope.launch {
+            activityRepository.logActivity(
+                Activity(
+                    userId = me.id,
+                    userName = me.name,
+                    affectedUserId = partner.id,
+                    affectedUserName = partner.name,
+                    category = ActivityCategory.PARTNER,
+                    type = "PARTNER_TOGETHER",
+                    title = "Together",
+                    details = message,
+                    metadata = mapOf(
+                        "partnerId" to partner.id,
+                        "partnerName" to partner.name
+                    )
+                )
+            )
+
+            authRepository.value.sendNotification(
+                targetUid = partner.id,
+                title = "Together!",
+                body = message,
+                type = "PARTNER_TOGETHER"
+            )
         }
     }
 

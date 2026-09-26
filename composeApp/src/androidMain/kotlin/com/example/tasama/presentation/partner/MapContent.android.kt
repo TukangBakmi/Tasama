@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
@@ -31,6 +34,10 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -76,6 +83,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlin.math.*
 import com.example.tasama.R
+import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
 import kotlinx.datetime.*
 import kotlin.time.Clock
 
@@ -152,7 +160,6 @@ actual fun MapContent(
     var tempColor by remember { mutableStateOf(Color(0xFF2196F3)) }
     var tempIconName by remember { mutableStateOf("Location") }
     var isPlacementModeEnabled by rememberSaveable { mutableStateOf(false) }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     var isFollowModeEnabled by rememberSaveable { mutableStateOf(true) }
 
     LaunchedEffect(showAddPlaceSheet, radiusEditCenter, editingPlace) {
@@ -756,37 +763,36 @@ actual fun MapContent(
 
 
 
-        if (showAddPlaceSheet != null) {
-            ModalBottomSheet(
-                onDismissRequest = { 
-                    showAddPlaceSheet = null
-                    editingPlace = null
-                },
-                sheetState = bottomSheetState
-            ) {
-                Box(modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp)) {
-                    AddPlaceSheetContent(
-                        location = showAddPlaceSheet!!,
-                        initialPlace = editingPlace,
-                        radiusValue = tempRadius,
-                        onRadiusChange = { tempRadius = it },
-                        selectedColor = tempColor,
-                        onColorChange = { tempColor = it },
-                        selectedIconName = tempIconName,
-                        onIconChange = { tempIconName = it },
-                        onAddPlace = { place: Place ->
-                            onAddPlace(place)
-                            showAddPlaceSheet = null
-                            editingPlace = null
-                        },
-                        onDeletePlace = {
-                            editingPlace?.let { onDeletePlace(it.id) }
-                            showAddPlaceSheet = null
-                            editingPlace = null
-                        }
-                    )
-                    com.example.tasama.presentation.components.AppTransientFeedbackOverlay()
-                }
+        CustomBottomSheet(
+            visible = showAddPlaceSheet != null,
+            onDismissRequest = { 
+                showAddPlaceSheet = null
+                editingPlace = null
+            },
+            peekHeight = 100.dp
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AddPlaceSheetContent(
+                    location = showAddPlaceSheet ?: LatLng(0.0, 0.0),
+                    initialPlace = editingPlace,
+                    radiusValue = tempRadius,
+                    onRadiusChange = { tempRadius = it },
+                    selectedColor = tempColor,
+                    onColorChange = { tempColor = it },
+                    selectedIconName = tempIconName,
+                    onIconChange = { tempIconName = it },
+                    onAddPlace = { place: Place ->
+                        onAddPlace(place)
+                        showAddPlaceSheet = null
+                        editingPlace = null
+                    },
+                    onDeletePlace = {
+                        editingPlace?.let { onDeletePlace(it.id) }
+                        showAddPlaceSheet = null
+                        editingPlace = null
+                    }
+                )
+                AppTransientFeedbackOverlay()
             }
         }
 
@@ -1231,8 +1237,9 @@ fun AddPlaceSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1291,47 +1298,15 @@ fun AddPlaceSheetContent(
             )
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), thickness = 0.5.dp)
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Radius", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Slider(
-                    value = radiusValue,
-                    onValueChange = onRadiusChange,
-                    valueRange = 50f..1000f,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "${radiusValue.toInt()}m",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.width(48.dp)
-                )
-            }
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val colors = listOf(
-                    Color(0xFF2196F3), // Blue
-                    Color(0xFF4CAF50), // Green
-                    Color(0xFFF44336), // Red
-                    Color(0xFFFFC107), // Amber
-                    Color(0xFF9C27B0), // Purple
-                    Color(0xFF795548)  // Brown
-                )
                 colors.forEach { color ->
                     val isSelected = selectedColor == color
                     Box(
@@ -1363,17 +1338,6 @@ fun AddPlaceSheetContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val icons = listOf(
-                    "Location" to Icons.Default.LocationOn,
-                    "Home" to Icons.Default.Home,
-                    "Work" to Icons.Default.Work,
-                    "School" to Icons.Default.School,
-                    "Shopping" to Icons.Default.ShoppingCart,
-                    "Restaurant" to Icons.Default.Restaurant,
-                    "Gym" to Icons.Default.FitnessCenter,
-                    "Hospital" to Icons.Default.LocalHospital,
-                    "Park" to Icons.Default.Park
-                )
                 icons.forEach { (iconName, icon) ->
                     Box(
                         modifier = Modifier
@@ -1399,7 +1363,7 @@ fun AddPlaceSheetContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
         Button(
             onClick = {
@@ -1435,7 +1399,7 @@ fun AddPlaceSheetContent(
                 Text("Delete Place")
             }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
@@ -1594,6 +1558,178 @@ fun ConnectionStatusBadge(status: ConnectionStatus, modifier: Modifier = Modifie
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
+    }
+}
+
+@Composable
+fun CustomBottomSheet(
+    visible: Boolean,
+    onDismissRequest: () -> Unit,
+    peekHeight: Dp = 100.dp,
+    content: @Composable () -> Unit
+) {
+    if (!visible) return
+
+    val density = LocalDensity.current
+    val peekHeightPx = with(density) { peekHeight.toPx() }
+    val scope = rememberCoroutineScope()
+
+    var contentHeightPx by remember { mutableFloatStateOf(0f) }
+    val offsetY = remember { Animatable(1200f) }
+
+    LaunchedEffect(visible, contentHeightPx) {
+        if (visible && contentHeightPx > 0f) {
+            if (offsetY.value == 1200f) {
+                offsetY.snapTo(contentHeightPx)
+            }
+            offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
+        }
+    }
+
+    val collapsedOffset = maxOf(0f, contentHeightPx - peekHeightPx)
+    val hiddenOffset = contentHeightPx
+    val thresholdPx = with(density) { 70.dp.toPx() }
+
+    fun settleSheet(velocity: Float = 0f) {
+        val current = offsetY.value
+        scope.launch {
+            when {
+                // High downward velocity OR dragged past collapsed threshold -> Dismiss
+                velocity > 1000f || current > collapsedOffset + thresholdPx -> {
+                    offsetY.animateTo(hiddenOffset, tween(200))
+                    onDismissRequest()
+                }
+                // High upward velocity OR near top -> Expand (0f)
+                velocity < -1000f || current < collapsedOffset * 0.5f -> {
+                    offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessLow))
+                }
+                // Otherwise -> Settle at Collapsed (100.dp)
+                else -> {
+                    offsetY.animateTo(collapsedOffset, spring(stiffness = Spring.StiffnessLow))
+                }
+            }
+        }
+    }
+
+    fun dismiss() {
+        scope.launch {
+            offsetY.animateTo(hiddenOffset, tween(200))
+            onDismissRequest()
+        }
+    }
+
+    val nestedScrollConnection = remember(collapsedOffset, hiddenOffset) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                val current = offsetY.value
+
+                // Dragging UP while sheet is not fully expanded
+                if (delta < 0 && current > 0f) {
+                    val newOffset = (current + delta).coerceAtLeast(0f)
+                    val consumed = current - newOffset
+                    scope.launch { offsetY.snapTo(newOffset) }
+                    return Offset(0f, -consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                val delta = available.y
+                val current = offsetY.value
+
+                // Dragging DOWN when inner content is at top
+                if (delta > 0 && current < hiddenOffset) {
+                    val newOffset = (current + delta).coerceAtMost(hiddenOffset)
+                    val consumedY = newOffset - current
+                    scope.launch { offsetY.snapTo(newOffset) }
+                    return Offset(0f, consumedY)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                settleSheet(available.y)
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                settleSheet(available.y)
+                return Velocity.Zero
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(999f),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        // Scrim
+        val scrimAlpha = if (hiddenOffset > 0f) {
+            (1f - (offsetY.value / hiddenOffset).coerceIn(0f, 1f)) * 0.5f
+        } else 0.5f
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = scrimAlpha))
+                .pointerInput(Unit) {
+                    detectTapGestures { dismiss() }
+                }
+        )
+
+        // Sheet Container with NestedScroll and PointerInput
+        Surface(
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { contentHeightPx = it.height.toFloat() }
+                .offset { IntOffset(0, offsetY.value.roundToInt()) }
+                .nestedScroll(nestedScrollConnection)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = { settleSheet(0f) },
+                        onDragCancel = { settleSheet(0f) },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            val newOffset = (offsetY.value + dragAmount).coerceIn(0f, hiddenOffset)
+                            scope.launch {
+                                offsetY.snapTo(newOffset)
+                            }
+                        }
+                    )
+                }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                // Drag Handle
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(32.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    )
+                }
+
+                content()
+            }
+        }
     }
 }
 

@@ -90,6 +90,7 @@ class NotificationsViewModel(
         private val PARTNER_NOTIFICATION_TYPES = setOf(
             "PARTNER_REQUEST",
             "PARTNER_ACCEPTED",
+            "PARTNER_TOGETHER",
             "PLACE_ALERT",
             "SIGNAL_LOST",
             "SIGNAL_RESTORED",

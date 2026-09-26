@@ -5,6 +5,8 @@ import com.example.tasama.domain.model.ChatMessage
 import com.example.tasama.domain.model.MessageSender
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
+import com.example.tasama.domain.repository.PresenceRepository
+import com.example.tasama.domain.repository.PresenceState
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.database.database
 import dev.gitlive.firebase.firestore.Direction
@@ -28,7 +30,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlin.time.Clock
 
 class FirebaseChatRepository(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val presenceRepository: PresenceRepository
 ) : ChatRepository {
     private val firestore = Firebase.firestore
     private val database = Firebase.database
@@ -260,13 +263,18 @@ class FirebaseChatRepository(
                     newReadBy[otherParticipantId] = now
                 } else {
                     // Check if they are online to mark as delivered
-                    val presenceSnapshot = database.reference("status/$otherParticipantId/state").valueEvents.firstOrNull()
-                    val presenceStatus = presenceSnapshot?.value<String?>()
-                    if (presenceStatus == "online") {
-                        newDeliveredTo[otherParticipantId] = now
+                    try {
+                        val presenceStatus = presenceRepository.getPresence(otherParticipantId).firstOrNull()
+                        if (presenceStatus is PresenceState.Online) {
+                            newDeliveredTo[otherParticipantId] = now
+                        }
+                    } catch (e: Exception) {
+                        println("DEBUG: [CHAT] Error checking presence: ${e.message}")
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                println("DEBUG: [CHAT] Error fetching user active channel: ${e.message}")
+            }
         }
 
         val finalMessage = newMessage.copy(

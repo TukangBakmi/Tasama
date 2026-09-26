@@ -1,5 +1,6 @@
 package com.example.tasama.service
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -159,6 +160,7 @@ class LocationService : Service() {
         }
     }
 
+    @SuppressLint("WrongConstant")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         println("LIVE_LOCATION_SERVICE: onStartCommand - Action: $action, Flags: $flags, StartId: $startId")
@@ -443,6 +445,7 @@ class LocationService : Service() {
         }
     }
 
+    @SuppressLint("WrongConstant")
     private fun createNotification(partner: User?): android.app.Notification {
         val collapsedView = RemoteViews(packageName, R.layout.notification_custom_small)
         val expandedView = RemoteViews(packageName, R.layout.notification_custom_expanded)
@@ -601,6 +604,7 @@ class LocationService : Service() {
         }
     }
 
+    @SuppressLint("WrongConstant")
     private fun stopLocationService(removeRealtimeData: Boolean = false) {
         if (!isServiceStarted) return
         isServiceStarted = false

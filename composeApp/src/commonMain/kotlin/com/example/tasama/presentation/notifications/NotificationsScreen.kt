@@ -13,32 +13,38 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.Activity
 import com.example.tasama.presentation.theme.PrimaryLightBlue
-import com.example.tasama.presentation.theme.SecondaryLightBlue
-import kotlinx.datetime.Clock
-import kotlinx.datetime.DateTimeUnit
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Duration.Companion.days
+import kotlin.time.Clock
+
+private data class ActivityIconConfig(
+    val icon: ImageVector,
+    val containerColor: Color,
+    val iconColor: Color
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +62,7 @@ fun NotificationsScreen(
         viewModel.onTabSelected(pagerState.currentPage)
     }
 
-    // Sync ViewModel state to Pager (e.g. if updated from elsewhere)
+    // Sync ViewModel state to Pager
     LaunchedEffect(uiState.selectedTab) {
         if (pagerState.currentPage != uiState.selectedTab) {
             pagerState.animateScrollToPage(uiState.selectedTab)
@@ -69,13 +75,32 @@ fun NotificationsScreen(
         }
     }
 
+    val currentHasUnread = if (pagerState.currentPage == 0) uiState.hasUnreadSavings else uiState.hasUnreadPartner
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Notifications") },
+                title = {
+                    Text(
+                        "Notifications",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (currentHasUnread) {
+                        TextButton(onClick = { viewModel.markAllAsReadCurrentTab() }) {
+                            Text(
+                                "Mark all as read",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             )
@@ -85,7 +110,7 @@ fun NotificationsScreen(
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = PrimaryLightBlue
+                contentColor = MaterialTheme.colorScheme.primary
             ) {
                 NotificationTab(
                     text = "Savings",
@@ -111,14 +136,13 @@ fun NotificationsScreen(
                 verticalAlignment = Alignment.Top
             ) { page ->
                 val activities = if (page == 0) uiState.savingsActivities else uiState.partnerActivities
+                val categoryName = if (page == 0) "Savings" else "Partner"
 
                 if (activities.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No notifications yet", color = Color.Gray)
-                    }
+                    EmptyNotificationsState(categoryName = categoryName)
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(activities) { activity ->
+                        items(activities, key = { it.id }) { activity ->
                             ActivityItem(
                                 activity = activity,
                                 uid = uiState.currentUserId,
@@ -127,7 +151,7 @@ fun NotificationsScreen(
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 16.dp),
                                 thickness = 0.5.dp,
-                                color = Color.LightGray.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                             )
                         }
                     }
@@ -149,19 +173,61 @@ fun NotificationTab(
         onClick = onClick,
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text)
+                Text(
+                    text = text,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                )
                 if (hasUnread) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
-                            .background(PrimaryLightBlue)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }
         }
     )
+}
+
+@Composable
+fun EmptyNotificationsState(categoryName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(80.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.NotificationsNone,
+                    contentDescription = null,
+                    modifier = Modifier.size(38.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No $categoryName Notifications",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "You're all caught up! Activity updates will appear here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 @Composable
@@ -171,220 +237,427 @@ fun ActivityItem(
     onClick: () -> Unit
 ) {
     val isUnread = activity.isUnreadFor(uid)
-    val displayDetails = remember(activity, uid) {
-        getActivityDescription(activity, uid)
+    val annotatedDescription = remember(activity, uid) {
+        buildActivityAnnotatedString(activity, uid)
+    }
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val iconConfig = remember(activity.type, activity.details, surfaceVariant, primaryColor) {
+        getActivityIconConfig(activity, surfaceVariant, primaryColor)
     }
 
-    Row(
+    Surface(
+        color = if (isUnread) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isUnread) PrimaryLightBlue.copy(alpha = 0.05f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Icon area
-        Box(
+        Row(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(SecondaryLightBlue.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ActivityIcon(activity)
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = displayDetails,
-                fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 14.sp,
-                lineHeight = 18.sp
-            )
-            Text(
-                text = formatTimestamp(activity.timestamp),
-                fontSize = 11.sp,
-                color = Color.Gray.copy(alpha = 0.8f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActivityIcon(activity: Activity) {
-    val icon = remember(activity.type, activity.details) {
-        when (activity.type) {
-            // Savings
-            "TRANSACTION_ADDED" -> Icons.Default.Add
-            "TRANSACTION_DELETED" -> Icons.Default.Remove
-            "INVITATION_SENT" -> Icons.Default.PersonAdd
-            "MEMBER_JOINED", "INVITATION_ACCEPTED" -> Icons.Default.Person
-            "MEMBER_REMOVED" -> Icons.Default.PersonRemove
-            "OWNERSHIP_TRANSFERRED" -> Icons.Default.SwapHoriz
-            "SPACE_CREATED" -> Icons.Default.AddCircle
-            "SPACE_UPDATED" -> Icons.Default.Edit
-            "SPACE_DELETED" -> Icons.Default.Delete
-            "TARGET_DATE_UPDATED" -> Icons.Default.Event
-            
-            // Partner
-            "PLACE_ALERT" -> {
-                if (activity.details.contains("arrived", ignoreCase = true)) Icons.Default.LocationOn
-                else Icons.Default.ExitToApp
+            // Dynamic Colored Icon Container
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(iconConfig.containerColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconConfig.icon,
+                    contentDescription = null,
+                    tint = iconConfig.iconColor,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            "PLACE_ADDED" -> Icons.Default.AddLocation
-            "PLACE_UPDATED" -> Icons.Default.EditLocation
-            "PLACE_DELETED" -> Icons.Default.LocationOff
-            "PARTNER_REQUEST" -> Icons.Default.Person
-            "PARTNER_ACCEPTED" -> Icons.Default.Favorite
-            "SIGNAL_LOST" -> Icons.Default.SignalWifiOff
-            "SIGNAL_RESTORED" -> Icons.Default.SignalWifi4Bar
-            "ANNIVERSARY_UPDATED" -> Icons.Default.Favorite
-            
-            else -> Icons.Default.Notifications
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            // Main Content
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = annotatedDescription,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = formatRelativeTimestamp(activity.timestamp),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Unread indicator dot
+            if (isUnread) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
         }
     }
-
-    Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = PrimaryLightBlue,
-        modifier = Modifier.size(20.dp)
-    )
 }
 
-private fun formatTimestamp(timestamp: Long): String {
-    val instant = Instant.fromEpochMilliseconds(timestamp)
-    val timeZone = TimeZone.currentSystemDefault()
-    val dateTime = instant.toLocalDateTime(timeZone)
-    val now = kotlin.time.Clock.System.now().toLocalDateTime(timeZone)
-    val yesterday = kotlin.time.Clock.System.now().minus(24, DateTimeUnit.HOUR).toLocalDateTime(timeZone)
+private fun getActivityIconConfig(
+    activity: Activity,
+    fallbackContainer: Color,
+    fallbackIconColor: Color
+): ActivityIconConfig {
+    return when (activity.type) {
+        // Success / Positive (Green)
+        "MEMBER_JOINED", "INVITATION_ACCEPTED", "PARTNER_ACCEPTED" -> ActivityIconConfig(
+            icon = Icons.Default.Person,
+            containerColor = Color(0xFFE8F5E9),
+            iconColor = Color(0xFF2E7D32)
+        )
+        "TRANSACTION_ADDED" -> ActivityIconConfig(
+            icon = Icons.Default.Add,
+            containerColor = Color(0xFFE8F5E9),
+            iconColor = Color(0xFF2E7D32)
+        )
+        "SIGNAL_RESTORED" -> ActivityIconConfig(
+            icon = Icons.Default.SignalWifi4Bar,
+            containerColor = Color(0xFFE8F5E9),
+            iconColor = Color(0xFF2E7D32)
+        )
 
-    val timeStr = "${dateTime.hour.toString().padStart(2, '0')}:${dateTime.minute.toString().padStart(2, '0')}"
+        // Danger / Negative (Red)
+        "MEMBER_REMOVED", "MEMBER_LEFT" -> ActivityIconConfig(
+            icon = Icons.Default.PersonRemove,
+            containerColor = Color(0xFFFFEBEE),
+            iconColor = Color(0xFFC62828)
+        )
+        "TRANSACTION_DELETED", "SPACE_DELETED", "PLACE_DELETED" -> ActivityIconConfig(
+            icon = Icons.Default.Delete,
+            containerColor = Color(0xFFFFEBEE),
+            iconColor = Color(0xFFC62828)
+        )
+        "SIGNAL_LOST" -> ActivityIconConfig(
+            icon = Icons.Default.SignalWifiOff,
+            containerColor = Color(0xFFFFEBEE),
+            iconColor = Color(0xFFC62828)
+        )
+
+        // Info / Invites / Updates (Blue / Purple)
+        "INVITATION_SENT" -> ActivityIconConfig(
+            icon = Icons.Default.PersonAdd,
+            containerColor = Color(0xFFE3F2FD),
+            iconColor = Color(0xFF1565C0)
+        )
+        "OWNERSHIP_TRANSFERRED" -> ActivityIconConfig(
+            icon = Icons.Default.SwapHoriz,
+            containerColor = Color(0xFFEDE7F6),
+            iconColor = Color(0xFF512DA8)
+        )
+        "SPACE_CREATED", "SPACE_UPDATED", "TARGET_DATE_UPDATED", "TARGET_AMOUNT_UPDATED", "DUE_DATE_UPDATED" -> ActivityIconConfig(
+            icon = Icons.Default.Edit,
+            containerColor = Color(0xFFE3F2FD),
+            iconColor = Color(0xFF1565C0)
+        )
+
+        // Partner / Love / Location (Pink / Teal / Orange)
+        "PARTNER_REQUEST" -> ActivityIconConfig(
+            icon = Icons.Default.FavoriteBorder,
+            containerColor = Color(0xFFFCE4EC),
+            iconColor = Color(0xFFC2185B)
+        )
+        "ANNIVERSARY_UPDATED" -> ActivityIconConfig(
+            icon = Icons.Default.Favorite,
+            containerColor = Color(0xFFFCE4EC),
+            iconColor = Color(0xFFC2185B)
+        )
+        "PLACE_ALERT" -> {
+            val isArrival = activity.details.contains("arrived", ignoreCase = true)
+            ActivityIconConfig(
+                icon = if (isArrival) Icons.Default.LocationOn else Icons.Default.ExitToApp,
+                containerColor = if (isArrival) Color(0xFFE0F2F1) else Color(0xFFFFF3E0),
+                iconColor = if (isArrival) Color(0xFF00695C) else Color(0xFFE65100)
+            )
+        }
+        "PLACE_ADDED", "PLACE_UPDATED" -> ActivityIconConfig(
+            icon = Icons.Default.AddLocation,
+            containerColor = Color(0xFFE0F2F1),
+            iconColor = Color(0xFF00695C)
+        )
+
+        else -> ActivityIconConfig(
+            icon = Icons.Default.Notifications,
+            containerColor = fallbackContainer,
+            iconColor = fallbackIconColor
+        )
+    }
+}
+
+private fun formatRelativeTimestamp(timestamp: Long): String {
+    val now = Clock.System.now().toEpochMilliseconds()
+    val diffSeconds = (now - timestamp) / 1000
+    val diffMinutes = diffSeconds / 60
+    val diffHours = diffMinutes / 60
+    val diffDays = diffHours / 24
 
     return when {
-        dateTime.date == now.date -> "Today, $timeStr"
-        dateTime.date == yesterday.date -> "Yesterday, $timeStr"
+        diffSeconds < 60 -> "Just now"
+        diffMinutes < 60 -> "${diffMinutes}m ago"
+        diffHours < 24 -> "${diffHours}h ago"
+        diffDays == 1L -> "Yesterday"
+        diffDays < 7L -> "${diffDays}d ago"
         else -> {
-            val monthStr = when(dateTime.monthNumber) {
-                1 -> "Jan"
-                2 -> "Feb"
-                3 -> "Mar"
-                4 -> "Apr"
-                5 -> "May"
-                6 -> "Jun"
-                7 -> "Jul"
-                8 -> "Aug"
-                9 -> "Sep"
-                10 -> "Oct"
-                11 -> "Nov"
-                12 -> "Dec"
-                else -> ""
-            }
-            "$monthStr ${dateTime.dayOfMonth}, ${dateTime.year}, $timeStr"
+            val instant = Instant.fromEpochMilliseconds(timestamp)
+            val tz = TimeZone.currentSystemDefault()
+            val dt = instant.toLocalDateTime(tz)
+            val month = dt.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+            val hour = dt.hour.toString().padStart(2, '0')
+            val minute = dt.minute.toString().padStart(2, '0')
+            "$month ${dt.dayOfMonth}, $hour:$minute"
         }
     }
 }
 
-fun getActivityDescription(activity: Activity, uid: String?): String {
+fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedString {
     val performerName = if (activity.userId == uid) "You" else activity.userName
     val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")
     val isPerformerMe = activity.userId == uid
     val isAffectedMe = activity.affectedUserId == uid
-    
-    val spaceName = activity.metadata["spaceName"] ?: activity.metadata["spaceId"] ?: "Space"
-    
-    return when (activity.type) {
-        "INVITATION_SENT" -> {
-            if (isPerformerMe) "You invited ${activity.affectedUserName} to $spaceName"
-            else if (isAffectedMe) "$performerName invited you to $spaceName"
-            else "$performerName invited ${activity.affectedUserName} to $spaceName"
-        }
-        "MEMBER_JOINED", "INVITATION_ACCEPTED" -> {
-            "$performerName joined $spaceName"
-        }
-        "MEMBER_LEFT" -> {
-            "$performerName left $spaceName"
-        }
-        "MEMBER_REMOVED" -> {
-            if (isAffectedMe) "You were removed from $spaceName"
-            else if (isPerformerMe) "You removed ${activity.affectedUserName} from $spaceName"
-            else "$performerName removed ${activity.affectedUserName} from $spaceName"
-        }
-        "OWNERSHIP_TRANSFERRED" -> {
-            if (isAffectedMe) "Ownership of $spaceName was transferred to you"
-            else "$performerName transferred ownership of $spaceName to $affectedName"
-        }
-        "TRANSACTION_ADDED" -> {
-            val amount = activity.metadata["amount"] ?: ""
-            "$performerName added $amount to $spaceName"
-        }
-        "TRANSACTION_UPDATED" -> {
-            "$performerName updated a contribution in $spaceName"
-        }
-        "TRANSACTION_DELETED" -> {
-            "$performerName removed a contribution from $spaceName"
-        }
-        "SPACE_CREATED" -> {
-            "$performerName created savings space $spaceName"
-        }
-        "SPACE_UPDATED" -> {
-            "$performerName updated savings space $spaceName"
-        }
-        "SPACE_DELETED" -> {
-            "$performerName deleted savings space $spaceName"
-        }
-        "TARGET_DATE_UPDATED" -> {
-            "$performerName updated the target date for $spaceName"
-        }
-        "TARGET_AMOUNT_UPDATED" -> {
-            "$performerName updated the target amount for $spaceName"
-        }
-        "DUE_DATE_UPDATED" -> {
-            "$performerName updated the due date for $spaceName"
-        }
-        "PLACE_ALERT" -> {
-            val placeName = activity.metadata["placeName"] ?: "a place"
-            if (activity.details.contains("arrived", ignoreCase = true)) {
-                "$performerName arrived at $placeName"
-            } else {
-                "$performerName left $placeName"
+
+    val rawSpaceName = activity.metadata["spaceName"] ?: activity.metadata["spaceId"]
+    val spaceName = when {
+        rawSpaceName.isNullOrBlank() -> "Space"
+        rawSpaceName.equals("Joined the space", ignoreCase = true) -> "Space"
+        rawSpaceName.equals("Left the space", ignoreCase = true) -> "Space"
+        rawSpaceName.startsWith("Removed ", ignoreCase = true) -> "Space"
+        else -> rawSpaceName
+    }
+
+    return buildAnnotatedString {
+        when (activity.type) {
+            "INVITATION_SENT" -> {
+                if (isPerformerMe) {
+                    append("You invited ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "someone") }
+                    append(" to join ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                } else if (isAffectedMe) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" invited you to join ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" invited ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "someone") }
+                    append(" to join ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                }
             }
+            "MEMBER_JOINED", "INVITATION_ACCEPTED" -> {
+                if (isPerformerMe) {
+                    append("You joined ")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" joined ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "MEMBER_LEFT" -> {
+                if (isPerformerMe) {
+                    append("You left ")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" left ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "MEMBER_REMOVED" -> {
+                if (isAffectedMe) {
+                    append("You were removed from ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                } else if (isPerformerMe) {
+                    append("You removed ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "someone") }
+                    append(" from ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" removed ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "someone") }
+                    append(" from ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                }
+            }
+            "OWNERSHIP_TRANSFERRED" -> {
+                if (isAffectedMe) {
+                    append("Ownership of ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                    append(" was transferred to you")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" transferred ownership of ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+                    append(" to ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(affectedName) }
+                }
+            }
+            "TRANSACTION_ADDED" -> {
+                val amount = activity.metadata["amount"] ?: ""
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                if (amount.isNotBlank()) {
+                    append(" added ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(amount) }
+                    append(" to ")
+                } else {
+                    append(" made a contribution to ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "TRANSACTION_UPDATED" -> {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                append(" updated a contribution in ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "TRANSACTION_DELETED" -> {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                append(" removed a contribution from ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "SPACE_CREATED" -> {
+                if (isPerformerMe) append("You created savings space ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" created savings space ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "SPACE_UPDATED" -> {
+                if (isPerformerMe) append("You updated savings space ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" updated savings space ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "SPACE_DELETED" -> {
+                if (isPerformerMe) append("You deleted savings space ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" deleted savings space ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "TARGET_DATE_UPDATED", "TARGET_AMOUNT_UPDATED", "DUE_DATE_UPDATED" -> {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                append(" updated the goals for ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(spaceName) }
+            }
+            "PLACE_ALERT" -> {
+                val isArrival = activity.details.contains("arrived", ignoreCase = true)
+                val extractedPlaceName = when {
+                    activity.details.contains(" arrived at ", ignoreCase = true) -> {
+                        activity.details.substringAfter(" arrived at ", "").trim()
+                    }
+                    activity.details.contains(" left ", ignoreCase = true) -> {
+                        activity.details.substringAfter(" left ", "").trim()
+                    }
+                    else -> null
+                }
+                val placeName = activity.metadata["placeName"]
+                    ?.ifBlank { null }
+                    ?: extractedPlaceName?.ifBlank { null }
+                    ?: "a place"
+
+                if (isPerformerMe) {
+                    append(if (isArrival) "You arrived at " else "You left ")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(if (isArrival) " arrived at " else " left ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(placeName) }
+            }
+            "SIGNAL_LOST" -> {
+                if (isPerformerMe) append("Your device lost signal")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append("'s device lost signal")
+                }
+            }
+            "SIGNAL_RESTORED" -> {
+                if (isPerformerMe) append("Your device reconnected")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append("'s device reconnected")
+                }
+            }
+            "ANNIVERSARY_UPDATED" -> {
+                if (isPerformerMe) append("You updated the anniversary date")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" updated the anniversary date")
+                }
+            }
+            "PLACE_ADDED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                if (isPerformerMe) append("You added a new place: ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" added a new place: ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(placeName) }
+            }
+            "PLACE_UPDATED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                if (isPerformerMe) append("You updated place: ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" updated place: ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(placeName) }
+            }
+            "PLACE_DELETED" -> {
+                val placeName = activity.metadata["placeName"] ?: "a place"
+                if (isPerformerMe) append("You deleted place: ")
+                else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" deleted place: ")
+                }
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(placeName) }
+            }
+            "PARTNER_REQUEST" -> {
+                if (isPerformerMe) {
+                    append("You sent a partner request to ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
+                } else if (isAffectedMe) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" sent you a partner request")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" sent a partner request to ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
+                }
+            }
+            "PARTNER_ACCEPTED" -> {
+                if (isPerformerMe) {
+                    append("You and ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
+                    append(" are now partners!")
+                } else if (isAffectedMe) {
+                    append("You and ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" are now partners!")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" and ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
+                    append(" are now partners!")
+                }
+            }
+            else -> append(activity.details)
         }
-        "SIGNAL_LOST" -> {
-            "$performerName lost signal"
-        }
-        "SIGNAL_RESTORED" -> {
-            if (isPerformerMe) "Your signal was restored"
-            else "$performerName's signal was restored"
-        }
-        "ANNIVERSARY_UPDATED" -> {
-            if (isPerformerMe) "You updated the anniversary date"
-            else "$performerName updated the anniversary date"
-        }
-        "PLACE_ADDED" -> {
-            val placeName = activity.metadata["placeName"] ?: "a place"
-            "$performerName added a new place: $placeName"
-        }
-        "PLACE_UPDATED" -> {
-            val placeName = activity.metadata["placeName"] ?: "a place"
-            "$performerName updated place: $placeName"
-        }
-        "PLACE_DELETED" -> {
-            val placeName = activity.metadata["placeName"] ?: "a place"
-            "$performerName deleted place: $placeName"
-        }
-        "PARTNER_REQUEST" -> {
-            if (isPerformerMe) "You sent a partner request to ${activity.affectedUserName}"
-            else if (isAffectedMe) "$performerName sent you a partner request"
-            else "$performerName sent a partner request to ${activity.affectedUserName}"
-        }
-        "PARTNER_ACCEPTED" -> {
-            if (isPerformerMe) "You and ${activity.affectedUserName} are now partners"
-            else if (isAffectedMe) "You and $performerName are now partners"
-            else "$performerName and ${activity.affectedUserName} are now partners"
-        }
-        else -> activity.details
     }
 }

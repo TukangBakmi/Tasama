@@ -121,10 +121,10 @@ class GeofenceMonitor(
             "👋 $userName left $placeName"
         }
         
-        sendPushNotification(user, partnerId, message)
+        sendPushNotification(user, partnerId, message, placeName)
     }
 
-    private fun sendPushNotification(user: User, targetUserId: String, message: String) {
+    private fun sendPushNotification(user: User, targetUserId: String, message: String, placeName: String) {
         scope.launch {
             // Log to unified activity stream
             activityRepository.logActivity(
@@ -134,8 +134,8 @@ class GeofenceMonitor(
                     category = ActivityCategory.PARTNER,
                     type = "PLACE_ALERT",
                     title = "Place Update",
-                    details = message
-                    // timestamp will be handled by repository if it's 0 (serverTimestamp)
+                    details = message,
+                    metadata = mapOf("placeName" to placeName)
                 )
             )
 

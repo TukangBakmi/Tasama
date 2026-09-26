@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tasama.domain.model.Activity
 import com.example.tasama.domain.model.ActivityCategory
+import com.example.tasama.domain.model.User
 import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -27,25 +29,36 @@ class NotificationsViewModel(
 
     private val _selectedTab = MutableStateFlow(0)
     
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val currentUser: Flow<User?> = authRepository.userId.flatMapLatest { uid ->
+        if (uid != null) authRepository.getUserFlow(uid) else flowOf(null)
+    }
+
     val uiState: StateFlow<NotificationsUiState> = combine(
         activityRepository.getActivities(ActivityCategory.SAVINGS),
         activityRepository.getActivities(ActivityCategory.PARTNER),
         _selectedTab,
-        authRepository.userId
+        authRepository.userId,
+        currentUser
     ) { flows ->
         val allSavings = flows[0] as List<Activity>
         val allPartner = flows[1] as List<Activity>
         val tab = flows[2] as Int
         val uid = flows[3] as String?
+        val user = flows[4] as User?
+        val partnerId = user?.partnerId
 
         val filteredSavings = allSavings.filter { 
             it.type in SAVINGS_NOTIFICATION_TYPES && uid != null && it.userId != uid 
         }
-        val filteredPartner = allPartner.filter { 
-            uid != null && 
-            it.userId != uid &&
-            it.type in PARTNER_NOTIFICATION_TYPES &&
-            (it.type != "PARTNER_REQUEST" || it.affectedUserId == uid)
+        val filteredPartner = if (uid != null && partnerId != null) {
+            allPartner.filter { activity ->
+                activity.type in PARTNER_NOTIFICATION_TYPES &&
+                (activity.userId == partnerId || activity.affectedUserId == partnerId) &&
+                (activity.type != "PARTNER_REQUEST" || activity.affectedUserId == uid)
+            }
+        } else {
+            emptyList()
         }
 
         val unreadSavings = filteredSavings.any { it.isUnreadFor(uid) }
@@ -69,20 +82,21 @@ class NotificationsViewModel(
             "MEMBER_REMOVED",
             "MEMBER_LEFT",
             "OWNERSHIP_TRANSFERRED",
-            "SPACE_DELETED",
-            "PLACE_ADDED",
-            "PLACE_UPDATED",
-            "PLACE_DELETED"
+            "SPACE_CREATED",
+            "SPACE_UPDATED",
+            "SPACE_DELETED"
         )
 
         private val PARTNER_NOTIFICATION_TYPES = setOf(
             "PARTNER_REQUEST",
+            "PARTNER_ACCEPTED",
             "PLACE_ALERT",
             "SIGNAL_LOST",
             "SIGNAL_RESTORED",
             "PLACE_ADDED",
             "PLACE_UPDATED",
-            "PLACE_DELETED"
+            "PLACE_DELETED",
+            "ANNIVERSARY_UPDATED"
         )
     }
 
@@ -98,6 +112,10 @@ class NotificationsViewModel(
 
     fun onScreenLeft() {
         // Mark current tab as read when leaving the screen
+        markTabAsRead(_selectedTab.value)
+    }
+
+    fun markAllAsReadCurrentTab() {
         markTabAsRead(_selectedTab.value)
     }
 

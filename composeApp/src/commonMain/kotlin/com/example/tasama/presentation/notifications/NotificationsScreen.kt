@@ -422,6 +422,9 @@ private fun formatRelativeTimestamp(timestamp: Long): String {
     }
 }
 
+fun getActivityDescription(activity: Activity, uid: String?): String =
+    buildActivityAnnotatedString(activity, uid).text
+
 fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedString {
     val performerName = if (activity.userId == uid) "You" else activity.userName
     val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")

@@ -371,7 +371,8 @@ fun SpaceDetailsScreen(
     onMemberClick: (SavingsMember) -> Unit = {},
     onDismissMemberProfile: () -> Unit = {},
     onOpenChat: (String) -> Unit = {},
-    onCopyUserId: (String) -> Unit = {}
+    onCopyUserId: (String) -> Unit = {},
+    onExportCsv: () -> Unit = {}
 ) {
     val space = uiState.selectedSpace ?: run {
         Scaffold(
@@ -454,6 +455,14 @@ fun SpaceDetailsScreen(
                                     onClick = {
                                         showMenu = false
                                         showEditDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export Report (CSV/Excel)") },
+                                    leadingIcon = { Icon(Icons.Default.TableChart, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        onExportCsv()
                                     }
                                 )
                                 if (isPersonal) {
@@ -548,7 +557,8 @@ fun SpaceDetailsScreen(
                             onDeleteTransaction = { tx ->
                                 transactionToDelete = tx
                                 showDeleteTransactionConfirm = true
-                            }
+                            },
+                            onExportCsv = onExportCsv
                         )
                         1 -> HistoryTab(uiState.activityHistory)
                         2 -> {
@@ -745,13 +755,24 @@ fun SpaceDetailsScreen(
 fun OverviewTab(
     space: SavingsSpace,
     transactions: List<SavingsTransaction>,
-    onDeleteTransaction: (SavingsTransaction) -> Unit
+    onDeleteTransaction: (SavingsTransaction) -> Unit,
+    onExportCsv: () -> Unit = {}
 ) {
+    val deposits = remember(transactions) { transactions.filter { it.type == TransactionType.INCOME } }
+    val withdrawals = remember(transactions) { transactions.filter { it.type == TransactionType.EXPENSE } }
+    val totalDeposits = remember(deposits) { deposits.sumOf { it.amount } }
+    val totalWithdrawals = remember(withdrawals) { withdrawals.sumOf { it.amount } }
+    val contributions = remember(deposits) {
+        deposits.groupBy { it.userName.ifEmpty { "Member" } }
+            .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // Goal Progress
         if (space.targetAmount != null && space.targetAmount > 0) {
             item {
                 val progress = (space.balance.toDouble() / space.targetAmount).toFloat().coerceIn(0f, 1f)
@@ -816,6 +837,175 @@ fun OverviewTab(
                         )
                     }
                 }
+            }
+        }
+
+        // Summary Cards: Total Savings vs Total Spent
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Total Deposits (Income)
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Total Savings", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(totalDeposits.toLong().formatCurrency(space.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+                    }
+                }
+
+                // Total Withdrawals (Expenses)
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Total Spent", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828), fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(totalWithdrawals.toLong().formatCurrency(space.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFFB71C1C))
+                    }
+                }
+            }
+        }
+
+        // Partner Contribution Share Breakdown
+        if (contributions.isNotEmpty() && totalDeposits > 0) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Partner Contribution Share",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "${contributions.size} Contributors",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Multi-color segmented ratio bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            val colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.tertiary,
+                                MaterialTheme.colorScheme.secondary,
+                                Color(0xFF4CAF50),
+                                Color(0xFFFF9800)
+                            )
+                            contributions.entries.forEachIndexed { index, entry ->
+                                val shareRatio = (entry.value.toDouble() / totalDeposits).toFloat().coerceIn(0f, 1f)
+                                if (shareRatio > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(shareRatio)
+                                            .fillMaxHeight()
+                                            .background(colors[index % colors.size])
+                                    )
+                                }
+                            }
+                        }
+
+                        // Individual contributor breakdown list
+                        val colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.tertiary,
+                            MaterialTheme.colorScheme.secondary,
+                            Color(0xFF4CAF50),
+                            Color(0xFFFF9800)
+                        )
+                        contributions.entries.forEachIndexed { index, (name, amount) ->
+                            val percent = ((amount.toDouble() / totalDeposits) * 100).toInt()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(colors[index % colors.size])
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = amount.toLong().formatCurrency(space.currency),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "($percent%)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Export Report Button
+        item {
+            OutlinedButton(
+                onClick = onExportCsv,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export Report to Excel / CSV", fontWeight = FontWeight.Bold)
             }
         }
 

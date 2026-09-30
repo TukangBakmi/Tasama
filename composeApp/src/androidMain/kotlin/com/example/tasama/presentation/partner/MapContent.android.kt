@@ -185,7 +185,7 @@ actual fun MapContent(
         }
     }
 
-    val isDarkTheme = LocalIsDarkTheme.current
+    val isDarkTheme = LocalIsDarkTheme.current || settings.mapDarkThemeEnabled
     val context = LocalContext.current
     val mapProperties = remember(isDarkTheme, settings.trafficLayerEnabled) {
         MapProperties(
@@ -327,8 +327,8 @@ actual fun MapContent(
     }
 
     // Smart Follow Mode: Synchronized follow
-    LaunchedEffect(currentPartnerLocation, isFollowModeEnabled) {
-        if (isFollowModeEnabled && currentPartnerLocation != null) {
+    LaunchedEffect(currentPartnerLocation, isFollowModeEnabled, settings.smartFollowEnabled) {
+        if (settings.smartFollowEnabled && isFollowModeEnabled && currentPartnerLocation != null) {
             // Using move() instead of animate() to keep the camera perfectly 
             // locked to the animated avatar position without any extra lag.
             cameraPositionState.move(CameraUpdateFactory.newLatLng(currentPartnerLocation))
@@ -636,13 +636,15 @@ actual fun MapContent(
                     }
 
                     // Circle for Place radius
-                    Circle(
-                        center = LatLng(place.latitude, place.longitude),
-                        radius = place.radius,
-                        fillColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.15f),
-                        strokeColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.3f),
-                        strokeWidth = 2f
-                    )
+                    if (settings.reminderMarkersEnabled) {
+                        Circle(
+                            center = LatLng(place.latitude, place.longitude),
+                            radius = place.radius,
+                            fillColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.15f),
+                            strokeColor = Color(place.color ?: 0xFF2196F3).copy(alpha = 0.3f),
+                            strokeWidth = 2f
+                        )
+                    }
                 }
             }
 

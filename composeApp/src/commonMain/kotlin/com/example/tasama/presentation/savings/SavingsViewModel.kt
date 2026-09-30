@@ -6,17 +6,22 @@ import com.example.tasama.domain.model.*
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.SavingsRepository
 import com.example.tasama.domain.repository.SettingsRepository
+import com.example.tasama.domain.service.FileService
 import com.example.tasama.presentation.components.TransientFeedback
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 
 class SavingsViewModel(
     private val repository: SavingsRepository,
     private val authRepository: AuthRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val fileService: FileService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SavingsUiState())
@@ -113,6 +118,67 @@ class SavingsViewModel(
                 _uiState.update { it.copy(myInvitations = invitations) }
             }
         }
+    }
+
+    fun exportTransactionsToCsv(feedbackHandler: ((TransientFeedback) -> Unit)? = null) {
+        val selectedSpace = _uiState.value.selectedSpace ?: run {
+            feedbackHandler?.invoke(TransientFeedback.Info("No space selected"))
+            return
+        }
+        val transactionsList = _uiState.value.transactions
+
+        viewModelScope.launch {
+            try {
+                val csvContent = generateCsvReport(selectedSpace, transactionsList)
+                val cleanSpaceName = selectedSpace.name.replace("[^a-zA-Z0-9]".toRegex(), "_")
+                val fileName = "Tasama_${cleanSpaceName}_Report.csv"
+                
+                fileService.saveAndShareFile(
+                    fileName = fileName,
+                    content = csvContent.encodeToByteArray(),
+                    mimeType = "text/csv"
+                )
+                
+                val successMsg = "Report for ${selectedSpace.name} exported successfully!"
+                feedbackHandler?.invoke(TransientFeedback.Info(successMsg))
+                _events.emit(SavingsEvent.ShowFeedback(successMsg))
+            } catch (e: Exception) {
+                val errorMsg = "Failed to export report: ${e.message}"
+                feedbackHandler?.invoke(TransientFeedback.Info(errorMsg))
+                _events.emit(SavingsEvent.ShowFeedback(errorMsg))
+            }
+        }
+    }
+
+    private fun generateCsvReport(space: SavingsSpace, transactions: List<SavingsTransaction>): String {
+        val sb = StringBuilder()
+        sb.append("TASAMA SAVINGS REPORT\n")
+        sb.append("Space Name,\"${space.name}\"\n")
+        sb.append("Type,\"${space.type.name}\"\n")
+        sb.append("Currency,\"${space.currency}\"\n")
+        sb.append("Current Balance,\"${space.balance}\"\n")
+        if (space.targetAmount != null && space.targetAmount > 0) {
+            sb.append("Target Amount,\"${space.targetAmount}\"\n")
+        }
+        sb.append("Total Transactions,\"${transactions.size}\"\n\n")
+
+        sb.append("Date,Time,Contributor,Type,Amount (${space.currency}),Notes\n")
+
+        transactions.sortedByDescending { it.timestamp }.forEach { tx ->
+            val instant = Instant.fromEpochMilliseconds(tx.timestamp)
+            val tz = TimeZone.currentSystemDefault()
+            val dt = instant.toLocalDateTime(tz)
+            val monthStr = dt.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+            val dateStr = "${dt.year}-$monthStr-${dt.dayOfMonth.toString().padStart(2, '0')}"
+            val timeStr = "${dt.hour.toString().padStart(2, '0')}:${dt.minute.toString().padStart(2, '0')}"
+            val typeStr = if (tx.type == TransactionType.INCOME) "Income / Contribution" else "Expense / Withdrawal"
+            val sign = if (tx.type == TransactionType.INCOME) "+" else "-"
+            val notesStr = tx.note.replace("\"", "\"\"")
+
+            sb.append("\"$dateStr\",\"$timeStr\",\"${tx.userName}\",\"$typeStr\",\"$sign ${tx.amount}\",\"$notesStr\"\n")
+        }
+
+        return sb.toString()
     }
 
     fun onSpaceClick(spaceId: String) {

@@ -595,7 +595,8 @@ fun MainScreen(
                                         onCopyUserId = { userId ->
                                             clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(userId))
                                             feedbackHandler(TransientFeedback.Copy("User ID copied to clipboard"))
-                                        }
+                                        },
+                                        onExportCsv = { savingsViewModel.exportTransactionsToCsv(feedbackHandler) }
                                     )
 
                                     if (uiState.showInviteMemberDialog) {

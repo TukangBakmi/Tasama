@@ -23,15 +23,15 @@ class NotificationPerspectiveTest {
 
         // Performer's perspective (Alice)
         val descriptionForAlice = getActivityDescription(activity, "user_a")
-        assertEquals("You invited Bebet cerdas to Holiday Fund", descriptionForAlice)
+        assertEquals("You invited Bebet cerdas to join Holiday Fund", descriptionForAlice)
 
         // Affected user's perspective (Bebet cerdas)
         val descriptionForBebet = getActivityDescription(activity, "user_b")
-        assertEquals("Alice invited you to Holiday Fund", descriptionForBebet)
+        assertEquals("Alice invited you to join Holiday Fund", descriptionForBebet)
 
         // Third party's perspective (Charlie)
         val descriptionForCharlie = getActivityDescription(activity, "user_c")
-        assertEquals("Alice invited Bebet cerdas to Holiday Fund", descriptionForCharlie)
+        assertEquals("Alice invited Bebet cerdas to join Holiday Fund", descriptionForCharlie)
     }
 
     @Test

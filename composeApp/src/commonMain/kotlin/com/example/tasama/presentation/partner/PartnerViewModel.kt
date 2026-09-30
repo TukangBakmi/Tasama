@@ -728,8 +728,16 @@ class PartnerViewModel(
         viewModelScope.launch { settingsRepository.updateBatteryMode(mode) }
     }
 
-    fun updateSmartFollowEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.updateSmartFollowEnabled(enabled) }
+    fun updateLoveNudgeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateLoveNudgeEnabled(enabled) }
+    }
+
+    fun updateTogetherAlertEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateTogetherAlertEnabled(enabled) }
+    }
+
+    fun updateLowBatteryAlertEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateLowBatteryAlertEnabled(enabled) }
     }
 
     fun updateWeatherWidgetEnabled(enabled: Boolean) {

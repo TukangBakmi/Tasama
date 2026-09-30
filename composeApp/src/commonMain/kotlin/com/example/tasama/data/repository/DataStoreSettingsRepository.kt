@@ -20,12 +20,14 @@ class DataStoreSettingsRepository(
         
         val PARTNER_MAP_ENABLED = booleanPreferencesKey("partner_map_enabled")
         val BATTERY_MODE = stringPreferencesKey("battery_mode")
-        val SMART_FOLLOW_ENABLED = booleanPreferencesKey("smart_follow_enabled")
+        val LOVE_NUDGE_ENABLED = booleanPreferencesKey("love_nudge_enabled")
         val WEATHER_WIDGET_ENABLED = booleanPreferencesKey("weather_widget_enabled")
         val DASHBOARD_ENABLED = booleanPreferencesKey("dashboard_enabled")
         val PLACES_ENABLED = booleanPreferencesKey("places_enabled")
         val REMINDER_NOTIFICATIONS_ENABLED = booleanPreferencesKey("reminder_notifications_enabled")
         val REMINDER_MARKERS_ENABLED = booleanPreferencesKey("reminder_markers_enabled")
+        val TOGETHER_ALERT_ENABLED = booleanPreferencesKey("together_alert_enabled")
+        val LOW_BATTERY_ALERT_ENABLED = booleanPreferencesKey("low_battery_alert_enabled")
         val TRAFFIC_LAYER_ENABLED = booleanPreferencesKey("traffic_layer_enabled")
         val MAP_DARK_THEME_ENABLED = booleanPreferencesKey("map_dark_theme_enabled")
         
@@ -44,12 +46,14 @@ class DataStoreSettingsRepository(
             notificationsEnabled = preferences[PreferencesKeys.NOTIFICATIONS] ?: true,
             partnerMapEnabled = preferences[PreferencesKeys.PARTNER_MAP_ENABLED] ?: true,
             batteryMode = BatteryMode.valueOf(preferences[PreferencesKeys.BATTERY_MODE] ?: BatteryMode.BALANCED.name),
-            smartFollowEnabled = preferences[PreferencesKeys.SMART_FOLLOW_ENABLED] ?: true,
+            loveNudgeEnabled = preferences[PreferencesKeys.LOVE_NUDGE_ENABLED] ?: true,
             weatherWidgetEnabled = preferences[PreferencesKeys.WEATHER_WIDGET_ENABLED] ?: true,
             dashboardEnabled = preferences[PreferencesKeys.DASHBOARD_ENABLED] ?: true,
             placesEnabled = preferences[PreferencesKeys.PLACES_ENABLED] ?: true,
             reminderNotificationsEnabled = preferences[PreferencesKeys.REMINDER_NOTIFICATIONS_ENABLED] ?: true,
             reminderMarkersEnabled = preferences[PreferencesKeys.REMINDER_MARKERS_ENABLED] ?: true,
+            togetherAlertEnabled = preferences[PreferencesKeys.TOGETHER_ALERT_ENABLED] ?: true,
+            lowBatteryAlertEnabled = preferences[PreferencesKeys.LOW_BATTERY_ALERT_ENABLED] ?: true,
             trafficLayerEnabled = preferences[PreferencesKeys.TRAFFIC_LAYER_ENABLED] ?: false,
             mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false,
             undoTransactionId = preferences[PreferencesKeys.UNDO_TRANSACTION_ID],
@@ -86,8 +90,16 @@ class DataStoreSettingsRepository(
         dataStore.edit { preferences -> preferences[PreferencesKeys.BATTERY_MODE] = mode.name }
     }
 
-    override suspend fun updateSmartFollowEnabled(enabled: Boolean) {
-        dataStore.edit { preferences -> preferences[PreferencesKeys.SMART_FOLLOW_ENABLED] = enabled }
+    override suspend fun updateLoveNudgeEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[PreferencesKeys.LOVE_NUDGE_ENABLED] = enabled }
+    }
+
+    override suspend fun updateTogetherAlertEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[PreferencesKeys.TOGETHER_ALERT_ENABLED] = enabled }
+    }
+
+    override suspend fun updateLowBatteryAlertEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[PreferencesKeys.LOW_BATTERY_ALERT_ENABLED] = enabled }
     }
 
     override suspend fun updateWeatherWidgetEnabled(enabled: Boolean) {

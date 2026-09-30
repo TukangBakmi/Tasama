@@ -30,12 +30,14 @@ fun PartnerSettingsSheet(
     settings: AppSettings,
     onUpdatePartnerMapEnabled: (Boolean) -> Unit,
     onUpdateBatteryMode: (BatteryMode) -> Unit,
-    onUpdateSmartFollowEnabled: (Boolean) -> Unit,
+    onUpdateLoveNudgeEnabled: (Boolean) -> Unit,
     onUpdateWeatherWidgetEnabled: (Boolean) -> Unit,
     onUpdateDashboardEnabled: (Boolean) -> Unit,
     onUpdatePlacesEnabled: (Boolean) -> Unit,
     onUpdateReminderNotificationsEnabled: (Boolean) -> Unit,
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
+    onUpdateTogetherAlertEnabled: (Boolean) -> Unit,
+    onUpdateLowBatteryAlertEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
     onDismiss: () -> Unit
@@ -108,11 +110,11 @@ fun PartnerSettingsSheet(
                             0 -> {
                                 SettingsSection(title = "General & Widgets") {
                                     SettingsToggleItem(
-                                        title = "Smart Follow",
-                                        subtitle = "Automatically keep partner in view",
-                                        icon = Icons.Default.MyLocation,
-                                        checked = settings.smartFollowEnabled,
-                                        onCheckedChange = onUpdateSmartFollowEnabled
+                                        title = "Love Nudge Button",
+                                        subtitle = "Show quick ❤️ interaction button on map",
+                                        icon = Icons.Default.Favorite,
+                                        checked = settings.loveNudgeEnabled,
+                                        onCheckedChange = onUpdateLoveNudgeEnabled
                                     )
 
                                     SettingsToggleItem(
@@ -152,7 +154,7 @@ fun PartnerSettingsSheet(
 
                                     SettingsToggleItem(
                                         title = "Place Reminders",
-                                        subtitle = "Show geofence markers",
+                                        subtitle = "Show geofence radius circles",
                                         icon = Icons.Default.PushPin,
                                         checked = settings.reminderMarkersEnabled,
                                         onCheckedChange = onUpdateReminderMarkersEnabled
@@ -160,7 +162,7 @@ fun PartnerSettingsSheet(
 
                                     SettingsToggleItem(
                                         title = "Show Saved Places",
-                                        subtitle = "Display saved locations on map",
+                                        subtitle = "Display saved place markers on map",
                                         icon = Icons.Default.Place,
                                         checked = settings.placesEnabled,
                                         onCheckedChange = onUpdatePlacesEnabled
@@ -172,6 +174,14 @@ fun PartnerSettingsSheet(
                                         icon = Icons.Default.NotificationsActive,
                                         checked = settings.reminderNotificationsEnabled,
                                         onCheckedChange = onUpdateReminderNotificationsEnabled
+                                    )
+
+                                    SettingsToggleItem(
+                                        title = "Together Alerts",
+                                        subtitle = "Notify when you and partner are nearby",
+                                        icon = Icons.Default.FavoriteBorder,
+                                        checked = settings.togetherAlertEnabled,
+                                        onCheckedChange = onUpdateTogetherAlertEnabled
                                     )
                                 }
                             }
@@ -189,6 +199,14 @@ fun PartnerSettingsSheet(
                                                 BatteryMode.BATTERY_SAVER -> "Power Saver"
                                             }
                                         }
+                                    )
+
+                                    SettingsToggleItem(
+                                        title = "Low Battery Warning",
+                                        subtitle = "Notify partner when battery drops <= 15%",
+                                        icon = Icons.Default.BatteryAlert,
+                                        checked = settings.lowBatteryAlertEnabled,
+                                        onCheckedChange = onUpdateLowBatteryAlertEnabled
                                     )
                                 }
 

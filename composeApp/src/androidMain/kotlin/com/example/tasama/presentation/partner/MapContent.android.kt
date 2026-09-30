@@ -328,8 +328,8 @@ actual fun MapContent(
     }
 
     // Smart Follow Mode: Synchronized follow
-    LaunchedEffect(currentPartnerLocation, isFollowModeEnabled, settings.smartFollowEnabled) {
-        if (settings.smartFollowEnabled && isFollowModeEnabled && currentPartnerLocation != null) {
+    LaunchedEffect(currentPartnerLocation, isFollowModeEnabled) {
+        if (isFollowModeEnabled && currentPartnerLocation != null) {
             // Using move() instead of animate() to keep the camera perfectly 
             // locked to the animated avatar position without any extra lag.
             cameraPositionState.move(CameraUpdateFactory.newLatLng(currentPartnerLocation))
@@ -1142,59 +1142,61 @@ actual fun MapContent(
             ) {
 
                 // Love Nudge FAB & Quick Selector
-                var showNudgeSelector by remember { mutableStateOf(false) }
+                if (settings.loveNudgeEnabled) {
+                    var showNudgeSelector by remember { mutableStateOf(false) }
 
-                Column(horizontalAlignment = Alignment.End) {
-                    AnimatedVisibility(
-                        visible = showNudgeSelector,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 6.dp,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                    Column(horizontalAlignment = Alignment.End) {
+                        AnimatedVisibility(
+                            visible = showNudgeSelector,
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                                shape = RoundedCornerShape(16.dp),
+                                tonalElevation = 6.dp,
+                                modifier = Modifier.padding(bottom = 8.dp)
                             ) {
-                                listOf(
-                                    "Love" to "❤️",
-                                    "Hug" to "🫂",
-                                    "Ping" to "⚡",
-                                    "Coffee" to "☕"
-                                ).forEach { (type, emoji) ->
-                                    Surface(
-                                        onClick = {
-                                            onSendLoveNudge(type)
-                                            showNudgeSelector = false
-                                        },
-                                        shape = CircleShape,
-                                        color = Color(0xFFFCE4EC)
-                                    ) {
-                                        Text(
-                                            text = emoji,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(8.dp)
-                                        )
+                                Row(
+                                    modifier = Modifier.padding(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "Love" to "❤️",
+                                        "Hug" to "🫂",
+                                        "Ping" to "⚡",
+                                        "Coffee" to "☕"
+                                    ).forEach { (type, emoji) ->
+                                        Surface(
+                                            onClick = {
+                                                onSendLoveNudge(type)
+                                                showNudgeSelector = false
+                                            },
+                                            shape = CircleShape,
+                                            color = Color(0xFFFCE4EC)
+                                        ) {
+                                            Text(
+                                                text = emoji,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    SmallFloatingActionButton(
-                        onClick = { showNudgeSelector = !showNudgeSelector },
-                        containerColor = Color(0xFFFCE4EC),
-                        contentColor = Color(0xFFC2185B),
-                        shape = CircleShape
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Send Love Nudge"
-                        )
+                        SmallFloatingActionButton(
+                            onClick = { showNudgeSelector = !showNudgeSelector },
+                            containerColor = Color(0xFFFCE4EC),
+                            contentColor = Color(0xFFC2185B),
+                            shape = CircleShape
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = "Send Love Nudge"
+                            )
+                        }
                     }
                 }
 

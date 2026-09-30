@@ -16,12 +16,14 @@ data class AppSettings(
     // Partner Map Settings
     val partnerMapEnabled: Boolean = true,
     val batteryMode: BatteryMode = BatteryMode.BALANCED,
-    val smartFollowEnabled: Boolean = true,
+    val loveNudgeEnabled: Boolean = true,
     val weatherWidgetEnabled: Boolean = true,
     val dashboardEnabled: Boolean = true,
     val placesEnabled: Boolean = true,
     val reminderNotificationsEnabled: Boolean = true,
     val reminderMarkersEnabled: Boolean = true,
+    val togetherAlertEnabled: Boolean = true,
+    val lowBatteryAlertEnabled: Boolean = true,
     val trafficLayerEnabled: Boolean = false,
     val mapDarkThemeEnabled: Boolean = false,
 

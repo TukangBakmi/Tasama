@@ -14,12 +14,14 @@ interface SettingsRepository {
     // Partner Map Settings
     suspend fun updatePartnerMapEnabled(enabled: Boolean)
     suspend fun updateBatteryMode(mode: BatteryMode)
-    suspend fun updateSmartFollowEnabled(enabled: Boolean)
+    suspend fun updateLoveNudgeEnabled(enabled: Boolean)
     suspend fun updateWeatherWidgetEnabled(enabled: Boolean)
     suspend fun updateDashboardEnabled(enabled: Boolean)
     suspend fun updatePlacesEnabled(enabled: Boolean)
     suspend fun updateReminderNotificationsEnabled(enabled: Boolean)
     suspend fun updateReminderMarkersEnabled(enabled: Boolean)
+    suspend fun updateTogetherAlertEnabled(enabled: Boolean)
+    suspend fun updateLowBatteryAlertEnabled(enabled: Boolean)
     suspend fun updateTrafficLayerEnabled(enabled: Boolean)
     suspend fun updateMapDarkThemeEnabled(enabled: Boolean)
 

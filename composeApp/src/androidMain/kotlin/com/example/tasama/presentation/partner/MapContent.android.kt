@@ -148,7 +148,8 @@ actual fun MapContent(
     onUnlink: () -> Unit,
     onCopyId: (String) -> Unit,
     settings: AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onSendLoveNudge: (String) -> Unit
 ) {
     val density = LocalDensity.current
 
@@ -1139,6 +1140,63 @@ actual fun MapContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.End
             ) {
+
+                // Love Nudge FAB & Quick Selector
+                var showNudgeSelector by remember { mutableStateOf(false) }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    AnimatedVisibility(
+                        visible = showNudgeSelector,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 6.dp,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf(
+                                    "Love" to "❤️",
+                                    "Hug" to "🫂",
+                                    "Ping" to "⚡",
+                                    "Coffee" to "☕"
+                                ).forEach { (type, emoji) ->
+                                    Surface(
+                                        onClick = {
+                                            onSendLoveNudge(type)
+                                            showNudgeSelector = false
+                                        },
+                                        shape = CircleShape,
+                                        color = Color(0xFFFCE4EC)
+                                    ) {
+                                        Text(
+                                            text = emoji,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    SmallFloatingActionButton(
+                        onClick = { showNudgeSelector = !showNudgeSelector },
+                        containerColor = Color(0xFFFCE4EC),
+                        contentColor = Color(0xFFC2185B),
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Send Love Nudge"
+                        )
+                    }
+                }
 
                 // Compass / Mata Angin Button (Visible ONLY when map is rotated away from North)
                 val currentBearing = cameraPositionState.position.bearing

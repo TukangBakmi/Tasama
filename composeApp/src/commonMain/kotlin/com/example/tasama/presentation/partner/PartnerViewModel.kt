@@ -2,11 +2,14 @@ package com.example.tasama.presentation.partner
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.LiveLocation
 import com.example.tasama.domain.model.Place
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.ChatRepository
 import com.example.tasama.domain.repository.DirectionsRepository
@@ -62,7 +65,8 @@ class PartnerViewModel(
     private val weatherRepository: WeatherRepository,
     private val settingsRepository: SettingsRepository,
     private val presenceRepository: PresenceRepository,
-    private val liveLocationRepository: LiveLocationRepository
+    private val liveLocationRepository: LiveLocationRepository,
+    private val activityRepository: ActivityRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PartnerUiState())
     val uiState = _uiState.asStateFlow()
@@ -638,6 +642,55 @@ class PartnerViewModel(
                     onFeedback(TransientFeedback.Info(e.message ?: "Failed to update anniversary"))
                 }
             )
+        }
+    }
+
+    fun sendLoveNudge(nudgeType: String = "LOVE", onFeedback: (TransientFeedback) -> Unit = {}) {
+        val currentUser = _uiState.value.currentUser ?: return
+        val partner = _uiState.value.partner ?: run {
+            onFeedback(TransientFeedback.Info("No partner linked"))
+            return
+        }
+
+        val (iconSymbol, nudgeText) = when (nudgeType.uppercase()) {
+            "HUG" -> "🫂" to "sent a warm hug"
+            "PING" -> "⚡" to "sent a ping"
+            "COFFEE" -> "☕" to "sent a coffee break reminder"
+            else -> "❤️" to "sent a love nudge"
+        }
+
+        val message = "$iconSymbol ${currentUser.name.ifEmpty { "Partner" }} $nudgeText!"
+
+        viewModelScope.launch {
+            try {
+                activityRepository.logActivity(
+                    Activity(
+                        userId = currentUser.id,
+                        userName = currentUser.name,
+                        affectedUserId = partner.id,
+                        affectedUserName = partner.name,
+                        category = ActivityCategory.PARTNER,
+                        type = "PARTNER_NUDGE",
+                        title = "Love Nudge",
+                        details = message,
+                        metadata = mapOf(
+                            "nudgeType" to nudgeType,
+                            "partnerName" to partner.name
+                        )
+                    )
+                )
+
+                authRepository.sendNotification(
+                    targetUid = partner.id,
+                    title = "$iconSymbol Love Nudge!",
+                    body = message,
+                    type = "PARTNER_NUDGE"
+                )
+
+                onFeedback(TransientFeedback.Info("$iconSymbol Nudge sent to ${partner.name}!"))
+            } catch (e: Exception) {
+                onFeedback(TransientFeedback.Info("Failed to send nudge: ${e.message}"))
+            }
         }
     }
 

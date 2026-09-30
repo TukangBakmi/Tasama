@@ -167,7 +167,8 @@ actual fun MapContent(
     onUnlink: () -> Unit,
     onCopyId: (String) -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onSendLoveNudge: (String) -> Unit
 ) {
     var mapViewInstance by remember { mutableStateOf<MKMapView?>(null) }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }

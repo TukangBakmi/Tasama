@@ -26,5 +26,6 @@ expect fun MapContent(
     onUnlink: () -> Unit = {},
     onCopyId: (String) -> Unit = {},
     settings: com.example.tasama.domain.model.AppSettings = com.example.tasama.domain.model.AppSettings(),
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onSendLoveNudge: (String) -> Unit = {}
 )

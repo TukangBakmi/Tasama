@@ -30,8 +30,10 @@ actual fun MapContent(
     onAddPlace: (com.example.tasama.domain.model.Place) -> Unit,
     onDeletePlace: (String) -> Unit,
     onUnlink: () -> Unit,
+    onCopyId: (String) -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onSendLoveNudge: (String) -> Unit
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

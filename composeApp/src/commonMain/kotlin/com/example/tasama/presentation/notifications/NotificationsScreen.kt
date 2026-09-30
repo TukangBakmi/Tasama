@@ -365,12 +365,12 @@ private fun getActivityIconConfig(
         )
 
         // Partner / Love / Location (Pink / Teal / Orange)
-        "PARTNER_REQUEST" -> ActivityIconConfig(
-            icon = Icons.Default.FavoriteBorder,
-            containerColor = Color(0xFFFCE4EC),
-            iconColor = Color(0xFFC2185B)
+        "LOW_BATTERY_ALERT" -> ActivityIconConfig(
+            icon = Icons.Default.BatteryAlert,
+            containerColor = Color(0xFFFFF3E0),
+            iconColor = Color(0xFFE65100)
         )
-        "PARTNER_TOGETHER", "ANNIVERSARY_UPDATED" -> ActivityIconConfig(
+        "PARTNER_REQUEST", "PARTNER_TOGETHER", "PARTNER_NUDGE" -> ActivityIconConfig(
             icon = Icons.Default.Favorite,
             containerColor = Color(0xFFFCE4EC),
             iconColor = Color(0xFFC2185B)
@@ -665,6 +665,36 @@ fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedStr
                 append("You and ")
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(partnerName) }
                 append(" are together now! ❤️")
+            }
+            "LOW_BATTERY_ALERT" -> {
+                val pct = activity.metadata["batteryPct"] ?: "15"
+                if (isPerformerMe) {
+                    append("Your phone battery is low (")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$pct%") }
+                    append(")")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append("'s phone battery is low (")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$pct%") }
+                    append(")")
+                }
+            }
+            "PARTNER_NUDGE" -> {
+                val nudgeType = activity.metadata["nudgeType"]?.uppercase() ?: "LOVE"
+                val (symbol, actionText) = when (nudgeType) {
+                    "HUG" -> "🫂" to "sent a warm hug to "
+                    "PING" -> "⚡" to "sent a ping to "
+                    "COFFEE" -> "☕" to "sent a coffee break reminder to "
+                    else -> "❤️" to "sent a love nudge to "
+                }
+                if (isPerformerMe) {
+                    append("You $actionText")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(activity.affectedUserName ?: "partner") }
+                    append("! $symbol")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" $actionText you! $symbol")
+                }
             }
             else -> append(activity.details)
         }

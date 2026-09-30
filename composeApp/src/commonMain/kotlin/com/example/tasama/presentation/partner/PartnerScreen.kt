@@ -109,7 +109,8 @@ fun PartnerScreen(
                             onUpdateReminderNotificationsEnabled = viewModel::updateReminderNotificationsEnabled,
                             onUpdateReminderMarkersEnabled = viewModel::updateReminderMarkersEnabled,
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
-                            onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled
+                            onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
+                            onSendLoveNudge = { type -> viewModel.sendLoveNudge(type, feedbackHandler) }
                         )
                     } else {
                         DisabledPartnerMapContent(
@@ -369,7 +370,8 @@ fun PartnerMapContent(
     onUpdateReminderNotificationsEnabled: (Boolean) -> Unit,
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
-    onUpdateMapDarkThemeEnabled: (Boolean) -> Unit
+    onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
+    onSendLoveNudge: (String) -> Unit = {}
 ) {
     var showSettings by remember { mutableStateOf(false) }
 
@@ -392,7 +394,8 @@ fun PartnerMapContent(
             onUnlink = onUnlink,
             onCopyId = onCopyId,
             settings = settings,
-            onOpenSettings = { showSettings = true }
+            onOpenSettings = { showSettings = true },
+            onSendLoveNudge = onSendLoveNudge
         )
     }
 

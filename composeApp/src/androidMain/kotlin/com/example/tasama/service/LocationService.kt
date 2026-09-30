@@ -21,9 +21,14 @@ import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import com.example.tasama.MainActivity
 import com.example.tasama.R
+import android.content.IntentFilter
+import android.os.BatteryManager
+import com.example.tasama.domain.model.Activity
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.domain.model.LiveLocation
 import com.example.tasama.domain.model.User
+import com.example.tasama.domain.repository.ActivityRepository
 import com.example.tasama.domain.repository.AuthRepository
 import com.example.tasama.domain.repository.LiveLocationRepository
 import com.example.tasama.domain.repository.PlaceRepository
@@ -45,6 +50,7 @@ class LocationService : Service() {
     private val placeRepository: PlaceRepository by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val geofenceMonitor: GeofenceMonitor by inject()
+    private val activityRepository: ActivityRepository by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
@@ -373,14 +379,72 @@ class LocationService : Service() {
         return results[0]
     }
 
+    private var lastLowBatteryAlertTime = 0L
+
     private fun monitorLocalStatus() {
         serviceScope.launch {
             val uid = authRepository.getCurrentUserId() ?: return@launch
             while (isActive) {
                 val connectionType = getConnectionType()
                 authRepository.updateConnectionType(uid, connectionType)
+
+                try {
+                    val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { ifilter ->
+                        registerReceiver(null, ifilter)
+                    }
+                    val level: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                    val scale: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+                    val status: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                            status == BatteryManager.BATTERY_STATUS_FULL
+
+                    if (level > 0 && scale > 0) {
+                        val pct = level / scale.toFloat()
+                        authRepository.updateBatteryLevel(uid, pct, isCharging)
+
+                        val now = System.currentTimeMillis()
+                        if (pct <= 0.15f && !isCharging && (now - lastLowBatteryAlertTime > 7200000L)) {
+                            lastLowBatteryAlertTime = now
+                            checkAndSendLowBatteryAlert(uid, (pct * 100).toInt())
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("LIVE_LOCATION_SERVICE: Error checking battery: ${e.message}")
+                }
+
                 delay(60000) // Update every minute
             }
+        }
+    }
+
+    private suspend fun checkAndSendLowBatteryAlert(uid: String, batteryPct: Int) {
+        val user = authRepository.getUser(uid) ?: return
+        val partnerId = user.partnerId ?: return
+        val partnerName = user.name.ifEmpty { "Partner" }
+        val message = "⚠️ $partnerName's phone battery is low ($batteryPct%). They might be hard to reach soon!"
+
+        try {
+            activityRepository.logActivity(
+                Activity(
+                    userId = user.id,
+                    userName = user.name,
+                    affectedUserId = partnerId,
+                    category = ActivityCategory.PARTNER,
+                    type = "LOW_BATTERY_ALERT",
+                    title = "Low Battery Alert",
+                    details = message,
+                    metadata = mapOf("batteryPct" to batteryPct.toString())
+                )
+            )
+
+            authRepository.sendNotification(
+                targetUid = partnerId,
+                title = "⚠️ Low Battery Alert",
+                body = message,
+                type = "LOW_BATTERY_ALERT"
+            )
+        } catch (e: Exception) {
+            println("LIVE_LOCATION_SERVICE: Error sending low battery alert: ${e.message}")
         }
     }
 

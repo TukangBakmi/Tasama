@@ -91,6 +91,8 @@ class NotificationsViewModel(
             "PARTNER_REQUEST",
             "PARTNER_ACCEPTED",
             "PARTNER_TOGETHER",
+            "PARTNER_NUDGE",
+            "LOW_BATTERY_ALERT",
             "PLACE_ALERT",
             "SIGNAL_LOST",
             "SIGNAL_RESTORED",

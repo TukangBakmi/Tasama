@@ -2,6 +2,7 @@ package com.example.tasama.presentation.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.InvitationStatus
 import com.example.tasama.domain.model.SavingsActivity
@@ -91,7 +92,7 @@ class DashboardViewModel(
             val savingsTransactionsFlow = savingsRepository.getGlobalTransactions().distinctUntilChanged()
             val channelsFlow = chatRepository.getChannels().distinctUntilChanged()
             val settingsFlow = settingsRepository.settings.distinctUntilChanged()
-            val unreadFlow = activityRepository.hasUnread().distinctUntilChanged()
+            val unreadFlow = activityRepository.hasUnread(ActivityCategory.SAVINGS).distinctUntilChanged()
 
             combine(
                 transactionsFlow,
@@ -159,8 +160,7 @@ class DashboardViewModel(
 
             val currentUid = authRepository.getCurrentUserId()
 
-            val hasUnread = snapshot.hasUnifiedUnread || 
-                           snapshot.channels.any { (it.unreadCounts[currentUid] ?: 0) > 0 }
+            val hasUnreadSavings = snapshot.hasUnifiedUnread || pendingInvitations.isNotEmpty()
 
             val trendChartData = calculateTrendData(filteredTransactions, currentPeriod)
 
@@ -171,7 +171,7 @@ class DashboardViewModel(
                 totalSavingsBalance = totalSavingsBalance,
                 pendingInvitations = pendingInvitations,
                 hasPendingPartnerRequest = hasPendingPartnerRequest,
-                hasUnreadNotifications = hasUnread,
+                hasUnreadNotifications = hasUnreadSavings,
                 currency = snapshot.settings.currency
             ) }
         }

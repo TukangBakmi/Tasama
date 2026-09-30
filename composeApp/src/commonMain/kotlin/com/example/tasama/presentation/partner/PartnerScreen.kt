@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.tasama.presentation.partner.components.FullScreenNudgeOverlay
 import com.example.tasama.presentation.partner.components.LinkPartnerDialog
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
@@ -114,7 +115,11 @@ fun PartnerScreen(
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
                             onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
                             onSendLoveNudge = { type -> viewModel.sendLoveNudge(type, feedbackHandler) },
-                            onOpenNotifications = onNavigateToNotifications
+                            onOpenNotifications = onNavigateToNotifications,
+                            hasUnreadNotifications = uiState.hasUnreadPartnerNotifications,
+                            activeNudgeAnimation = uiState.activeNudgeAnimation,
+                            nudgeSenderName = uiState.nudgeSenderName,
+                            onClearNudgeAnimation = viewModel::clearNudgeAnimation
                         )
                     } else {
                         DisabledPartnerMapContent(
@@ -378,7 +383,11 @@ fun PartnerMapContent(
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
     onSendLoveNudge: (String) -> Unit = {},
-    onOpenNotifications: () -> Unit = {}
+    onOpenNotifications: () -> Unit = {},
+    hasUnreadNotifications: Boolean = false,
+    activeNudgeAnimation: String? = null,
+    nudgeSenderName: String? = null,
+    onClearNudgeAnimation: () -> Unit = {}
 ) {
     var showSettings by remember { mutableStateOf(false) }
 
@@ -403,7 +412,15 @@ fun PartnerMapContent(
             settings = settings,
             onOpenSettings = { showSettings = true },
             onSendLoveNudge = onSendLoveNudge,
-            onOpenNotifications = onOpenNotifications
+            onOpenNotifications = onOpenNotifications,
+            hasUnreadNotifications = hasUnreadNotifications
+        )
+
+        // Full Screen Animated Love Nudge Overlay
+        FullScreenNudgeOverlay(
+            nudgeType = activeNudgeAnimation,
+            senderName = nudgeSenderName,
+            onAnimationDismiss = onClearNudgeAnimation
         )
     }
 

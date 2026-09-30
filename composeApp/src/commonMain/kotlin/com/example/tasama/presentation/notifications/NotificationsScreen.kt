@@ -55,39 +55,29 @@ fun NotificationsScreen(
     initialTab: Int = 0
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val pagerState = rememberPagerState(initialPage = initialTab, pageCount = { 2 })
-    val scope = rememberCoroutineScope()
+    val isPartnerCategory = initialTab == 1
 
     LaunchedEffect(initialTab) {
         viewModel.onTabSelected(initialTab)
     }
 
-    // Sync Pager state to ViewModel when user swipes
-    LaunchedEffect(pagerState.currentPage) {
-        viewModel.onTabSelected(pagerState.currentPage)
-    }
-
-    // Sync ViewModel state to Pager
-    LaunchedEffect(uiState.selectedTab) {
-        if (pagerState.currentPage != uiState.selectedTab) {
-            pagerState.animateScrollToPage(uiState.selectedTab)
-        }
-    }
-
-    DisposableEffect(Unit) {
+    DisposableEffect(initialTab) {
         onDispose {
             viewModel.onScreenLeft()
         }
     }
 
-    val currentHasUnread = if (pagerState.currentPage == 0) uiState.hasUnreadSavings else uiState.hasUnreadPartner
+    val activities = if (isPartnerCategory) uiState.partnerActivities else uiState.savingsActivities
+    val hasUnread = if (isPartnerCategory) uiState.hasUnreadPartner else uiState.hasUnreadSavings
+    val screenTitle = if (isPartnerCategory) "Partner Notifications" else "Savings Notifications"
+    val categoryName = if (isPartnerCategory) "Partner" else "Savings"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Notifications",
+                        screenTitle,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -95,105 +85,31 @@ fun NotificationsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
-                },
-                actions = {
-                    if (currentHasUnread) {
-                        TextButton(onClick = { viewModel.markAllAsReadCurrentTab() }) {
-                            Text(
-                                "Mark all as read",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
                 }
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            TabRow(
-                selectedTabIndex = pagerState.currentPage,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
-            ) {
-                NotificationTab(
-                    text = "Savings",
-                    selected = pagerState.currentPage == 0,
-                    hasUnread = uiState.hasUnreadSavings,
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(0) }
-                    }
-                )
-                NotificationTab(
-                    text = "Partner",
-                    selected = pagerState.currentPage == 1,
-                    hasUnread = uiState.hasUnreadPartner,
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    }
-                )
-            }
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.Top
-            ) { page ->
-                val activities = if (page == 0) uiState.savingsActivities else uiState.partnerActivities
-                val categoryName = if (page == 0) "Savings" else "Partner"
-
-                if (activities.isEmpty()) {
-                    EmptyNotificationsState(categoryName = categoryName)
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(activities, key = { it.id }) { activity ->
-                            ActivityItem(
-                                activity = activity,
-                                uid = uiState.currentUserId,
-                                onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                            )
-                        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (activities.isEmpty()) {
+                EmptyNotificationsState(categoryName = categoryName)
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(activities, key = { it.id }) { activity ->
+                        ActivityItem(
+                            activity = activity,
+                            uid = uiState.currentUserId,
+                            onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-fun NotificationTab(
-    text: String,
-    selected: Boolean,
-    hasUnread: Boolean,
-    onClick: () -> Unit
-) {
-    Tab(
-        selected = selected,
-        onClick = onClick,
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = text,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                )
-                if (hasUnread) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                }
-            }
-        }
-    )
 }
 
 @Composable
@@ -689,7 +605,12 @@ fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedStr
                 val (symbol, actionText) = when (nudgeType) {
                     "HUG" -> "🫂" to "sent a warm hug to "
                     "PING" -> "⚡" to "sent a ping to "
-                    "COFFEE" -> "☕" to "sent a coffee break reminder to "
+                    "COFFEE", "KOPI" -> "☕" to "sent a coffee break reminder to "
+                    "MEAL", "MAKAN" -> "🍱" to "sent a meal reminder to "
+                    "SLEEP", "TIDUR" -> "🌙" to "sent a sleep reminder to "
+                    "WATER", "MINUM" -> "💧" to "sent a hydration reminder to "
+                    "KANGEN", "MISS" -> "🥺" to "sent a miss you nudge to "
+                    "ULTAH", "BIRTHDAY" -> "🎂" to "sent a birthday wish to "
                     else -> "❤️" to "sent a love nudge to "
                 }
                 if (isPerformerMe) {

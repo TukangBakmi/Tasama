@@ -54,7 +54,10 @@ data class PartnerUiState(
     val searchedUser: User? = null,
     val isSearchingUser: Boolean = false,
     val suggestedContacts: List<User> = emptyList(),
-    val filteredContacts: List<User> = emptyList()
+    val filteredContacts: List<User> = emptyList(),
+    val activeNudgeAnimation: String? = null,
+    val nudgeSenderName: String? = null,
+    val hasUnreadPartnerNotifications: Boolean = false
 )
 
 class PartnerViewModel(
@@ -240,6 +243,8 @@ class PartnerViewModel(
                     val isGuest = authRepository.isGuest()
                     _uiState.update { it.copy(isGuest = isGuest, isLoading = true) }
 
+                    observePartnerActivities(uid)
+
                     authRepository.getUserFlow(uid).collectLatest { user ->
                         _uiState.update { it.copy(currentUser = user, isLoading = false) }
                         if (user != null) {
@@ -260,6 +265,7 @@ class PartnerViewModel(
             observePartner(user.partnerId)
             observePartnerLiveLocation(user.partnerId)
             observePresence(user.partnerId)
+            observePartnerActivities(user.id)
             _uiState.update { it.copy(isLinked = true, pendingRequestFrom = null, pendingRequestTo = null) }
         } else {
             _uiState.update { it.copy(partner = null, partnerLiveLocation = null, partnerPresence = PresenceState.Offline(0L), isLinked = false) }
@@ -645,6 +651,74 @@ class PartnerViewModel(
         }
     }
 
+    private var activityObservationJob: Job? = null
+    private var lastObservedNudgeId: String? = null
+
+    private val partnerNotificationTypes = setOf(
+        "PARTNER_REQUEST",
+        "PARTNER_ACCEPTED",
+        "PARTNER_TOGETHER",
+        "PARTNER_NUDGE",
+        "LOW_BATTERY_ALERT",
+        "PLACE_ALERT",
+        "SIGNAL_LOST",
+        "SIGNAL_RESTORED",
+        "PLACE_ADDED",
+        "PLACE_UPDATED",
+        "PLACE_DELETED",
+        "ANNIVERSARY_UPDATED"
+    )
+
+    private fun observePartnerActivities(uid: String) {
+        activityObservationJob?.cancel()
+        activityObservationJob = viewModelScope.launch {
+            activityRepository.getActivities(ActivityCategory.PARTNER).collect { activities ->
+                val filteredPartnerActivities = activities.filter { activity ->
+                    activity.type in partnerNotificationTypes &&
+                    (activity.userId != uid || activity.type in setOf("PARTNER_ACCEPTED", "ANNIVERSARY_UPDATED", "PARTNER_TOGETHER", "LOW_BATTERY_ALERT")) &&
+                    (activity.type != "PARTNER_REQUEST" || activity.affectedUserId == uid)
+                }
+
+                val hasUnread = filteredPartnerActivities.any { it.isUnreadFor(uid) }
+                _uiState.update { it.copy(hasUnreadPartnerNotifications = hasUnread) }
+
+                val latestNudge = activities.firstOrNull { it.type == "PARTNER_NUDGE" }
+                if (latestNudge != null && latestNudge.id != lastObservedNudgeId) {
+                    val nudgeType = latestNudge.metadata["nudgeType"] ?: "LOVE"
+                    val senderName = if (latestNudge.userId == uid) "You" else latestNudge.userName
+                    
+                    if (lastObservedNudgeId != null) {
+                        _uiState.update { 
+                            it.copy(
+                                activeNudgeAnimation = nudgeType,
+                                nudgeSenderName = senderName
+                            )
+                        }
+                    }
+                    lastObservedNudgeId = latestNudge.id
+                }
+            }
+        }
+    }
+
+    fun triggerNudgeAnimation(nudgeType: String, senderName: String? = null) {
+        _uiState.update { 
+            it.copy(
+                activeNudgeAnimation = nudgeType,
+                nudgeSenderName = senderName
+            )
+        }
+    }
+
+    fun clearNudgeAnimation() {
+        _uiState.update { 
+            it.copy(
+                activeNudgeAnimation = null,
+                nudgeSenderName = null
+            )
+        }
+    }
+
     fun sendLoveNudge(nudgeType: String = "LOVE", onFeedback: (TransientFeedback) -> Unit = {}) {
         val currentUser = _uiState.value.currentUser ?: return
         val partner = _uiState.value.partner ?: run {
@@ -653,13 +727,26 @@ class PartnerViewModel(
         }
 
         val (iconSymbol, nudgeText) = when (nudgeType.uppercase()) {
+            "MEAL", "MAKAN" -> "🍱" to "sent a meal reminder"
+            "SLEEP", "TIDUR" -> "🌙" to "sent a sleep reminder"
             "HUG" -> "🫂" to "sent a warm hug"
             "PING" -> "⚡" to "sent a ping"
-            "COFFEE" -> "☕" to "sent a coffee break reminder"
+            "COFFEE", "KOPI" -> "☕" to "sent a coffee break reminder"
+            "WATER", "MINUM" -> "💧" to "sent a hydration reminder"
+            "KANGEN", "MISS" -> "🥺" to "sent a miss you reminder"
+            "ULTAH", "BIRTHDAY" -> "🎂" to "sent a birthday wish"
             else -> "❤️" to "sent a love nudge"
         }
 
         val message = "$iconSymbol ${currentUser.name.ifEmpty { "Partner" }} $nudgeText!"
+
+        // Trigger local full-screen animation immediately for sender!
+        _uiState.update {
+            it.copy(
+                activeNudgeAnimation = nudgeType,
+                nudgeSenderName = "You"
+            )
+        }
 
         viewModelScope.launch {
             try {

@@ -209,7 +209,7 @@ fun DashboardHeader(
                         .align(Alignment.TopEnd)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(PrimaryLightBlue)
+                        .background(Color.Red)
                 )
             }
         }

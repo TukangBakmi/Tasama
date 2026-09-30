@@ -1048,8 +1048,8 @@ actual fun MapContent(
                             badge = {
                                 if (hasUnreadNotifications) {
                                     Badge(
-                                        modifier = Modifier.size(8.dp),
-                                        containerColor = MaterialTheme.colorScheme.primary
+                                        modifier = Modifier.size(10.dp),
+                                        containerColor = Color.Red
                                     )
                                 }
                             }
@@ -1156,7 +1156,17 @@ actual fun MapContent(
         }
 
 
-        // Floating action buttons container
+        // Center-Right Radial Love Nudge Arc Menu (Kanan Tengah)
+        if (settings.loveNudgeEnabled && !isPlacementModeEnabled) {
+            RadialLoveNudgeMenu(
+                onSendNudge = onSendLoveNudge,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+            )
+        }
+
+        // Floating action buttons container (Kanan Bawah)
         AnimatedVisibility(
             visible = !isPlacementModeEnabled,
             enter = fadeIn() + slideInVertically { it / 2 },
@@ -1169,65 +1179,6 @@ actual fun MapContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.End
             ) {
-
-                // Love Nudge FAB & Quick Selector
-                if (settings.loveNudgeEnabled) {
-                    var showNudgeSelector by remember { mutableStateOf(false) }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        AnimatedVisibility(
-                            visible = showNudgeSelector,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                                shape = RoundedCornerShape(16.dp),
-                                tonalElevation = 6.dp,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    listOf(
-                                        "Love" to "❤️",
-                                        "Hug" to "🫂",
-                                        "Ping" to "⚡",
-                                        "Coffee" to "☕"
-                                    ).forEach { (type, emoji) ->
-                                        Surface(
-                                            onClick = {
-                                                onSendLoveNudge(type)
-                                                showNudgeSelector = false
-                                            },
-                                            shape = CircleShape,
-                                            color = Color(0xFFFCE4EC)
-                                        ) {
-                                            Text(
-                                                text = emoji,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                modifier = Modifier.padding(8.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        SmallFloatingActionButton(
-                            onClick = { showNudgeSelector = !showNudgeSelector },
-                            containerColor = Color(0xFFFCE4EC),
-                            contentColor = Color(0xFFC2185B),
-                            shape = CircleShape
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Favorite,
-                                contentDescription = "Send Love Nudge"
-                            )
-                        }
-                    }
-                }
 
                 // Compass / Mata Angin Button (Visible ONLY when map is rotated away from North)
                 val currentBearing = cameraPositionState.position.bearing
@@ -1641,6 +1592,138 @@ data class MarkerVisibilityData(
     val showPolyline: Boolean,
     val partnerScreenPos: Offset?
 )
+
+@Composable
+fun RadialLoveNudgeMenu(
+    onSendNudge: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var rotationAngle by remember { mutableFloatStateOf(0f) }
+
+    // Exactly 7 Nudges (Kangen and Ultah strictly removed)
+    val nudges = remember {
+        listOf(
+            "Love" to "❤️",
+            "Makan" to "🍱",
+            "Tidur" to "🌙",
+            "Hug" to "🫂",
+            "Ping" to "⚡",
+            "Coffee" to "☕",
+            "Minum" to "💧"
+        )
+    }
+
+    // Smooth rotational & radial expansion progress
+    val animProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = if (expanded) {
+            spring(
+                dampingRatio = 0.72f,
+                stiffness = 320f
+            )
+        } else {
+            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        },
+        label = "nudgeMenuProgress"
+    )
+
+    // Main Heart button position: 80% on screen, 20% off screen (+12dp offset to right)
+    Box(
+        modifier = modifier.offset(x = 12.dp),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        val totalItems = nudges.size
+        val maxRadiusPx = with(LocalDensity.current) { 62.dp.toPx() }
+
+        // Draggable 360-Degree Circular Fan
+        Box(
+            modifier = Modifier
+                .pointerInput(expanded) {
+                    if (expanded) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val sensitivity = 0.6f
+                            val delta = dragAmount.y * sensitivity
+                            rotationAngle = (rotationAngle + delta).coerceIn(-50f, 50f)
+                        }
+                    }
+                },
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            if (animProgress > 0.001f) {
+                nudges.forEachIndexed { index, (type, emoji) ->
+                    // Dynamic spiral rotation and radial expansion
+                    val currentRadius = maxRadiusPx * animProgress
+                    val spiralAngleOffset = (1f - animProgress) * -50f
+                    val baseAngle = 90f + (index * (180f / (totalItems - 1))) + rotationAngle + spiralAngleOffset
+                    val angleRad = (baseAngle * PI / 180f).toFloat()
+
+                    val offsetX = currentRadius * cos(angleRad)
+                    val offsetY = -currentRadius * sin(angleRad)
+                    val itemAlpha = animProgress.coerceIn(0f, 1f)
+                    val itemScale = animProgress
+
+                    Surface(
+                        onClick = {
+                            onSendNudge(type)
+                            expanded = false
+                        },
+                        shape = CircleShape,
+                        color = Color(0xFFFCE4EC),
+                        border = BorderStroke(1.5.dp, Color(0xFFF48FB1)),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                alpha = itemAlpha
+                                scaleX = itemScale
+                                scaleY = itemScale
+                            }
+                            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                            .size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = emoji,
+                                fontSize = 18.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Main Trigger Heart FAB
+        Surface(
+            onClick = { expanded = !expanded },
+            color = Color(0xFFFCE4EC),
+            contentColor = Color(0xFFC2185B),
+            shape = CircleShape,
+            border = BorderStroke(2.dp, Color(0xFFF48FB1)),
+            tonalElevation = 8.dp,
+            shadowElevation = 10.dp,
+            modifier = Modifier.size(52.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (animProgress > 0.5f) Icons.Default.Close else Icons.Default.Favorite,
+                    contentDescription = "Love Nudge Menu",
+                    modifier = Modifier
+                        .size(26.dp)
+                        .graphicsLayer {
+                            rotationZ = animProgress * 135f
+                            val pulse = 1f + sin(animProgress * PI.toFloat()) * 0.12f
+                            scaleX = pulse
+                            scaleY = pulse
+                        },
+                    tint = Color(0xFFC2185B)
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun CompassIcon(bearing: Float, modifier: Modifier = Modifier) {

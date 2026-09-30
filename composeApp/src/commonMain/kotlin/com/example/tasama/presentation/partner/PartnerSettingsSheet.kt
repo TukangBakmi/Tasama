@@ -118,14 +118,6 @@ fun PartnerSettingsSheet(
                                     )
 
                                     SettingsToggleItem(
-                                        title = "Weather Widget",
-                                        subtitle = "Show partner's local weather",
-                                        icon = Icons.Default.WbSunny,
-                                        checked = settings.weatherWidgetEnabled,
-                                        onCheckedChange = onUpdateWeatherWidgetEnabled
-                                    )
-
-                                    SettingsToggleItem(
                                         title = "Status Dashboard",
                                         subtitle = "Show anniversary and status bar",
                                         icon = Icons.Default.Dashboard,
@@ -150,14 +142,6 @@ fun PartnerSettingsSheet(
                                         icon = Icons.Default.DarkMode,
                                         checked = settings.mapDarkThemeEnabled,
                                         onCheckedChange = onUpdateMapDarkThemeEnabled
-                                    )
-
-                                    SettingsToggleItem(
-                                        title = "Place Reminders",
-                                        subtitle = "Show geofence radius circles",
-                                        icon = Icons.Default.PushPin,
-                                        checked = settings.reminderMarkersEnabled,
-                                        onCheckedChange = onUpdateReminderMarkersEnabled
                                     )
 
                                     SettingsToggleItem(

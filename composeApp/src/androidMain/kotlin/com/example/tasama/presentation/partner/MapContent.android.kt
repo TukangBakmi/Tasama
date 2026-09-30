@@ -149,7 +149,9 @@ actual fun MapContent(
     onCopyId: (String) -> Unit,
     settings: AppSettings,
     onOpenSettings: () -> Unit,
-    onSendLoveNudge: (String) -> Unit
+    onSendLoveNudge: (String) -> Unit,
+    onOpenNotifications: () -> Unit,
+    hasUnreadNotifications: Boolean
 ) {
     val density = LocalDensity.current
 
@@ -982,7 +984,7 @@ actual fun MapContent(
             }
         }
 
-        // New Header Layout: Weather(Left), Dashboard(Center), Settings(Right)
+        // Header Layout: Settings(Left), Dashboard(Center), Partner Notifications(Right)
         AnimatedVisibility(
             visible = !isPlacementModeEnabled,
             enter = fadeIn() + slideInVertically { -it / 2 },
@@ -994,12 +996,28 @@ actual fun MapContent(
                     .statusBarsPadding()
                     .padding(top = 14.dp)
             ) {
-                if (settings.weatherWidgetEnabled) {
-                    WeatherWidget(
-                        modifier = Modifier.align(Alignment.CenterStart),
-                        weatherInfo = weatherInfo,
-                        isLoading = isWeatherLoading
-                    )
+                // Map Settings Button (Top Left)
+                Surface(
+                    onClick = { onOpenSettings() },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    shape = CircleShape,
+                    tonalElevation = 4.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Map Settings",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
 
                 if (settings.dashboardEnabled) {
@@ -1011,9 +1029,9 @@ actual fun MapContent(
                     )
                 }
 
-                // Map Settings Button (Top Right, standalone circular button)
+                // Partner Notification History Button (Top Right, replaced settings position)
                 Surface(
-                    onClick = { onOpenSettings() },
+                    onClick = { onOpenNotifications() },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .padding(end = 16.dp),
@@ -1026,12 +1044,23 @@ actual fun MapContent(
                         modifier = Modifier.size(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        BadgedBox(
+                            badge = {
+                                if (hasUnreadNotifications) {
+                                    Badge(
+                                        modifier = Modifier.size(8.dp),
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Partner Notifications",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }

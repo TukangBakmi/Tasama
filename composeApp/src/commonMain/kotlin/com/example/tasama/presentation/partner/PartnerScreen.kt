@@ -42,7 +42,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PartnerScreen(
-    viewModel: PartnerViewModel = koinViewModel()
+    viewModel: PartnerViewModel = koinViewModel(),
+    onNavigateToNotifications: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = LocalSnackbarHostState.current
@@ -112,7 +113,8 @@ fun PartnerScreen(
                             onUpdateLowBatteryAlertEnabled = viewModel::updateLowBatteryAlertEnabled,
                             onUpdateTrafficLayerEnabled = viewModel::updateTrafficLayerEnabled,
                             onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
-                            onSendLoveNudge = { type -> viewModel.sendLoveNudge(type, feedbackHandler) }
+                            onSendLoveNudge = { type -> viewModel.sendLoveNudge(type, feedbackHandler) },
+                            onOpenNotifications = onNavigateToNotifications
                         )
                     } else {
                         DisabledPartnerMapContent(
@@ -375,7 +377,8 @@ fun PartnerMapContent(
     onUpdateLowBatteryAlertEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
-    onSendLoveNudge: (String) -> Unit = {}
+    onSendLoveNudge: (String) -> Unit = {},
+    onOpenNotifications: () -> Unit = {}
 ) {
     var showSettings by remember { mutableStateOf(false) }
 
@@ -399,7 +402,8 @@ fun PartnerMapContent(
             onCopyId = onCopyId,
             settings = settings,
             onOpenSettings = { showSettings = true },
-            onSendLoveNudge = onSendLoveNudge
+            onSendLoveNudge = onSendLoveNudge,
+            onOpenNotifications = onOpenNotifications
         )
     }
 

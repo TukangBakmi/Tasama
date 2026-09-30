@@ -25,6 +25,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.example.tasama.navigation.BottomNavItem
 import com.example.tasama.presentation.ai.AIScreen
 import com.example.tasama.presentation.chat.ChatListScreen
@@ -317,7 +319,7 @@ fun MainScreen(
                                                             navController.navigate("ai_chat")
                                                         },
                                                         onNavigateToNotifications = {
-                                                            navController.navigate("notifications")
+                                                            navController.navigate("notifications?initialTab=0")
                                                         }
                                                     )
 
@@ -335,7 +337,11 @@ fun MainScreen(
                                                         }
                                                     )
 
-                                                    BottomNavItem.Partner -> PartnerScreen()
+                                                    BottomNavItem.Partner -> PartnerScreen(
+                                                        onNavigateToNotifications = {
+                                                            navController.navigate("notifications?initialTab=1")
+                                                        }
+                                                    )
                                                     BottomNavItem.Profile -> ProfileScreen()
                                                 }
                                             }
@@ -445,7 +451,8 @@ fun MainScreen(
                                 }
 
                                 composable(
-                                    route = "notifications",
+                                    route = "notifications?initialTab={initialTab}",
+                                    arguments = listOf(navArgument("initialTab") { defaultValue = "0" }),
                                     enterTransition = {
                                         slideInVertically(
                                             initialOffsetY = { it },
@@ -464,10 +471,12 @@ fun MainScreen(
                                             animationSpec = tween(300)
                                         )
                                     }
-                                ) {
+                                ) { backStackEntry ->
+                                    val tabArg = backStackEntry.savedStateHandle.get<String>("initialTab")?.toIntOrNull() ?: 0
                                     NotificationsScreen(
                                         viewModel = koinViewModel(),
                                         onBack = { navController.popBackStack() },
+                                        initialTab = tabArg,
                                         onNavigateToDetail = { route ->
                                             if (route.startsWith("tabs/")) {
                                                 val target = route.substringAfter("tabs/")

@@ -51,11 +51,16 @@ private data class ActivityIconConfig(
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
     onBack: () -> Unit,
-    onNavigateToDetail: (String) -> Unit
+    onNavigateToDetail: (String) -> Unit,
+    initialTab: Int = 0
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val pagerState = rememberPagerState(initialPage = uiState.selectedTab, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = initialTab, pageCount = { 2 })
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(initialTab) {
+        viewModel.onTabSelected(initialTab)
+    }
 
     // Sync Pager state to ViewModel when user swipes
     LaunchedEffect(pagerState.currentPage) {

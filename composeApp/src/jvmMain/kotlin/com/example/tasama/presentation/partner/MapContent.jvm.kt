@@ -33,7 +33,9 @@ actual fun MapContent(
     onCopyId: (String) -> Unit,
     settings: com.example.tasama.domain.model.AppSettings,
     onOpenSettings: () -> Unit,
-    onSendLoveNudge: (String) -> Unit
+    onSendLoveNudge: (String) -> Unit,
+    onOpenNotifications: () -> Unit,
+    hasUnreadNotifications: Boolean
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

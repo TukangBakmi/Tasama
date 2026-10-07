@@ -1029,44 +1029,53 @@ actual fun MapContent(
                     )
                 }
 
-                // Partner Notification History Button (Top Right, replaced settings position)
-                Surface(
-                    onClick = { onOpenNotifications() },
+                // Partner Notification History Button (Top Right, extreme top-right outer corner badge)
+                Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                    shape = CircleShape,
-                    tonalElevation = 4.dp,
-                    shadowElevation = 8.dp
+                        .padding(end = 16.dp)
                 ) {
-                    Box(
+                    Surface(
+                        onClick = { onOpenNotifications() },
                         modifier = Modifier.size(40.dp),
-                        contentAlignment = Alignment.Center
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                        shape = CircleShape,
+                        tonalElevation = 4.dp,
+                        shadowElevation = 8.dp
                     ) {
-                        BadgedBox(
-                            badge = {
-                                if (unreadNotificationsCount > 0) {
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ) {
-                                        Text(
-                                            text = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.Notifications,
                                 contentDescription = "Partner Notifications",
                                 modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+
+                    if (unreadNotificationsCount > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shadowElevation = 4.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-3).dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString(),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
                         }
                     }
                 }

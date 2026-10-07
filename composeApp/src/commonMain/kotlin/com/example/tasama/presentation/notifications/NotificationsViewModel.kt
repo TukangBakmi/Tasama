@@ -86,18 +86,13 @@ class NotificationsViewModel(
         )
 
         val PARTNER_NOTIFICATION_TYPES = setOf(
-            "PARTNER_REQUEST",
-            "PARTNER_ACCEPTED",
-            "PARTNER_TOGETHER",
-            "PARTNER_NUDGE",
-            "LOW_BATTERY_ALERT",
             "PLACE_ALERT",
-            "SIGNAL_LOST",
-            "SIGNAL_RESTORED",
+            "LOW_BATTERY_ALERT",
             "PLACE_ADDED",
             "PLACE_UPDATED",
             "PLACE_DELETED",
-            "ANNIVERSARY_UPDATED"
+            "PARTNER_NUDGE",
+            "PARTNER_TOGETHER"
         )
 
         val SHARED_PARTNER_TYPES = setOf(

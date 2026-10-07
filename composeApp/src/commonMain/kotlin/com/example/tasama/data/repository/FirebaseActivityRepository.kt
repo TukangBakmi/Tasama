@@ -10,6 +10,7 @@ import dev.gitlive.firebase.firestore.FieldPath
 import dev.gitlive.firebase.firestore.firestore
 import dev.gitlive.firebase.firestore.where
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.time.Clock
 
@@ -30,6 +31,7 @@ class FirebaseActivityRepository(
             else {
                 activitiesCollection
                     .where(FieldPath("targetUids"), arrayContains = uid)
+                    .limit(100)
                     .snapshots
                     .map { snapshot ->
                         val activities = snapshot.documents.map { doc ->
@@ -80,8 +82,10 @@ class FirebaseActivityRepository(
         val targetUids = if (activity.metadata.containsKey("targetUids")) {
             activity.metadata["targetUids"]?.split(",") ?: emptyList()
         } else {
-            // Default targets: current user and partner
-            listOfNotNull(currentUid, partnerId)
+            // Default targets: current user, partner, and affected user
+            listOfNotNull(currentUid, partnerId, activity.affectedUserId, activity.userId)
+                .filter { it.isNotBlank() }
+                .distinct()
         }
         
         val data = mutableMapOf(
@@ -105,28 +109,32 @@ class FirebaseActivityRepository(
     }
 
     override suspend fun markAsRead(activityIds: List<String>) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        activityIds.forEach { id ->
-            try {
-                activitiesCollection.document(id).updateFields {
-                    FieldPath("metadata", "readBy_$uid") to Clock.System.now().toEpochMilliseconds().toString()
+        withContext(Dispatchers.IO + NonCancellable) {
+            val uid = authRepository.getCurrentUserId() ?: return@withContext
+            activityIds.forEach { id ->
+                try {
+                    activitiesCollection.document(id).updateFields {
+                        FieldPath("metadata", "readBy_$uid") to Clock.System.now().toEpochMilliseconds().toString()
+                    }
+                } catch (e: Exception) {
+                    println("Error marking activity as read: $id - ${e.message}")
                 }
-            } catch (e: Exception) {
-                println("Error marking activity as read: ${id} - ${e.message}")
             }
         }
     }
 
     override suspend fun markAllAsRead(category: ActivityCategory?) {
-        val uid = authRepository.getCurrentUserId() ?: return
-        try {
-            val activities = getActivities(category).first()
-            val unreadIds = activities.filter { !it.metadata.containsKey("readBy_$uid") }.map { it.id }
-            if (unreadIds.isNotEmpty()) {
-                markAsRead(unreadIds)
+        withContext(Dispatchers.IO + NonCancellable) {
+            val uid = authRepository.getCurrentUserId() ?: return@withContext
+            try {
+                val activities = getActivities(category).first()
+                val unreadIds = activities.filter { !it.metadata.containsKey("readBy_$uid") }.map { it.id }
+                if (unreadIds.isNotEmpty()) {
+                    markAsRead(unreadIds)
+                }
+            } catch (e: Exception) {
+                println("Error marking all as read: ${e.message}")
             }
-        } catch (e: Exception) {
-            println("Error marking all as read: ${e.message}")
         }
     }
 

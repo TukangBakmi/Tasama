@@ -530,6 +530,7 @@ class PartnerViewModel(
     fun addPlace(place: Place) {
         val user = _uiState.value.currentUser ?: return
         val partnerId = _uiState.value.partner?.id
+        val isNew = place.id.isBlank()
         
         val relationshipId = if (partnerId != null) {
             listOf(user.id, partnerId).sorted().joinToString("_")
@@ -538,18 +539,85 @@ class PartnerViewModel(
         }
 
         viewModelScope.launch {
-            placeRepository.addPlace(
-                place.copy(
-                    relationshipId = relationshipId,
-                    createdBy = user.id
-                )
+            val placeToSave = place.copy(
+                relationshipId = relationshipId,
+                createdBy = user.id
             )
+            placeRepository.addPlace(placeToSave)
+
+            // Log activity and send notification to partner
+            if (partnerId != null) {
+                val actionType = if (isNew) "PLACE_ADDED" else "PLACE_UPDATED"
+                val actionTitle = if (isNew) "New Place Added" else "Place Updated"
+                val userName = user.name.ifEmpty { "Partner" }
+                val details = if (isNew) "📍 $userName added place marker: ${place.name}" else "📍 $userName updated place marker: ${place.name}"
+
+                try {
+                    activityRepository.logActivity(
+                        Activity(
+                            userId = user.id,
+                            userName = user.name,
+                            affectedUserId = partnerId,
+                            category = ActivityCategory.PARTNER,
+                            type = actionType,
+                            title = actionTitle,
+                            details = details,
+                            metadata = mapOf(
+                                "placeName" to place.name,
+                                "radius" to "${place.radius.toInt()}m"
+                            )
+                        )
+                    )
+
+                    authRepository.sendNotification(
+                        targetUid = partnerId,
+                        title = actionTitle,
+                        body = details,
+                        type = actionType
+                    )
+                } catch (e: Exception) {
+                    println("PartnerViewModel: Error logging place activity: ${e.message}")
+                }
+            }
         }
     }
 
     fun deletePlace(placeId: String) {
+        val user = _uiState.value.currentUser
+        val partnerId = _uiState.value.partner?.id
+        val targetPlace = _uiState.value.places.find { it.id == placeId }
+
         viewModelScope.launch {
             placeRepository.deletePlace(placeId)
+
+            if (user != null && partnerId != null && targetPlace != null) {
+                val userName = user.name.ifEmpty { "Partner" }
+                val details = "🗑️ $userName deleted place marker: ${targetPlace.name}"
+
+                try {
+                    activityRepository.logActivity(
+                        Activity(
+                            userId = user.id,
+                            userName = user.name,
+                            affectedUserId = partnerId,
+                            category = ActivityCategory.PARTNER,
+                            type = "PLACE_DELETED",
+                            title = "Place Deleted",
+                            details = details,
+                            metadata = mapOf("placeName" to targetPlace.name)
+                        )
+                    )
+
+                    authRepository.sendNotification(
+                        targetUid = partnerId,
+                        title = "Place Deleted",
+                        body = details,
+                        type = "PLACE_DELETED"
+                    )
+                } catch (e: Exception) {
+                    println("PartnerViewModel: Error logging delete place activity: ${e.message}")
+                }
+            }
         }
     }
 

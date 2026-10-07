@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.Activity
+import com.example.tasama.presentation.components.PlatformBackHandler
 import com.example.tasama.presentation.theme.PrimaryLightBlue
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -58,6 +59,11 @@ fun NotificationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isPartnerCategory = initialTab == 1
     val currentCategory = if (isPartnerCategory) ActivityCategory.PARTNER else ActivityCategory.SAVINGS
+
+    PlatformBackHandler {
+        viewModel.markAllAsReadForCategory(currentCategory)
+        onBack()
+    }
 
     LaunchedEffect(currentCategory) {
         viewModel.onTabSelected(initialTab)

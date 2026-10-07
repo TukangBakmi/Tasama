@@ -40,6 +40,8 @@ fun PartnerSettingsSheet(
     onUpdateReminderMarkersEnabled: (Boolean) -> Unit,
     onUpdateTogetherAlertEnabled: (Boolean) -> Unit,
     onUpdateLowBatteryAlertEnabled: (Boolean) -> Unit,
+    onUpdateOtwAlertEnabled: (Boolean) -> Unit,
+    onUpdateSpeedingAlertEnabled: (Boolean) -> Unit,
     onUpdateTrafficLayerEnabled: (Boolean) -> Unit,
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
     onDismiss: () -> Unit
@@ -113,7 +115,7 @@ fun PartnerSettingsSheet(
                                 SettingsSection(title = "General & Widgets") {
                                     SettingsToggleItem(
                                         title = "Love Nudge Button",
-                                        subtitle = "Show quick ❤️ interaction button on map",
+                                        subtitle = "Show floating Love Nudge menu on map",
                                         icon = Icons.Default.Favorite,
                                         checked = settings.loveNudgeEnabled,
                                         onCheckedChange = onUpdateLoveNudgeEnabled
@@ -121,7 +123,7 @@ fun PartnerSettingsSheet(
 
                                     SettingsToggleItem(
                                         title = "Status Dashboard",
-                                        subtitle = "Show anniversary and status bar",
+                                        subtitle = "Show anniversary countdown and status bar",
                                         icon = Icons.Default.Dashboard,
                                         checked = settings.dashboardEnabled,
                                         onCheckedChange = onUpdateDashboardEnabled
@@ -169,6 +171,22 @@ fun PartnerSettingsSheet(
                                         checked = settings.togetherAlertEnabled,
                                         onCheckedChange = onUpdateTogetherAlertEnabled
                                     )
+
+                                    SettingsToggleItem(
+                                        title = "Moving Alerts",
+                                        subtitle = "Notify partner when you are on the way",
+                                        icon = Icons.Default.DirectionsCar,
+                                        checked = settings.otwAlertEnabled,
+                                        onCheckedChange = onUpdateOtwAlertEnabled
+                                    )
+
+                                    SettingsToggleItem(
+                                        title = "Speeding Alerts",
+                                        subtitle = "Notify partner when you are driving > 70 km/h",
+                                        icon = Icons.Default.Speed,
+                                        checked = settings.speedingAlertEnabled,
+                                        onCheckedChange = onUpdateSpeedingAlertEnabled
+                                    )
                                 }
                             }
                             2 -> {
@@ -190,10 +208,10 @@ fun PartnerSettingsSheet(
                                         )
                                         Text(
                                             text = when (settings.batteryMode) {
-                                                BatteryMode.AUTO -> "Auto · Dynamically adjusts based on movement (High when moving, Power Saver when stationary)"
-                                                BatteryMode.PERFORMANCE -> "High · Continuous high accuracy updates (High battery usage)"
-                                                BatteryMode.BALANCED -> "Balanced · Optimized 10s updates (Recommended)"
-                                                BatteryMode.BATTERY_SAVER -> "Power Saver · 30s updates using low power location"
+                                                BatteryMode.AUTO -> "Auto · Dynamically adjusts mode based on movement"
+                                                BatteryMode.PERFORMANCE -> "High · Frequent high accuracy updates"
+                                                BatteryMode.BALANCED -> "Balanced · Optimized updates for everyday use"
+                                                BatteryMode.BATTERY_SAVER -> "Power Saver · Low power location updates"
                                             },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant

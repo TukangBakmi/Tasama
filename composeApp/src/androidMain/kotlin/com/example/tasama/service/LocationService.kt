@@ -167,6 +167,9 @@ class LocationService : Service() {
 
         // Evaluate dynamic mode switches when AUTO battery mode is active
         evaluateAutoMode(location, distance, timestamp)
+
+        // Check OTW and Speeding motion alerts for partner
+        checkAndSendMotionAlerts(uid, location, timestamp)
     }
 
     @SuppressLint("WrongConstant")
@@ -448,6 +451,87 @@ class LocationService : Service() {
             )
         } catch (e: Exception) {
             println("LIVE_LOCATION_SERVICE: Error sending low battery alert: ${e.message}")
+        }
+    }
+
+    private var isOtwState = false
+    private var lastOtwNotificationTime = 0L
+    private var lastSpeedingNotificationTime = 0L
+
+    private suspend fun checkAndSendMotionAlerts(uid: String, location: Location, timestamp: Long) {
+        val user = authRepository.getUser(uid) ?: return
+        val partnerId = user.partnerId ?: return
+        val settings = settingsRepository.settings.first()
+        if (!settings.partnerMapEnabled) return
+
+        val speedKmh = if (location.hasSpeed()) (location.speed * 3.6f) else 0f
+        val userName = user.name.ifEmpty { "Partner" }
+
+        if (settings.otwAlertEnabled && speedKmh >= 6.0f) {
+            if (!isOtwState && (timestamp - lastOtwNotificationTime > 1800000L)) {
+                isOtwState = true
+                lastOtwNotificationTime = timestamp
+                sendMotionAlert(
+                    uid = user.id,
+                    userName = userName,
+                    partnerId = partnerId,
+                    type = "PARTNER_OTW",
+                    title = "Partner OTW",
+                    details = "🚗 $userName is on the way",
+                    metadata = mapOf("speedKmh" to speedKmh.toInt().toString())
+                )
+            }
+        } else if (speedKmh < 2.0f && isOtwState) {
+            isOtwState = false
+        }
+
+        if (settings.speedingAlertEnabled && speedKmh >= 70.0f) {
+            if (timestamp - lastSpeedingNotificationTime > 900000L) {
+                lastSpeedingNotificationTime = timestamp
+                sendMotionAlert(
+                    uid = user.id,
+                    userName = userName,
+                    partnerId = partnerId,
+                    type = "PARTNER_SPEEDING",
+                    title = "Speeding Warning",
+                    details = "🚗💨 $userName is driving fast at ${speedKmh.toInt()} km/h",
+                    metadata = mapOf("speedKmh" to speedKmh.toInt().toString())
+                )
+            }
+        }
+    }
+
+    private suspend fun sendMotionAlert(
+        uid: String,
+        userName: String,
+        partnerId: String,
+        type: String,
+        title: String,
+        details: String,
+        metadata: Map<String, String>
+    ) {
+        try {
+            activityRepository.logActivity(
+                Activity(
+                    userId = uid,
+                    userName = userName,
+                    affectedUserId = partnerId,
+                    category = ActivityCategory.PARTNER,
+                    type = type,
+                    title = title,
+                    details = details,
+                    metadata = metadata
+                )
+            )
+
+            authRepository.sendNotification(
+                targetUid = partnerId,
+                title = title,
+                body = details,
+                type = type
+            )
+        } catch (e: Exception) {
+            println("LIVE_LOCATION_SERVICE: Error sending motion alert $type: ${e.message}")
         }
     }
 

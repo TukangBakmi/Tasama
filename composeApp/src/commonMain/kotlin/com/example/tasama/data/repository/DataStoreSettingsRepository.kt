@@ -28,6 +28,8 @@ class DataStoreSettingsRepository(
         val REMINDER_MARKERS_ENABLED = booleanPreferencesKey("reminder_markers_enabled")
         val TOGETHER_ALERT_ENABLED = booleanPreferencesKey("together_alert_enabled")
         val LOW_BATTERY_ALERT_ENABLED = booleanPreferencesKey("low_battery_alert_enabled")
+        val OTW_ALERT_ENABLED = booleanPreferencesKey("otw_alert_enabled")
+        val SPEEDING_ALERT_ENABLED = booleanPreferencesKey("speeding_alert_enabled")
         val TRAFFIC_LAYER_ENABLED = booleanPreferencesKey("traffic_layer_enabled")
         val MAP_DARK_THEME_ENABLED = booleanPreferencesKey("map_dark_theme_enabled")
         
@@ -54,6 +56,8 @@ class DataStoreSettingsRepository(
             reminderMarkersEnabled = preferences[PreferencesKeys.REMINDER_MARKERS_ENABLED] ?: true,
             togetherAlertEnabled = preferences[PreferencesKeys.TOGETHER_ALERT_ENABLED] ?: true,
             lowBatteryAlertEnabled = preferences[PreferencesKeys.LOW_BATTERY_ALERT_ENABLED] ?: true,
+            otwAlertEnabled = preferences[PreferencesKeys.OTW_ALERT_ENABLED] ?: true,
+            speedingAlertEnabled = preferences[PreferencesKeys.SPEEDING_ALERT_ENABLED] ?: true,
             trafficLayerEnabled = preferences[PreferencesKeys.TRAFFIC_LAYER_ENABLED] ?: false,
             mapDarkThemeEnabled = preferences[PreferencesKeys.MAP_DARK_THEME_ENABLED] ?: false,
             undoTransactionId = preferences[PreferencesKeys.UNDO_TRANSACTION_ID],
@@ -100,6 +104,14 @@ class DataStoreSettingsRepository(
 
     override suspend fun updateLowBatteryAlertEnabled(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.LOW_BATTERY_ALERT_ENABLED] = enabled }
+    }
+
+    override suspend fun updateOtwAlertEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[PreferencesKeys.OTW_ALERT_ENABLED] = enabled }
+    }
+
+    override suspend fun updateSpeedingAlertEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[PreferencesKeys.SPEEDING_ALERT_ENABLED] = enabled }
     }
 
     override suspend fun updateWeatherWidgetEnabled(enabled: Boolean) {

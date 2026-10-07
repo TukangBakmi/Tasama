@@ -888,6 +888,14 @@ class PartnerViewModel(
         viewModelScope.launch { settingsRepository.updateLowBatteryAlertEnabled(enabled) }
     }
 
+    fun updateOtwAlertEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateOtwAlertEnabled(enabled) }
+    }
+
+    fun updateSpeedingAlertEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateSpeedingAlertEnabled(enabled) }
+    }
+
     fun updateWeatherWidgetEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.updateWeatherWidgetEnabled(enabled) }
     }

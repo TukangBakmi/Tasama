@@ -92,7 +92,9 @@ class NotificationsViewModel(
             "PLACE_UPDATED",
             "PLACE_DELETED",
             "PARTNER_NUDGE",
-            "PARTNER_TOGETHER"
+            "PARTNER_TOGETHER",
+            "PARTNER_OTW",
+            "PARTNER_SPEEDING"
         )
 
         val SHARED_PARTNER_TYPES = setOf(

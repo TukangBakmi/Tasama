@@ -24,6 +24,8 @@ data class AppSettings(
     val reminderMarkersEnabled: Boolean = true,
     val togetherAlertEnabled: Boolean = true,
     val lowBatteryAlertEnabled: Boolean = true,
+    val otwAlertEnabled: Boolean = true,
+    val speedingAlertEnabled: Boolean = true,
     val trafficLayerEnabled: Boolean = false,
     val mapDarkThemeEnabled: Boolean = false,
 

@@ -306,6 +306,16 @@ private fun getActivityIconConfig(
             containerColor = Color(0xFFFFF3E0),
             iconColor = Color(0xFFE65100)
         )
+        "PARTNER_OTW" -> ActivityIconConfig(
+            icon = Icons.Default.DirectionsCar,
+            containerColor = Color(0xFFE3F2FD),
+            iconColor = Color(0xFF1565C0)
+        )
+        "PARTNER_SPEEDING" -> ActivityIconConfig(
+            icon = Icons.Default.Speed,
+            containerColor = Color(0xFFFFEBEE),
+            iconColor = Color(0xFFC62828)
+        )
         "PARTNER_REQUEST", "PARTNER_TOGETHER", "PARTNER_NUDGE" -> ActivityIconConfig(
             icon = Icons.Default.Favorite,
             containerColor = Color(0xFFFCE4EC),
@@ -362,7 +372,7 @@ fun getActivityDescription(activity: Activity, uid: String?): String =
     buildActivityAnnotatedString(activity, uid).text
 
 fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedString {
-    val performerName = if (activity.userId == uid) "You" else activity.userName
+    val performerName = if (activity.userId == uid) "You" else activity.userName.ifBlank { "Partner" }
     val affectedName = if (activity.affectedUserId == uid) "you" else (activity.affectedUserName ?: "someone")
     val isPerformerMe = activity.userId == uid
     val isAffectedMe = activity.affectedUserId == uid
@@ -613,6 +623,27 @@ fun buildActivityAnnotatedString(activity: Activity, uid: String?): AnnotatedStr
                     append("'s phone battery is low (")
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$pct%") }
                     append(")")
+                }
+            }
+            "PARTNER_OTW" -> {
+                if (isPerformerMe) {
+                    append("You are on the way 🚗")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" is on the way 🚗")
+                }
+            }
+            "PARTNER_SPEEDING" -> {
+                val speed = activity.metadata["speedKmh"] ?: "70"
+                if (isPerformerMe) {
+                    append("You were driving fast at ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$speed km/h") }
+                    append(" 🚗💨")
+                } else {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(performerName) }
+                    append(" is driving fast at ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$speed km/h") }
+                    append(" 🚗💨")
                 }
             }
             "PARTNER_NUDGE" -> {

@@ -22,6 +22,8 @@ interface SettingsRepository {
     suspend fun updateReminderMarkersEnabled(enabled: Boolean)
     suspend fun updateTogetherAlertEnabled(enabled: Boolean)
     suspend fun updateLowBatteryAlertEnabled(enabled: Boolean)
+    suspend fun updateOtwAlertEnabled(enabled: Boolean)
+    suspend fun updateSpeedingAlertEnabled(enabled: Boolean)
     suspend fun updateTrafficLayerEnabled(enabled: Boolean)
     suspend fun updateMapDarkThemeEnabled(enabled: Boolean)
 

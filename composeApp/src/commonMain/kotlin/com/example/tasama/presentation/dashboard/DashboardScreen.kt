@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -203,6 +204,7 @@ fun DashboardHeader(
             }
 
             if (unreadCount > 0) {
+                val badgeText = if (unreadCount > 9) "9+" else unreadCount.toString()
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
@@ -210,19 +212,23 @@ fun DashboardHeader(
                     shadowElevation = 2.dp,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 4.dp, y = (-2).dp)
+                        .offset(x = 2.dp, y = (-2).dp)
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                        modifier = if (badgeText.length > 1) {
+                            Modifier.height(18.dp).padding(horizontal = 5.dp)
+                        } else {
+                            Modifier.size(18.dp)
+                        }
                     ) {
                         Text(
-                            text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                            text = badgeText,
                             fontSize = 10.sp,
+                            lineHeight = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }

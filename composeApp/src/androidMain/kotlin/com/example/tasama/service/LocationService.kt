@@ -164,6 +164,9 @@ class LocationService : Service() {
             lastFirestoreUpdateLocation = location.latitude to location.longitude
             lastFirestoreUpdateTime = timestamp
         }
+
+        // Evaluate dynamic mode switches when AUTO battery mode is active
+        evaluateAutoMode(location, distance, timestamp)
     }
 
     @SuppressLint("WrongConstant")
@@ -641,14 +644,66 @@ class LocationService : Service() {
         }
     }
 
-    private fun requestLocationUpdates() {
-        val (interval, minInterval, priority) = when (currentBatteryMode) {
-            BatteryMode.PERFORMANCE -> Triple(3000L, 1000L, Priority.PRIORITY_HIGH_ACCURACY)
-            BatteryMode.BALANCED -> Triple(10000L, 5000L, Priority.PRIORITY_HIGH_ACCURACY) // Use HIGH_ACCURACY for emulators/reliability
-            BatteryMode.BATTERY_SAVER -> Triple(30000L, 15000L, Priority.PRIORITY_LOW_POWER)
+    private var activeAutoMode: BatteryMode = BatteryMode.BALANCED
+    private var stationaryStartTime: Long = 0L
+    private var lastFastMovementTime: Long = 0L
+
+    private fun evaluateAutoMode(location: Location, distance: Float, timestamp: Long) {
+        if (currentBatteryMode != BatteryMode.AUTO) return
+
+        val speed = if (location.hasSpeed()) location.speed else 0f
+        val isMovingFast = speed > 2.0f || (speed > 1.2f && distance > 10)
+        val isMovingNormal = speed > 0.4f || distance > 3
+        val isStationary = speed <= 0.3f && distance <= 2
+
+        val previousAutoMode = activeAutoMode
+
+        if (isMovingFast) {
+            stationaryStartTime = 0L
+            lastFastMovementTime = timestamp
+            if (activeAutoMode != BatteryMode.PERFORMANCE) {
+                activeAutoMode = BatteryMode.PERFORMANCE
+            }
+        } else if (isMovingNormal) {
+            stationaryStartTime = 0L
+            if (activeAutoMode == BatteryMode.BATTERY_SAVER) {
+                activeAutoMode = BatteryMode.BALANCED
+            } else if (activeAutoMode == BatteryMode.PERFORMANCE) {
+                if (timestamp - lastFastMovementTime > 30000L) {
+                    activeAutoMode = BatteryMode.BALANCED
+                }
+            }
+        } else if (isStationary) {
+            if (stationaryStartTime == 0L) {
+                stationaryStartTime = timestamp
+            }
+            val stationaryDuration = timestamp - stationaryStartTime
+            
+            if (stationaryDuration > 180000L) {
+                if (activeAutoMode != BatteryMode.BATTERY_SAVER) {
+                    activeAutoMode = BatteryMode.BATTERY_SAVER
+                }
+            } else if (stationaryDuration > 30000L && activeAutoMode == BatteryMode.PERFORMANCE) {
+                activeAutoMode = BatteryMode.BALANCED
+            }
         }
 
-        println("LIVE_LOCATION_SERVICE: requestLocationUpdates - Mode: $currentBatteryMode, Interval: $interval")
+        if (activeAutoMode != previousAutoMode) {
+            println("LIVE_LOCATION_SERVICE: Auto Mode Switched from $previousAutoMode to $activeAutoMode")
+            requestLocationUpdates()
+        }
+    }
+
+    private fun requestLocationUpdates() {
+        val effectiveMode = if (currentBatteryMode == BatteryMode.AUTO) activeAutoMode else currentBatteryMode
+
+        val (interval, minInterval, priority) = when (effectiveMode) {
+            BatteryMode.PERFORMANCE -> Triple(3000L, 1000L, Priority.PRIORITY_HIGH_ACCURACY)
+            BatteryMode.BATTERY_SAVER -> Triple(30000L, 15000L, Priority.PRIORITY_LOW_POWER)
+            else -> Triple(10000L, 5000L, Priority.PRIORITY_HIGH_ACCURACY)
+        }
+
+        println("LIVE_LOCATION_SERVICE: requestLocationUpdates - Mode: $currentBatteryMode (Effective: $effectiveMode), Interval: $interval")
 
         val locationRequest = LocationRequest.Builder(priority, interval)
             .setMinUpdateIntervalMillis(minInterval)

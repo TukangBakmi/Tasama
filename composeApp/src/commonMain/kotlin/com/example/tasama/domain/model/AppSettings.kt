@@ -5,7 +5,7 @@ enum class AppTheme {
 }
 
 enum class BatteryMode {
-    PERFORMANCE, BALANCED, BATTERY_SAVER
+    AUTO, PERFORMANCE, BALANCED, BATTERY_SAVER
 }
 
 data class AppSettings(

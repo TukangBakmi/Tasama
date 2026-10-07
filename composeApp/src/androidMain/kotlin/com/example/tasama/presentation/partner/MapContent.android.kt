@@ -1054,6 +1054,7 @@ actual fun MapContent(
                     }
 
                     if (unreadNotificationsCount > 0) {
+                        val badgeText = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString()
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary,
@@ -1061,19 +1062,23 @@ actual fun MapContent(
                             shadowElevation = 4.dp,
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-3).dp)
+                                .offset(x = 3.dp, y = (-2).dp)
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                modifier = if (badgeText.length > 1) {
+                                    Modifier.height(18.dp).padding(horizontal = 5.dp)
+                                } else {
+                                    Modifier.size(18.dp)
+                                }
                             ) {
                                 Text(
-                                    text = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString(),
-                                    fontSize = 9.sp,
+                                    text = badgeText,
+                                    fontSize = 10.sp,
+                                    lineHeight = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }

@@ -382,6 +382,7 @@ class PartnerViewModel(
         
         // Define thresholds based on battery mode
         val (distThreshold, timeThreshold) = when (_uiState.value.settings.batteryMode) {
+            BatteryMode.AUTO -> 10.0 to 10_000L // 10m, 10s (Auto default/balanced)
             BatteryMode.PERFORMANCE -> 5.0 to 5_000L // 5m, 5s
             BatteryMode.BALANCED -> 15.0 to 15_000L // 15m, 15s
             BatteryMode.BATTERY_SAVER -> 50.0 to 60_000L // 50m, 60s
@@ -441,6 +442,7 @@ class PartnerViewModel(
         val now = Clock.System.now().toEpochMilliseconds()
         
         val (distThreshold, timeThreshold) = when (_uiState.value.settings.batteryMode) {
+            BatteryMode.AUTO -> 1000.0 to 20 * 60 * 1000L // 1km, 20m (Auto default/balanced)
             BatteryMode.PERFORMANCE -> 500.0 to 10 * 60 * 1000L // 500m, 10m
             BatteryMode.BALANCED -> 1000.0 to 20 * 60 * 1000L // 1km, 20m
             BatteryMode.BATTERY_SAVER -> 3000.0 to 60 * 60 * 1000L // 3km, 1h

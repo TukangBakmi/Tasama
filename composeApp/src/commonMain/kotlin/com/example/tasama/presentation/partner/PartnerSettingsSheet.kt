@@ -17,7 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.tasama.domain.model.AppSettings
 import com.example.tasama.domain.model.BatteryMode
 import com.example.tasama.presentation.components.AppTransientFeedbackOverlay
@@ -171,19 +173,32 @@ fun PartnerSettingsSheet(
                             }
                             2 -> {
                                 SettingsSection(title = "Battery & Tracking Mode") {
-                                    SettingsSegmentedControl(
-                                        title = "Location Update Mode",
-                                        options = BatteryMode.entries,
-                                        selectedOption = settings.batteryMode,
-                                        onOptionSelected = onUpdateBatteryMode,
-                                        labelProvider = {
-                                            when (it) {
-                                                BatteryMode.PERFORMANCE -> "High"
-                                                BatteryMode.BALANCED -> "Balanced"
-                                                BatteryMode.BATTERY_SAVER -> "Power Saver"
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        SettingsSegmentedControl(
+                                            title = "Location Update Mode",
+                                            options = BatteryMode.entries,
+                                            selectedOption = settings.batteryMode,
+                                            onOptionSelected = onUpdateBatteryMode,
+                                            labelProvider = { mode ->
+                                                when (mode) {
+                                                    BatteryMode.AUTO -> "Auto"
+                                                    BatteryMode.PERFORMANCE -> "High"
+                                                    BatteryMode.BALANCED -> "Balanced"
+                                                    BatteryMode.BATTERY_SAVER -> "Saver"
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                        Text(
+                                            text = when (settings.batteryMode) {
+                                                BatteryMode.AUTO -> "Auto · Dynamically adjusts based on movement (High when moving, Power Saver when stationary)"
+                                                BatteryMode.PERFORMANCE -> "High · Continuous high accuracy updates (High battery usage)"
+                                                BatteryMode.BALANCED -> "Balanced · Optimized 10s updates (Recommended)"
+                                                BatteryMode.BATTERY_SAVER -> "Power Saver · 30s updates using low power location"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
 
                                     SettingsToggleItem(
                                         title = "Low Battery Warning",
@@ -335,7 +350,13 @@ fun <T> SettingsSegmentedControl(
                     onClick = { onOptionSelected(option) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
                 ) {
-                    Text(labelProvider(option), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = labelProvider(option),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

@@ -21,6 +21,7 @@ import com.example.tasama.domain.repository.SettingsRepository
 import com.example.tasama.domain.repository.WeatherRepository
 import com.example.tasama.util.compressImage
 import com.example.tasama.presentation.components.TransientFeedback
+import com.example.tasama.presentation.notifications.NotificationsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -57,7 +58,8 @@ data class PartnerUiState(
     val filteredContacts: List<User> = emptyList(),
     val activeNudgeAnimation: String? = null,
     val nudgeSenderName: String? = null,
-    val hasUnreadPartnerNotifications: Boolean = false
+    val hasUnreadPartnerNotifications: Boolean = false,
+    val unreadPartnerNotificationsCount: Int = 0
 )
 
 class PartnerViewModel(
@@ -654,33 +656,22 @@ class PartnerViewModel(
     private var activityObservationJob: Job? = null
     private var lastObservedNudgeId: String? = null
 
-    private val partnerNotificationTypes = setOf(
-        "PARTNER_REQUEST",
-        "PARTNER_ACCEPTED",
-        "PARTNER_TOGETHER",
-        "PARTNER_NUDGE",
-        "LOW_BATTERY_ALERT",
-        "PLACE_ALERT",
-        "SIGNAL_LOST",
-        "SIGNAL_RESTORED",
-        "PLACE_ADDED",
-        "PLACE_UPDATED",
-        "PLACE_DELETED",
-        "ANNIVERSARY_UPDATED"
-    )
-
     private fun observePartnerActivities(uid: String) {
         activityObservationJob?.cancel()
         activityObservationJob = viewModelScope.launch {
             activityRepository.getActivities(ActivityCategory.PARTNER).collect { activities ->
+                val partnerId = _uiState.value.partner?.id
                 val filteredPartnerActivities = activities.filter { activity ->
-                    activity.type in partnerNotificationTypes &&
-                    (activity.userId != uid || activity.type in setOf("PARTNER_ACCEPTED", "ANNIVERSARY_UPDATED", "PARTNER_TOGETHER", "LOW_BATTERY_ALERT")) &&
-                    (activity.type != "PARTNER_REQUEST" || activity.affectedUserId == uid)
+                    NotificationsViewModel.isPartnerNotificationForUser(activity, uid, partnerId)
                 }
 
-                val hasUnread = filteredPartnerActivities.any { it.isUnreadFor(uid) }
-                _uiState.update { it.copy(hasUnreadPartnerNotifications = hasUnread) }
+                val unreadCount = filteredPartnerActivities.count { it.isUnreadFor(uid) }
+                _uiState.update { 
+                    it.copy(
+                        hasUnreadPartnerNotifications = unreadCount > 0,
+                        unreadPartnerNotificationsCount = unreadCount
+                    ) 
+                }
 
                 val latestNudge = activities.firstOrNull { it.type == "PARTNER_NUDGE" }
                 if (latestNudge != null && latestNudge.id != lastObservedNudgeId) {

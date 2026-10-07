@@ -116,7 +116,7 @@ fun PartnerScreen(
                             onUpdateMapDarkThemeEnabled = viewModel::updateMapDarkThemeEnabled,
                             onSendLoveNudge = { type -> viewModel.sendLoveNudge(type, feedbackHandler) },
                             onOpenNotifications = onNavigateToNotifications,
-                            hasUnreadNotifications = uiState.hasUnreadPartnerNotifications,
+                            unreadNotificationsCount = uiState.unreadPartnerNotificationsCount,
                             activeNudgeAnimation = uiState.activeNudgeAnimation,
                             nudgeSenderName = uiState.nudgeSenderName,
                             onClearNudgeAnimation = viewModel::clearNudgeAnimation
@@ -384,7 +384,7 @@ fun PartnerMapContent(
     onUpdateMapDarkThemeEnabled: (Boolean) -> Unit,
     onSendLoveNudge: (String) -> Unit = {},
     onOpenNotifications: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false,
+    unreadNotificationsCount: Int = 0,
     activeNudgeAnimation: String? = null,
     nudgeSenderName: String? = null,
     onClearNudgeAnimation: () -> Unit = {}
@@ -413,7 +413,7 @@ fun PartnerMapContent(
             onOpenSettings = { showSettings = true },
             onSendLoveNudge = onSendLoveNudge,
             onOpenNotifications = onOpenNotifications,
-            hasUnreadNotifications = hasUnreadNotifications
+            unreadNotificationsCount = unreadNotificationsCount
         )
 
         // Full Screen Animated Love Nudge Overlay

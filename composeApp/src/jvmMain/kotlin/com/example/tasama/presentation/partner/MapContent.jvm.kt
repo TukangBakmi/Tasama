@@ -35,7 +35,7 @@ actual fun MapContent(
     onOpenSettings: () -> Unit,
     onSendLoveNudge: (String) -> Unit,
     onOpenNotifications: () -> Unit,
-    hasUnreadNotifications: Boolean
+    unreadNotificationsCount: Int
 ) {
     Box(
         modifier = modifier.fillMaxSize().background(Color.LightGray),

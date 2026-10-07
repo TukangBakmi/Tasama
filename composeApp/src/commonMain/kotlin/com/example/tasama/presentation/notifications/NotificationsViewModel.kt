@@ -51,11 +51,9 @@ class NotificationsViewModel(
         val filteredSavings = allSavings.filter { 
             it.type in SAVINGS_NOTIFICATION_TYPES && uid != null && it.userId != uid 
         }
-        val filteredPartner = if (uid != null && partnerId != null) {
+        val filteredPartner = if (uid != null) {
             allPartner.filter { activity ->
-                activity.type in PARTNER_NOTIFICATION_TYPES &&
-                (activity.userId == partnerId || activity.affectedUserId == partnerId) &&
-                (activity.type != "PARTNER_REQUEST" || activity.affectedUserId == uid)
+                isPartnerNotificationForUser(activity, uid, partnerId)
             }
         } else {
             emptyList()
@@ -75,7 +73,7 @@ class NotificationsViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationsUiState())
 
     companion object {
-        private val SAVINGS_NOTIFICATION_TYPES = setOf(
+        val SAVINGS_NOTIFICATION_TYPES = setOf(
             "INVITATION_SENT",
             "MEMBER_JOINED",
             "INVITATION_ACCEPTED",
@@ -87,7 +85,7 @@ class NotificationsViewModel(
             "SPACE_DELETED"
         )
 
-        private val PARTNER_NOTIFICATION_TYPES = setOf(
+        val PARTNER_NOTIFICATION_TYPES = setOf(
             "PARTNER_REQUEST",
             "PARTNER_ACCEPTED",
             "PARTNER_TOGETHER",
@@ -101,6 +99,42 @@ class NotificationsViewModel(
             "PLACE_DELETED",
             "ANNIVERSARY_UPDATED"
         )
+
+        val SHARED_PARTNER_TYPES = setOf(
+            "PARTNER_ACCEPTED",
+            "ANNIVERSARY_UPDATED",
+            "PARTNER_TOGETHER",
+            "LOW_BATTERY_ALERT"
+        )
+
+        fun isPartnerNotificationForUser(
+            activity: Activity,
+            uid: String,
+            partnerId: String?
+        ): Boolean {
+            if (activity.type !in PARTNER_NOTIFICATION_TYPES) return false
+
+            if (activity.type == "PARTNER_REQUEST") {
+                return activity.affectedUserId == uid
+            }
+
+            if (partnerId == null) return false
+
+            val isPartnerInvolved = activity.userId == partnerId || activity.affectedUserId == partnerId
+            if (!isPartnerInvolved) return false
+
+            if (activity.userId == uid && activity.type !in SHARED_PARTNER_TYPES) {
+                return false
+            }
+
+            return true
+        }
+    }
+
+    fun markAllAsReadForCategory(category: ActivityCategory) {
+        viewModelScope.launch {
+            activityRepository.markAllAsRead(category)
+        }
     }
 
     fun onTabSelected(index: Int) {

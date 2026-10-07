@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.Activity
 import com.example.tasama.presentation.theme.PrimaryLightBlue
 import kotlinx.coroutines.launch
@@ -56,19 +57,19 @@ fun NotificationsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isPartnerCategory = initialTab == 1
+    val currentCategory = if (isPartnerCategory) ActivityCategory.PARTNER else ActivityCategory.SAVINGS
 
-    LaunchedEffect(initialTab) {
+    LaunchedEffect(currentCategory) {
         viewModel.onTabSelected(initialTab)
     }
 
-    DisposableEffect(initialTab) {
+    DisposableEffect(currentCategory) {
         onDispose {
-            viewModel.onScreenLeft()
+            viewModel.markAllAsReadForCategory(currentCategory)
         }
     }
 
     val activities = if (isPartnerCategory) uiState.partnerActivities else uiState.savingsActivities
-    val hasUnread = if (isPartnerCategory) uiState.hasUnreadPartner else uiState.hasUnreadSavings
     val screenTitle = if (isPartnerCategory) "Partner Notifications" else "Savings Notifications"
     val categoryName = if (isPartnerCategory) "Partner" else "Savings"
 
@@ -82,7 +83,12 @@ fun NotificationsScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = {
+                            viewModel.markAllAsReadForCategory(currentCategory)
+                            onBack()
+                        }
+                    ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -98,7 +104,10 @@ fun NotificationsScreen(
                         ActivityItem(
                             activity = activity,
                             uid = uiState.currentUserId,
-                            onClick = { viewModel.onActivityClicked(activity, onNavigateToDetail) }
+                            onClick = {
+                                viewModel.markAllAsReadForCategory(currentCategory)
+                                viewModel.onActivityClicked(activity, onNavigateToDetail)
+                            }
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),

@@ -170,7 +170,7 @@ actual fun MapContent(
     onOpenSettings: () -> Unit,
     onSendLoveNudge: (String) -> Unit,
     onOpenNotifications: () -> Unit,
-    hasUnreadNotifications: Boolean
+    unreadNotificationsCount: Int
 ) {
     var mapViewInstance by remember { mutableStateOf<MKMapView?>(null) }
     var mapSize by remember { mutableStateOf(IntSize.Zero) }

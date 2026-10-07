@@ -151,7 +151,7 @@ actual fun MapContent(
     onOpenSettings: () -> Unit,
     onSendLoveNudge: (String) -> Unit,
     onOpenNotifications: () -> Unit,
-    hasUnreadNotifications: Boolean
+    unreadNotificationsCount: Int
 ) {
     val density = LocalDensity.current
 
@@ -1046,11 +1046,18 @@ actual fun MapContent(
                     ) {
                         BadgedBox(
                             badge = {
-                                if (hasUnreadNotifications) {
+                                if (unreadNotificationsCount > 0) {
                                     Badge(
-                                        modifier = Modifier.size(10.dp),
-                                        containerColor = Color.Red
-                                    )
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ) {
+                                        Text(
+                                            text = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         ) {
@@ -1058,7 +1065,7 @@ actual fun MapContent(
                                 imageVector = Icons.Default.Notifications,
                                 contentDescription = "Partner Notifications",
                                 modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

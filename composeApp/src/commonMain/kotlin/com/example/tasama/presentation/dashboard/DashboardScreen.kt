@@ -87,7 +87,7 @@ fun DashboardScreen(
                 ) {
                     DashboardHeader(
                         userName = uiState.userName ?: "User",
-                        hasUnread = uiState.hasUnreadNotifications,
+                        unreadCount = uiState.unreadNotificationsCount,
                         onNotificationsClick = onNavigateToNotifications,
                         modifier = Modifier.weight(1f)
                     )
@@ -159,7 +159,7 @@ fun DashboardScreen(
 @Composable
 fun DashboardHeader(
     userName: String,
-    hasUnread: Boolean,
+    unreadCount: Int,
     onNotificationsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -195,22 +195,29 @@ fun DashboardHeader(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
-                Icon(
-                    imageVector = Icons.Default.Notifications,
-                    contentDescription = "Notifications",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            if (hasUnread) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .align(Alignment.TopEnd)
-                        .padding(2.dp)
-                        .clip(CircleShape)
-                        .background(Color.Red)
-                )
+                BadgedBox(
+                    badge = {
+                        if (unreadCount > 0) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ) {
+                                Text(
+                                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = "Notifications",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

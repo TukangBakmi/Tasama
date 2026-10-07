@@ -2,6 +2,7 @@ package com.example.tasama.presentation.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tasama.domain.model.Activity
 import com.example.tasama.domain.model.ActivityCategory
 import com.example.tasama.domain.model.ChatChannel
 import com.example.tasama.domain.model.InvitationStatus
@@ -92,7 +93,7 @@ class DashboardViewModel(
             val savingsTransactionsFlow = savingsRepository.getGlobalTransactions().distinctUntilChanged()
             val channelsFlow = chatRepository.getChannels().distinctUntilChanged()
             val settingsFlow = settingsRepository.settings.distinctUntilChanged()
-            val unreadFlow = activityRepository.hasUnread(ActivityCategory.SAVINGS).distinctUntilChanged()
+            val unifiedActivitiesFlow = activityRepository.getActivities(ActivityCategory.SAVINGS).distinctUntilChanged()
 
             combine(
                 transactionsFlow,
@@ -103,7 +104,7 @@ class DashboardViewModel(
                 channelsFlow,
                 userFlow,
                 settingsFlow,
-                unreadFlow
+                unifiedActivitiesFlow
             ) { args: Array<Any?> ->
                 val transactions = args[0] as List<Transaction>
                 val spaces = args[1] as List<SavingsSpace>
@@ -113,9 +114,9 @@ class DashboardViewModel(
                 val channels = args[5] as List<ChatChannel>
                 val user = args[6] as User?
                 val settings = args[7] as com.example.tasama.domain.model.AppSettings
-                val hasUnifiedUnread = args[8] as Boolean
+                val unifiedSavingsActivities = args[8] as List<Activity>
                 
-                DataSnapshot(transactions, spaces, invitations, savingsActivities, savingsTransactions, channels, user, settings, hasUnifiedUnread)
+                DataSnapshot(transactions, spaces, invitations, savingsActivities, savingsTransactions, channels, user, settings, unifiedSavingsActivities)
             }
             .flowOn(Dispatchers.Default)
             .collect { snapshot ->
@@ -134,7 +135,7 @@ class DashboardViewModel(
         val channels: List<ChatChannel>,
         val user: User?,
         val settings: com.example.tasama.domain.model.AppSettings,
-        val hasUnifiedUnread: Boolean
+        val unifiedSavingsActivities: List<Activity>
     )
 
     private suspend fun updateDashboardWith(snapshot: DataSnapshot) {
@@ -160,7 +161,9 @@ class DashboardViewModel(
 
             val currentUid = authRepository.getCurrentUserId()
 
-            val hasUnreadSavings = snapshot.hasUnifiedUnread || pendingInvitations.isNotEmpty()
+            val unreadSavingsCount = snapshot.unifiedSavingsActivities.count { activity ->
+                currentUid != null && activity.userId != currentUid && activity.isUnreadFor(currentUid)
+            } + pendingInvitations.size
 
             val trendChartData = calculateTrendData(filteredTransactions, currentPeriod)
 
@@ -171,7 +174,8 @@ class DashboardViewModel(
                 totalSavingsBalance = totalSavingsBalance,
                 pendingInvitations = pendingInvitations,
                 hasPendingPartnerRequest = hasPendingPartnerRequest,
-                hasUnreadNotifications = hasUnreadSavings,
+                hasUnreadNotifications = unreadSavingsCount > 0,
+                unreadNotificationsCount = unreadSavingsCount,
                 currency = snapshot.settings.currency
             ) }
         }

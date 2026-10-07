@@ -29,5 +29,5 @@ expect fun MapContent(
     onOpenSettings: () -> Unit = {},
     onSendLoveNudge: (String) -> Unit = {},
     onOpenNotifications: () -> Unit = {},
-    hasUnreadNotifications: Boolean = false
+    unreadNotificationsCount: Int = 0
 )

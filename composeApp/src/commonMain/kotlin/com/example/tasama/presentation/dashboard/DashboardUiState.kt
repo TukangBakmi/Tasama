@@ -27,6 +27,7 @@ data class DashboardUiState(
     val pendingInvitations: List<SavingsInvitation> = emptyList(),
     val hasPendingPartnerRequest: Boolean = false,
     val hasUnreadNotifications: Boolean = false,
+    val unreadNotificationsCount: Int = 0,
     val isLoading: Boolean = false,
     val showAddTransactionDialog: Boolean = false,
     val error: String? = null,
